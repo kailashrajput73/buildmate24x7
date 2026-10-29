@@ -1,0 +1,17 @@
+{
+  "_brand": {
+    "name": "BuildMate",
+    "accent": " 24x7",
+    "logo": "/assets/images/branding/buildmate_logo.png"
+  },
+  "_searchPlaceholder": "Search for products, brands and more...",
+  "_accountLabel": "My Account",
+  "_rewardPoints": 0,
+  "_notificationCount": 3,
+  "_tooltips": {
+    "rewards": "My Rewards",
+    "cart": "Cart",
+    "wishlist": "Wishlist",
+    "notifications": "Notifications"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "_mockPlace": {
+    "line1": "221B, Shivani Enclave, Sector 18",
+    "line2": "Noida, Uttar Pradesh — 201301"
+  },
+  "_defaultCenter": {
+    "latitude": 22.8394,
+    "longitude": 69.7219
+  },
+  "initialZoom": 15,
+  "locatedZoom": 16,
+  "locateDelayMs": 1100,
+  "tileLayer": {
+    "urlTemplate": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors"
+  }
+}

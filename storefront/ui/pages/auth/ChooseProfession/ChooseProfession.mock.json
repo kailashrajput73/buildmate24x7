@@ -1,0 +1,34 @@
+{
+  "_options": [
+    {
+      "title": "Contractor",
+      "subtitle": "Building & construction",
+      "role": "contractor",
+      "imageAsset": "/assets/images/professions/contractor.png"
+    },
+    {
+      "title": "Plumber",
+      "subtitle": "Pipes, bathrooms & Fittings",
+      "role": "dealer",
+      "imageAsset": "/assets/images/professions/plumber.png"
+    },
+    {
+      "title": "Electrician",
+      "subtitle": "Wiring, switches & lighting",
+      "role": "builder",
+      "imageAsset": "/assets/images/professions/electrician.png"
+    },
+    {
+      "title": "Flooring",
+      "subtitle": "Tiles & Adhesives",
+      "role": "dealer",
+      "imageAsset": "/assets/images/professions/flooring.png"
+    },
+    {
+      "title": "Home Owner",
+      "subtitle": "Buying for my own house",
+      "role": "individualCustomer",
+      "imageAsset": "/assets/images/professions/home_owner.png"
+    }
+  ]
+}

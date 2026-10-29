@@ -1,0 +1,1 @@
+export { CategoryComingSoon } from './CategoryComingSoon';

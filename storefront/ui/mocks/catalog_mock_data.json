@@ -1,0 +1,155 @@
+{
+  "_comment": "Flutter CatalogMockData.categories (_CatalogIndex.build categoryMeta + itemCount from PlumbingCatalogRows). iconColor/iconBackground are the resolved AppColors values.",
+  "categories": [
+    {
+      "id": "cat-pipes-tubing",
+      "name": "Pipes & Tubing",
+      "description": "UPVC, CPVC, HDPE and SWR pipes",
+      "icon": "pi-wrench",
+      "itemCount": 16,
+      "iconColor": "#1A56DB",
+      "iconBackground": "#D6E4FF",
+      "imageAsset": "/assets/images/categories/pipes_tubing.png"
+    },
+    {
+      "id": "cat-fittings",
+      "name": "Fittings",
+      "description": "Elbows, tees, couplers and transitions",
+      "icon": "pi-hammer",
+      "itemCount": 12,
+      "iconColor": "#0369A1",
+      "iconBackground": "#E0F2FE",
+      "imageAsset": "/assets/images/categories/fittings.png"
+    },
+    {
+      "id": "cat-valves-controls",
+      "name": "Valves & Controls",
+      "description": "Ball, gate, check, float and butterfly valves",
+      "icon": "pi-sliders-h",
+      "itemCount": 8,
+      "iconColor": "#D97706",
+      "iconBackground": "#FFECD0",
+      "imageAsset": "/assets/images/categories/valves_controls.png"
+    },
+    {
+      "id": "cat-sanitary-wares",
+      "name": "Sanitary Wares",
+      "description": "Closets, basins, urinals and cisterns",
+      "icon": "pi-filter",
+      "itemCount": 8,
+      "iconColor": "#059669",
+      "iconBackground": "#CCFCE7",
+      "imageAsset": "/assets/images/categories/sanitary_wares.png"
+    },
+    {
+      "id": "cat-cp-fittings",
+      "name": "CP Fittings",
+      "description": "Faucets, showers and chrome fittings",
+      "icon": "pi-cloud",
+      "itemCount": 8,
+      "iconColor": "#0F766E",
+      "iconBackground": "#CCFBF1",
+      "imageAsset": "/assets/images/categories/cp_fittings.png"
+    },
+    {
+      "id": "cat-drainage-accessories",
+      "name": "Drainage & Accessories",
+      "description": "Floor drains, traps and covers",
+      "icon": "pi-th-large",
+      "itemCount": 8,
+      "iconColor": "#44484F",
+      "iconBackground": "#E8EDF8",
+      "imageAsset": "/assets/images/categories/drainage_accessories.png"
+    },
+    {
+      "id": "cat-consumables",
+      "name": "Consumables",
+      "description": "Solvent cement, sealing and mounting",
+      "icon": "pi-box",
+      "itemCount": 8,
+      "iconColor": "#CA8A04",
+      "iconBackground": "#FEF9C3",
+      "imageAsset": "/assets/images/categories/consumables.png"
+    },
+    {
+      "id": "cat-cement-plaster",
+      "name": "Cement & Plaster",
+      "description": "Cement, wall plaster and putty bags",
+      "icon": "pi-box",
+      "itemCount": 0,
+      "iconColor": "#B45309",
+      "iconBackground": "#FEF3C7",
+      "imageAsset": "/assets/images/categories/cement_plaster.png"
+    },
+    {
+      "id": "cat-tiling-grouts",
+      "name": "Tiling & Grouts",
+      "description": "Tile adhesives, grouts and spacers",
+      "icon": "pi-th-large",
+      "itemCount": 0,
+      "iconColor": "#15803D",
+      "iconBackground": "#DCFCE7",
+      "imageAsset": "/assets/images/categories/tiling_grouts.png"
+    },
+    {
+      "id": "cat-paints-putty",
+      "name": "Paints & Putty",
+      "description": "Emulsions, primers and wall putty",
+      "icon": "pi-palette",
+      "itemCount": 0,
+      "iconColor": "#BE185D",
+      "iconBackground": "#FCE7F3",
+      "imageAsset": "/assets/images/categories/paints_putty.png"
+    },
+    {
+      "id": "cat-locks-handles",
+      "name": "Locks & Handles",
+      "description": "Door locks, smart locks and handles",
+      "icon": "pi-lock",
+      "itemCount": 0,
+      "iconColor": "#92400E",
+      "iconBackground": "#FDE68A",
+      "imageAsset": "/assets/images/categories/locks_handles.png"
+    },
+    {
+      "id": "cat-hardware-tools",
+      "name": "Hardware & Tools",
+      "description": "Power tools, hand tools and hardware",
+      "icon": "pi-wrench",
+      "itemCount": 0,
+      "iconColor": "#1E40AF",
+      "iconBackground": "#DBEAFE",
+      "imageAsset": "/assets/images/categories/hardware_tools.png"
+    },
+    {
+      "id": "cat-plumbing-pipes-fittings",
+      "name": "Plumbing Pipes & Fittings",
+      "description": "Plumbing pipes, valves and fittings",
+      "icon": "pi-sitemap",
+      "itemCount": 0,
+      "iconColor": "#0E7490",
+      "iconBackground": "#CFFAFE",
+      "imageAsset": "/assets/images/categories/plumbing_pipes_fittings.png"
+    },
+    {
+      "id": "cat-fevicol-adhesives",
+      "name": "Fevicol & Adhesives",
+      "description": "Wood adhesives, marine glues and sealants",
+      "icon": "pi-filter-fill",
+      "itemCount": 0,
+      "iconColor": "#6D28D9",
+      "iconBackground": "#EDE9FE",
+      "imageAsset": "/assets/images/categories/fevicol_adhesives.png"
+    },
+    {
+      "id": "cat-electricals-lights",
+      "name": "Electricals & Lights",
+      "description": "Wires, cables, panel lights and switches",
+      "icon": "pi-bolt",
+      "itemCount": 0,
+      "iconColor": "#DC2626",
+      "iconBackground": "#FEE2E2",
+      "imageAsset": "/assets/images/categories/electricals_lights.png"
+    }
+  ]
+}

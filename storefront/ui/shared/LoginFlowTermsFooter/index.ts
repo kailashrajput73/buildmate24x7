@@ -1,0 +1,1 @@
+export { LoginFlowTermsFooter } from './LoginFlowTermsFooter';

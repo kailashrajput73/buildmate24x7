@@ -1,0 +1,54 @@
+# Local / single-VPS stack: Postgres + API + admin panel + storefront.
+# Put a TLS reverse proxy (Caddy, nginx, or the cloud load balancer) in front for production.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: buildmate
+      POSTGRES_USER: buildmate
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U buildmate"], interval: 5s, retries: 10 }
+    restart: unless-stopped
+
+  api:
+    build: ./api
+    depends_on: { db: { condition: service_healthy } }
+    environment:
+      ConnectionStrings__Default: Host=db;Database=buildmate;Username=buildmate;Password=${POSTGRES_PASSWORD}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      Seed__AdminPassword: ${ADMIN_PASSWORD}
+      Seed__DemoData: ${DEMO_DATA:-false}
+      Storage__PublicBaseUrl: ${PUBLIC_API_URL}/files
+      Cashfree__Environment: ${CASHFREE_ENV:-sandbox}
+      Cashfree__ClientId: ${CASHFREE_CLIENT_ID}
+      Cashfree__ClientSecret: ${CASHFREE_CLIENT_SECRET}
+      Cashfree__WebReturnUrl: ${SITE_URL}/checkout/return?order={orderId}
+      Cashfree__NotifyUrl: ${PUBLIC_API_URL}/api/payments/cashfree/webhook
+      Sms__Provider: ${SMS_PROVIDER:-Log}
+      Sms__Msg91AuthKey: ${MSG91_AUTH_KEY}
+      Sms__Msg91OtpTemplateId: ${MSG91_OTP_TEMPLATE_ID}
+      Cors__Origins__0: ${SITE_URL}
+      Cors__Origins__1: ${ADMIN_URL}
+    volumes: [files:/app/storage]
+    ports: ["8080:8080"]
+    restart: unless-stopped
+
+  admin:
+    build: ./admin
+    depends_on: [api]
+    ports: ["8081:80"]
+    restart: unless-stopped
+
+  storefront:
+    build:
+      context: ./storefront
+      args: { API_URL: "http://api:8080", NEXT_PUBLIC_CASHFREE_MODE: "${CASHFREE_ENV:-sandbox}" }
+    environment: { API_URL: "http://api:8080" }
+    depends_on: [api]
+    ports: ["3000:3000"]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  files:

@@ -1,0 +1,21 @@
+{
+  "_pricing": {
+    "maxQuantity": 99,
+    "gstRate": 0.18,
+    "shippingFee": 250,
+    "freeShippingThreshold": 10000,
+    "build10Rate": 0.1
+  },
+  "_coupons": [
+    {
+      "code": "BUILD10",
+      "type": "percent",
+      "label": "10% off your order"
+    },
+    {
+      "code": "FREESHIP",
+      "type": "freeShipping",
+      "label": "Free shipping"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "_demoAddress": "A-123, Sector 62, Noida, Uttar Pradesh - 201309",
+  "_seed": {
+    "pan": {
+      "panNumber": "ABCDE1234F",
+      "document": { "fileName": "PAN_Card.pdf", "uploadedOn": "2026-03-10" },
+      "status": "approved"
+    },
+    "gst": {
+      "gstNumber": "09ABCDE1234F1Z5",
+      "document": { "fileName": "GST_Certificate.pdf", "uploadedOn": "2026-03-10" },
+      "status": "pending"
+    },
+    "bank": {
+      "accountNumber": "XXXXXXXX1234",
+      "ifscCode": "HDFC0001234",
+      "document": { "fileName": "Cancelled_Cheque.pdf", "uploadedOn": "2026-03-10" },
+      "status": "approved"
+    }
+  },
+  "_saveDelayMs": 400
+}

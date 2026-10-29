@@ -1,0 +1,173 @@
+{
+  "savedAddresses": [
+    {
+      "id": "addr-home",
+      "fullName": "Nandini Sharma",
+      "mobile": "9876543210",
+      "pincode": "560076",
+      "city": "Bangalore",
+      "state": "Karnataka",
+      "house": "123, Green Park",
+      "area": "Near City Mall",
+      "type": "home",
+      "isDefault": true
+    },
+    {
+      "id": "addr-office",
+      "fullName": "Nandini Sharma",
+      "mobile": "9876543210",
+      "pincode": "560001",
+      "city": "Bangalore",
+      "state": "Karnataka",
+      "house": "Plot No. 45",
+      "area": "Tech Park Road",
+      "type": "office",
+      "isDefault": false
+    }
+  ],
+  "addressTypes": [
+    {
+      "value": "home",
+      "label": "Home",
+      "icon": "pi-home"
+    },
+    {
+      "value": "office",
+      "label": "Office",
+      "icon": "pi-building"
+    },
+    {
+      "value": "other",
+      "label": "Other",
+      "icon": "pi-map-marker"
+    }
+  ],
+  "pincodes": {
+    "560001": [
+      "Bangalore",
+      "Karnataka"
+    ],
+    "560076": [
+      "Bangalore",
+      "Karnataka"
+    ],
+    "110001": [
+      "New Delhi",
+      "Delhi"
+    ],
+    "201301": [
+      "Noida",
+      "Uttar Pradesh"
+    ],
+    "122001": [
+      "Gurugram",
+      "Haryana"
+    ],
+    "400001": [
+      "Mumbai",
+      "Maharashtra"
+    ],
+    "411001": [
+      "Pune",
+      "Maharashtra"
+    ],
+    "500001": [
+      "Hyderabad",
+      "Telangana"
+    ],
+    "600001": [
+      "Chennai",
+      "Tamil Nadu"
+    ],
+    "700001": [
+      "Kolkata",
+      "West Bengal"
+    ],
+    "302001": [
+      "Jaipur",
+      "Rajasthan"
+    ],
+    "380001": [
+      "Ahmedabad",
+      "Gujarat"
+    ]
+  },
+  "pincodeLookupDelayMs": 450,
+  "map": {
+    "defaultCenter": [
+      22.8394,
+      69.7219
+    ],
+    "zoom": 13,
+    "gpsZoom": 16
+  },
+  "gps": {
+    "delayMs": 1100,
+    "location": [
+      12.9166,
+      77.6101
+    ],
+    "area": "Bannerghatta Road, BTM Layout",
+    "pincode": "560076",
+    "city": "Bangalore",
+    "state": "Karnataka"
+  },
+  "saveAddressDelayMs": 600,
+  "deliveryOptions": [
+    {
+      "value": "standard",
+      "label": "Standard Delivery",
+      "eta": "3 - 5 business days",
+      "fee": 0,
+      "icon": "pi-truck"
+    },
+    {
+      "value": "express",
+      "label": "Express Delivery",
+      "eta": "1 - 2 business days",
+      "fee": 99,
+      "icon": "pi-bolt"
+    }
+  ],
+  "paymentMethods": [
+    {
+      "value": "upi",
+      "label": "UPI (GPay / PhonePe / Paytm)",
+      "subtitle": "Instant payment with 0 transaction fees",
+      "icon": "pi-qrcode",
+      "status": "Paid via UPI"
+    },
+    {
+      "value": "card",
+      "label": "Credit / Debit Card",
+      "subtitle": "Visa, MasterCard, RuPay",
+      "icon": "pi-credit-card",
+      "status": "Paid via Card"
+    },
+    {
+      "value": "netBanking",
+      "label": "Net Banking",
+      "subtitle": "All major Indian banks supported",
+      "icon": "pi-building-columns",
+      "status": "Paid via Net Banking"
+    },
+    {
+      "value": "cod",
+      "label": "Cash on Delivery",
+      "subtitle": "Pay at your doorstep upon arrival",
+      "icon": "pi-money-bill",
+      "status": "Pay on Delivery"
+    }
+  ],
+  "netBankingBanks": [
+    "State Bank of India",
+    "HDFC Bank",
+    "ICICI Bank",
+    "Axis Bank",
+    "Kotak Mahindra Bank",
+    "Punjab National Bank",
+    "Bank of Baroda",
+    "Canara Bank"
+  ],
+  "paymentProcessingDelayMs": 1200
+}

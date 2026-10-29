@@ -1,0 +1,70 @@
+{
+  "_mockSeedEntries": [
+    {
+      "id": "seed-ledger-6",
+      "requesterId": "",
+      "quotationId": "seed-qt-1058",
+      "quotationDisplayId": "QT-1058",
+      "quotationGrandTotal": 18400,
+      "points": 150,
+      "type": "earned",
+      "createdAt": "2026-09-24",
+      "description": "Sale confirmed"
+    },
+    {
+      "id": "seed-ledger-5",
+      "requesterId": "",
+      "quotationId": "seed-perk-quotation-off-200",
+      "quotationDisplayId": "RWD-1609",
+      "quotationGrandTotal": 0,
+      "points": 250,
+      "type": "redeemed",
+      "createdAt": "2026-09-16",
+      "description": "Redeemed: ₹200 off"
+    },
+    {
+      "id": "seed-ledger-4",
+      "requesterId": "",
+      "quotationId": "seed-qt-1042",
+      "quotationDisplayId": "QT-1042",
+      "quotationGrandTotal": 36000,
+      "points": 300,
+      "type": "earned",
+      "createdAt": "2026-09-10",
+      "description": "Sale confirmed"
+    },
+    {
+      "id": "seed-ledger-3",
+      "requesterId": "",
+      "quotationId": "seed-perk-free-delivery",
+      "quotationDisplayId": "RWD-2208",
+      "quotationGrandTotal": 0,
+      "points": 230,
+      "type": "redeemed",
+      "createdAt": "2026-08-22",
+      "description": "Redeemed: Free delivery"
+    },
+    {
+      "id": "seed-ledger-2",
+      "requesterId": "",
+      "quotationId": "seed-qt-1035",
+      "quotationDisplayId": "QT-1035",
+      "quotationGrandTotal": 27500,
+      "points": 250,
+      "type": "earned",
+      "createdAt": "2026-08-20",
+      "description": "Sale confirmed"
+    },
+    {
+      "id": "seed-ledger-1",
+      "requesterId": "",
+      "quotationId": "seed-qt-1021",
+      "quotationDisplayId": "QT-1021",
+      "quotationGrandTotal": 52000,
+      "points": 420,
+      "type": "earned",
+      "createdAt": "2026-07-28",
+      "description": "Sale confirmed"
+    }
+  ]
+}

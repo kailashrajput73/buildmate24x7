@@ -1,0 +1,1 @@
+export { LoginFlowOtpIcon } from './LoginFlowOtpIcon';

@@ -1,0 +1,18 @@
+{
+  "_currentStep": 1,
+  "_labels": {
+    "shippingTitle": "Shipping Address",
+    "shippingSubtitle": "Select or add a new delivery address",
+    "default": "Default",
+    "addNewAddress": "Add New Address",
+    "addFirstAddress": "Add a shipping address",
+    "deliveryTitle": "Delivery Options",
+    "deliverySubtitle": "Choose your preferred delivery option",
+    "free": "FREE",
+    "backToCart": "Back to Cart",
+    "proceed": "Proceed to Payment",
+    "addressSaved": "{label} address saved",
+    "noAddress": "Add a shipping address to continue",
+    "couponApplied": "Coupon {code} applied"
+  }
+}

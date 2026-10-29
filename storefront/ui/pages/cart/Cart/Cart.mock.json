@@ -1,0 +1,22 @@
+{
+  "_currentStep": 0,
+  "_quantityLimits": {
+    "min": 1,
+    "max": 99
+  },
+  "_labels": {
+    "reviewItems": "Review Items",
+    "itemsSubtitle": "{count} items · {units} units",
+    "itemSubtitle": "{count} item · {units} units",
+    "clearAll": "Clear All",
+    "perUnit": "{price} / {unit}",
+    "continueShopping": "Continue Shopping",
+    "proceed": "Continue to delivery",
+    "emptyTitle": "Your cart is empty",
+    "emptySubtitle": "Add cement, bricks, steel and more to get started.",
+    "browse": "Browse products",
+    "removed": "{name} removed from cart",
+    "cleared": "Cart cleared",
+    "couponApplied": "Coupon {code} applied"
+  }
+}

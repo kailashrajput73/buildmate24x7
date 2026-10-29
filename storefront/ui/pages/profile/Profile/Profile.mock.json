@@ -1,0 +1,80 @@
+{
+  "_title": "My Profile",
+  "_subtitle": "Manage your personal and business details",
+  "_webSubtitle": "Your account details. Trade partners also upload KYC here to unlock partner prices and reward points.",
+  "_backLabel": "Back",
+  "_approvalBanner": {
+    "title": "Your KYC is being reviewed.",
+    "body": "We usually verify within a working day. Approved documents can only be changed by the store."
+  },
+  "_statusLabels": {
+    "approved": "Approved",
+    "pending": "Pending for Approval"
+  },
+  "_notEditable": "Not Editable",
+  "_uploadedOnPrefix": "Uploaded on ",
+  "_documentLabel": "Supporting Document",
+  "_replaceDocument": "Replace",
+  "_documentAccept": ".pdf,.jpg,.jpeg,.png",
+  "_approvalNote": "The document goes to the store team for verification. Once approved it can no longer be changed here.",
+  "_buttons": {
+    "edit": "Edit",
+    "cancel": "Cancel",
+    "save": "Save Changes",
+    "submit": "Submit for Approval",
+    "saving": "Saving…",
+    "preview": "View document",
+    "changePhoto": "Change photo"
+  },
+  "_snack": {
+    "lockedSuffix": " are approved and can no longer be changed.",
+    "personalSaved": "Personal information updated",
+    "kycSubmittedSuffix": " submitted for approval",
+    "photoComingSoon": "Profile photo upload is coming soon",
+    "previewUnavailable": "Preview is only available for documents uploaded in this session"
+  },
+  "_sections": {
+    "personal": {
+      "icon": "pi-user",
+      "title": "Personal Information",
+      "subtitle": "Used on your orders and invoices.",
+      "snackName": "Personal information"
+    },
+    "pan": {
+      "icon": "pi-file",
+      "title": "PAN Details",
+      "subtitle": "Upload a photo or PDF of your PAN card.",
+      "snackName": "PAN details"
+    },
+    "gst": {
+      "icon": "pi-file",
+      "title": "GST Details",
+      "subtitle": "Optional — add your GSTIN to get GST invoices in your firm's name.",
+      "snackName": "GST details"
+    },
+    "aadhaar": {
+      "icon": "pi-id-card",
+      "title": "Aadhaar",
+      "subtitle": "Upload a photo or PDF of your Aadhaar card.",
+      "snackName": "Aadhaar"
+    }
+  },
+  "_fields": {
+    "fullName": "Full Name",
+    "mobileNumber": "Mobile Number",
+    "email": "Email Address",
+    "address": "Address",
+    "panNumber": "PAN Number",
+    "gstNumber": "GST Number",
+    "nameOnDocument": "Name on Document",
+    "accountNumber": "Account Number",
+    "ifscCode": "IFSC Code",
+    "nameOnAccount": "Name on Bank Account"
+  },
+  "_account": {
+    "title": "Account",
+    "rewardsTitle": "My Rewards",
+    "rewardsSuffix": " points",
+    "signOut": "Sign out"
+  }
+}

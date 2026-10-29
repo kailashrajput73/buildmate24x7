@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Flat white-and-blue look of the design kit (ui/theme). The class names (.glass, .btn-primary…) are kept so the
+  pages still on Tailwind pick up the new look without being rewritten; "glass" is now simply a white card.
+*/
+@layer base {
+  html { color: theme('colors.ink.DEFAULT'); background: #F8FAFF; -webkit-font-smoothing: antialiased; }
+  body { background: #F8FAFF; font-family: theme('fontFamily.sans'); }
+  h1, h2, h3, h4 { font-family: theme('fontFamily.display'); letter-spacing: -0.01em; }
+  :focus-visible { outline: 2px solid theme('colors.pipe.500'); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+  @media print { html, body { background: #fff; } }
+}
+
+@layer components {
+  .wrap { @apply mx-auto w-full max-w-[1280px] px-4 sm:px-6; }
+
+  .glass, .glass-strong { background: #fff; border: 1px solid #E2E5EC; box-shadow: 0 1px 2px rgb(0 0 0 / 0.06); }
+  .glass-soft { background: #F1F3FA; border: 1px solid transparent; }
+  .glass-dark { background: #1B2A47; color: #fff; border: 1px solid #1B2A47; }
+  .glass-tile { @apply glass rounded-2xl transition-[box-shadow,border-color] duration-150; }
+  .glass-tile:hover { border-color: #BFD3F7; box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 2px 6px 2px rgb(0 0 0 / 0.06); }
+
+  .input {
+    @apply w-full rounded-lg border border-[#D1D5DB] bg-white px-3.5 py-2.5 text-[15px] text-ink placeholder:text-ink-faint
+           focus:border-pipe-500 focus:outline-none focus:ring-2 focus:ring-pipe-500/20;
+  }
+  .label { @apply mb-1 block text-sm font-medium text-ink-soft; }
+
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-[15px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50; font-family: theme('fontFamily.display'); }
+  .btn-primary { @apply btn bg-pipe-600 text-white hover:bg-pipe-700; }
+  .btn-go { @apply btn bg-[#5FAF2E] text-white hover:bg-[#3D7A1A]; }
+  .btn-ghost { @apply btn border border-line bg-white text-ink hover:border-pipe-200 hover:text-pipe-700; }
+  .btn-outline { @apply btn border border-pipe-600 bg-white text-pipe-700 hover:bg-pipe-50; }
+  .chip { @apply rounded-full border border-line bg-white px-3 py-1 text-sm text-ink-soft hover:border-pipe-200 hover:text-pipe-700; }
+  .num { font-variant-numeric: tabular-nums; }
+}

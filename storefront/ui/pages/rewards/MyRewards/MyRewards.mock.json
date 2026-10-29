@@ -1,0 +1,21 @@
+{
+  "_title": "Rewards",
+  "_refreshTooltip": "Refresh",
+  "_backLabel": "Back",
+  "_webSubtitle": "Earn points on every delivered order and track them here.",
+  "_pointsCard": {
+    "badge": "Reward Points",
+    "balanceLabel": "Available balance",
+    "unit": "pts",
+    "totalEarnedLabel": "Total earned",
+    "redeemedLabel": "Redeemed"
+  },
+  "_historyTitle": "Reward History",
+  "_empty": {
+    "title": "No reward points earned yet.",
+    "subtitle": "Points are added when your order is delivered."
+  },
+  "_quotationPrefix": "Quotation #",
+  "_defaultDescription": "Order delivered",
+  "_quotationSuffix": "quotation"
+}

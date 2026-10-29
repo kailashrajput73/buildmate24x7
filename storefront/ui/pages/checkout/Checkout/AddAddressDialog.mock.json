@@ -1,0 +1,46 @@
+{
+  "title": "Add New Address",
+  "subtitle": "We'll deliver your order to this address",
+  "gps": {
+    "title": "Use my current location",
+    "locating": "Detecting location…",
+    "subtitle": "Auto-fill your address using GPS"
+  },
+  "locationFound": "Location found. Add your house/flat number.",
+  "orManually": "OR ENTER MANUALLY",
+  "sections": {
+    "contact": "Contact Details",
+    "address": "Address",
+    "pin": "Pin Location",
+    "saveAs": "Save Address As"
+  },
+  "optional": "Optional",
+  "fields": {
+    "fullName": "Full Name",
+    "mobile": "Mobile Number",
+    "pincode": "Pincode",
+    "city": "City",
+    "state": "State",
+    "house": "House / Flat / Building No.",
+    "area": "Area / Street / Landmark",
+    "customLabel": "Label (e.g. Site 2, Warehouse)"
+  },
+  "pincode": {
+    "idle": "City & State fill in automatically",
+    "found": "Delivery available · City & State filled",
+    "notFound": "Couldn't find this pincode — enter City & State"
+  },
+  "errors": {
+    "pincodeRequired": "Pincode is required",
+    "pincodeInvalid": "Enter a valid 6-digit pincode",
+    "areaLabel": "Area / Street"
+  },
+  "tileUrl": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+  "mapHint": "Drag the map to place the pin on your exact location",
+  "defaultToggle": {
+    "title": "Make this my default address",
+    "subtitle": "Used first at every checkout"
+  },
+  "cancel": "Cancel",
+  "save": "Save & Deliver Here"
+}

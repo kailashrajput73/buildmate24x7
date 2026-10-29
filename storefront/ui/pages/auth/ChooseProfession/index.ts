@@ -1,0 +1,1 @@
+export { ChooseProfession } from './ChooseProfession';

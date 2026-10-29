@@ -1,0 +1,18 @@
+{
+  "_currentStep": 2,
+  "_labels": {
+    "title": "Select Payment Method",
+    "subtitle": "Choose how you'd like to pay for this order",
+    "upiHint": "Enter UPI ID (e.g. 9876543210@paytm)",
+    "cardNumber": "Card number",
+    "expiry": "Expiry (MM/YY)",
+    "cvv": "CVV",
+    "cardName": "Name on card",
+    "bankHint": "Select your bank",
+    "bankRequired": "Select your bank to continue",
+    "codNote": "Keep {total} ready in cash or pay by UPI to the delivery partner.",
+    "secureNote": "Guaranteed 256-bit SSL encrypted safe checkout",
+    "back": "Back to Address",
+    "placeOrder": "Place Order ({total})"
+  }
+}

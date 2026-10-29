@@ -1,0 +1,18 @@
+{
+  "_currentStep": 3,
+  "_labels": {
+    "badge": "ORDER PLACED SUCCESSFULLY",
+    "thankYou": "Thank You, {name}!",
+    "orderId": "Order ID: ",
+    "estimatedDelivery": "Estimated Delivery",
+    "shippingTo": "Shipping To",
+    "paymentStatus": "Payment Status",
+    "summary": "Order Summary ({count} {noun})",
+    "item": "item",
+    "items": "items",
+    "lineName": "{qty}x {name}",
+    "totalPaid": "Total Amount Paid",
+    "amountPayable": "Amount Payable",
+    "continueShopping": "Continue Shopping"
+  }
+}

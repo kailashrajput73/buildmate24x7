@@ -1,0 +1,26 @@
+{
+  "AppBottomNavigation": {
+    "tabs": [
+      {
+        "tab": "home",
+        "icon": "pi-home",
+        "label": "Home"
+      },
+      {
+        "tab": "categories",
+        "icon": "pi-th-large",
+        "label": "Categories"
+      },
+      {
+        "tab": "wishlist",
+        "icon": "pi-heart",
+        "label": "Wishlist"
+      }
+    ]
+  },
+  "floatingActionButton": {
+    "tooltip": "AI Assistant",
+    "icon": "pi-sparkles"
+  },
+  "_webTabPlaceholder": "Comming Soon..."
+}

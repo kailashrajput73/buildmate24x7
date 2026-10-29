@@ -1,0 +1,23 @@
+{
+  "_webBrandPanel": {
+    "logo": "/assets/images/branding/buildmate_logo.png",
+    "eyebrow": "Customers & trade partners",
+    "highlights": [
+      {
+        "icon": "pi pi-box",
+        "title": "Wide product catalogue",
+        "subtitle": "Pipes, tubing and construction materials in one place"
+      },
+      {
+        "icon": "pi pi-gift",
+        "title": "Rewards on every order",
+        "subtitle": "Earn points and redeem them for exclusive benefits"
+      },
+      {
+        "icon": "pi pi-shield",
+        "title": "Secure OTP login",
+        "subtitle": "No passwords to remember — just your mobile number"
+      }
+    ]
+  }
+}
