@@ -338,7 +338,7 @@ public class PartnerService : IPartnerService
     }
 
     /// <summary>Keeps only the last 4 characters: never store full Aadhaar/PAN numbers.</summary>
-    private static string? Mask(string? number)
+    internal static string? Mask(string? number)
     {
         if (string.IsNullOrWhiteSpace(number)) return null;
         var clean = new string(number.Where(char.IsLetterOrDigit).ToArray());

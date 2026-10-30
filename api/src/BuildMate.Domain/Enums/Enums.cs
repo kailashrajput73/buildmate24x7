@@ -54,7 +54,7 @@ public enum PaymentMethod { Cashfree = 1, CashAtStore = 2, UpiAtStore = 3, CardA
 
 public enum PaymentStatus { Pending = 1, Success = 2, Failed = 3, Refunded = 4, PartiallyRefunded = 5 }
 
-public enum RewardTransactionType { Earned = 1, Reversed = 2, Adjusted = 3, Redeemed = 4 }
+public enum RewardTransactionType { Earned = 1, Reversed = 2, Adjusted = 3, Redeemed = 4, Referral = 5 }
 
 public enum ServiceType { Plumber = 1, Electrician = 2 }
 

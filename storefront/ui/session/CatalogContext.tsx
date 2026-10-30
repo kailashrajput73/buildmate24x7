@@ -34,7 +34,7 @@ export function artFor(name: string, imageUrl?: string | null): string {
 
 export function toHomeCategory(c: CategoryTree, i: number): HomeCategory {
   const [iconColor, iconBackground] = TINTS[i % TINTS.length];
-  return { id: String(c.id), name: c.name, itemCount: c.productCount, icon: 'pi-box', iconColor, iconBackground, imageAsset: artFor(c.name, c.imageUrl) };
+  return { id: String(c.id), name: c.name, itemCount: c.productCount, icon: 'pi-box', iconColor, iconBackground, imageAsset: artFor(c.name, c.imageUrl), comingSoon: c.productCount <= 0 };
 }
 
 interface CatalogValue {
@@ -48,7 +48,8 @@ const CatalogContext = createContext<CatalogValue>({ categories: [], raw: [], st
 export function CatalogProvider({ categories, store, children }: { categories: CategoryTree[]; store: StoreInfo | null; children: ReactNode }) {
   const value = useMemo<CatalogValue>(() => ({
     raw: categories,
-    categories: categories.filter((c) => c.productCount > 0).map(toHomeCategory),
+    // Every active category: the ones with products first (admin order), then the rest marked "Coming soon".
+    categories: [...categories.filter((c) => c.productCount > 0), ...categories.filter((c) => c.productCount <= 0)].map(toHomeCategory),
     store,
   }), [categories, store]);
   return <CatalogContext.Provider value={value}>{children}</CatalogContext.Provider>;

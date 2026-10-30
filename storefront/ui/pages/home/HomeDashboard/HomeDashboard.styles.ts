@@ -95,6 +95,7 @@ export const Controls = styled.div`
 
   ${({ theme }) => theme.media.md} {
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
     padding: ${({ theme }) => `${theme.spacing.space6}px ${theme.spacing.space10}px 0`};
   }
@@ -136,6 +137,40 @@ export const LocationBar = styled.button`
       box-shadow: 0 4px 14px ${({ theme }) => withAlpha(theme.colors.primary, 0.12)};
     }
   }
+`;
+
+export const LocateButton = styled.button`
+  ${resetButton}
+  ${focusRing}
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: ${({ theme }) => theme.spacing.space2}px;
+  align-self: flex-start;
+  padding: ${({ theme }) => `${theme.spacing.space2}px ${theme.spacing.space3}px`};
+  border-radius: ${({ theme }) => theme.radius.pill}px;
+  background: ${({ theme }) => theme.colors.primaryContainer};
+  color: ${({ theme }) => theme.colors.primary};
+  ${({ theme }) => textStyle(theme.typography.labelLarge)}
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:disabled { opacity: 0.7; cursor: progress; }
+  > i { font-size: 14px; }
+
+  ${({ theme }) => theme.media.md} {
+    align-self: center;
+    height: ${({ theme }) => theme.spacing.space12}px;
+    padding: 0 ${({ theme }) => theme.spacing.space4}px;
+  }
+`;
+
+export const LocationError = styled.p`
+  ${({ theme }) => textStyle(theme.typography.bodySmall)}
+  color: ${({ theme }) => theme.colors.error};
+  margin: 0;
+  flex-basis: 100%;
 `;
 
 export const LocationIcon = styled.i`

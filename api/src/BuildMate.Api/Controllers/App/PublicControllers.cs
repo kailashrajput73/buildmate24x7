@@ -3,10 +3,12 @@ using BuildMate.Services.Auth;
 using BuildMate.Services.Catalog;
 using BuildMate.Services.Common;
 using BuildMate.Services.Content;
+using BuildMate.Services.Notifications;
 using BuildMate.Services.Orders;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 
 namespace BuildMate.Api.Controllers.App;
 
@@ -37,6 +39,18 @@ public class AuthController : ControllerBase
     /// <summary>Website / app sign-in after Firebase phone OTP. Returns 409 "signup_required" for a new number without an audience.</summary>
     [HttpPost("firebase"), EnableRateLimiting("otp")]
     public Task<AuthResult> Firebase(FirebaseLoginRequest req, CancellationToken ct) => _auth.FirebaseLoginAsync(req, ct);
+
+    /// <summary>
+    /// Which phone-login methods this server accepts (no secrets): the Firebase project ids it trusts and whether the
+    /// API's own SMS OTP really sends SMS. For set-up checks — see FIREBASE_SETUP.md.
+    /// </summary>
+    [HttpGet("config")]
+    public object Config([FromServices] IOptions<FirebaseOptions> firebase, [FromServices] ISmsSender sms) => new
+    {
+        firebaseProjects = firebase.Value.ProjectIds,
+        firebaseEnabled = firebase.Value.ProjectIds.Count > 0,
+        smsOtpSendsSms = sms is not LogSmsSender,
+    };
 
     [HttpPost("staff/login"), EnableRateLimiting("login")]
     public Task<AuthResult> StaffLogin(StaffLoginRequest req, CancellationToken ct) => _auth.StaffLoginAsync(req, ct);
@@ -106,6 +120,19 @@ public class CatalogController : ControllerBase
     /// <summary>Fresh prices for a guest cart kept in the browser.</summary>
     [HttpPost("products/batch")]
     public Task<List<ProductCardDto>> Batch([FromBody] List<long> ids, CancellationToken ct) => _catalog.GetCardsAsync(ids.Take(100), V, ct);
+}
+
+/// <summary>Address for the customer's current position (location bar). Looked up and cached by the server.</summary>
+[ApiController]
+[Route("api/geo")]
+[AllowAnonymous]
+public class GeoController : ControllerBase
+{
+    private readonly IGeocodingService _geo;
+    public GeoController(IGeocodingService geo) => _geo = geo;
+
+    [HttpGet("reverse"), EnableRateLimiting("geo")]
+    public Task<GeocodedPlace> Reverse([FromQuery] double lat, [FromQuery] double lng, CancellationToken ct) => _geo.ReverseAsync(lat, lng, ct);
 }
 
 [ApiController]

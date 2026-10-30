@@ -7,6 +7,7 @@ import { SessionProvider } from './session/SessionContext';
 import { LocationProvider } from './session/LocationContext';
 import { CartProvider } from './session/CartContext';
 import { CatalogProvider } from './session/CatalogContext';
+import { ToastHost } from './shared/Toast';
 
 /** The design kit's providers, on top of the BuildMate shop session (lib/shop). */
 export function UiProviders({ categories, store, children }: { categories: CategoryTree[]; store: StoreInfo | null; children: ReactNode }) {
@@ -16,7 +17,10 @@ export function UiProviders({ categories, store, children }: { categories: Categ
       <CatalogProvider categories={categories} store={store}>
         <SessionProvider>
           <LocationProvider>
-            <CartProvider>{children}</CartProvider>
+            <CartProvider>
+              {children}
+              <ToastHost />
+            </CartProvider>
           </LocationProvider>
         </SessionProvider>
       </CatalogProvider>

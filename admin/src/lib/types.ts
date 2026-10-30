@@ -137,7 +137,7 @@ export type StoreSettings = {
   bankName?: string; bankBranch?: string; bankAccountNo?: string; bankIfsc?: string; invoiceLogoUrl?: string; invoiceNumberDigits: number
   supportPhone: string; supportEmail?: string; whatsAppNumber?: string; openingHours: string
   minOrderValue: number; deliveryFee: number; freeDeliveryAbove: number; deliveryPincodes: string[]
-  homeDeliveryEnabled: boolean; storePickupEnabled: boolean; rewardPointValue: number; invoicePrefix: string; invoiceTerms: string
+  homeDeliveryEnabled: boolean; storePickupEnabled: boolean; rewardPointValue: number; referralRewardPoints?: number; referralWelcomePoints?: number; invoicePrefix: string; invoiceTerms: string
   supportedLanguages: string[]; androidAppUrl?: string; iosAppUrl?: string; minAppVersion?: string
 }
 

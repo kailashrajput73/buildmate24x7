@@ -1,11 +1,11 @@
 import { api } from '@/lib/api';
 import type { RewardLedgerEntry } from './rewardModels';
 
-/** BuildMate reward transaction (GET /api/partner/rewards/history). */
+/** BuildMate reward transaction (GET /api/account/rewards/history — customers and partners). */
 interface RewardTxn {
   id: number;
   createdAt: string;
-  type: 'Earned' | 'Redeemed' | 'Adjusted' | 'Reversed' | string;
+  type: 'Earned' | 'Redeemed' | 'Adjusted' | 'Reversed' | 'Referral' | string;
   points: number;
   balanceAfter: number;
   orderId?: number | null;
@@ -24,14 +24,14 @@ const toEntry = (t: RewardTxn): RewardLedgerEntry => ({
   createdAt: t.createdAt,
   quotationDisplayId: t.orderNo ?? '',
   quotationGrandTotal: 0,
-  description: t.note || (t.type === 'Earned' ? 'Order delivered' : t.type),
+  description: t.note || (t.type === 'Earned' ? 'Order delivered' : t.type === 'Referral' ? 'Refer & Earn' : t.type),
 });
 
-/** Partner reward points from the BuildMate API (balance from the account, history from the ledger). */
+/** Reward points from the BuildMate API (balance from the account, history from the ledger). */
 export async function loadRewards(): Promise<{ balance: number; lifetimeEarned: number; pointValueRupees: number; entries: RewardLedgerEntry[] }> {
   const [summary, history] = await Promise.all([
-    api<RewardSummary>('/api/partner/rewards'),
-    api<{ items: RewardTxn[] }>('/api/partner/rewards/history?pageSize=100'),
+    api<RewardSummary>('/api/account/rewards'),
+    api<{ items: RewardTxn[] }>('/api/account/rewards/history?pageSize=100'),
   ]);
   return { balance: summary.balance, lifetimeEarned: summary.lifetimeEarned, pointValueRupees: summary.pointValueRupees, entries: history.items.map(toEntry) };
 }

@@ -39,6 +39,10 @@ public class StoreSettings
 
     /// <summary>Rupee value of one reward point when redeemed offline.</summary>
     public decimal RewardPointValue { get; set; } = 1m;
+    /// <summary>Refer &amp; Earn: points for the person who invited a new user (0 = no points, codes still tracked).</summary>
+    public decimal ReferralRewardPoints { get; set; } = 0m;
+    /// <summary>Refer &amp; Earn: welcome points for the new user who signed up with a code.</summary>
+    public decimal ReferralWelcomePoints { get; set; } = 0m;
     /// <summary>Invoice numbers read {prefix}/{financial year}/{number}, e.g. SESW/26-27/001 (online sales — the store keeps SES for its own bills); the number restarts each April.</summary>
     public string InvoicePrefix { get; set; } = "SESW";
     public int InvoiceNumberDigits { get; set; } = 3;

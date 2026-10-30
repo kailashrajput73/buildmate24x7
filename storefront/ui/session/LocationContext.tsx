@@ -26,6 +26,8 @@ interface LocationContextValue {
   addressStatus: AddressStatus;
   addressError: string | null;
   isTracking: boolean;
+  /** Last problem getting the position (permission denied, location off, timeout, not HTTPS…). */
+  trackingError: string | null;
   saveLocation: (location: Omit<CurrentLocation, 'updatedAt'>) => void;
   requestCurrentLocation: () => Promise<CurrentLocation>;
   startLiveTracking: () => void;
@@ -65,7 +67,7 @@ function locationErrorMessage(error: GeolocationPositionError): string {
     case error.PERMISSION_DENIED:
       return 'Location permission was denied. Allow location access in your browser settings.';
     case error.POSITION_UNAVAILABLE:
-      return 'Your current location is unavailable.';
+      return 'Location is turned off or unavailable. Turn on location (GPS) on your device and try again.';
     case error.TIMEOUT:
       return 'Getting your location took too long. Please try again.';
     default:
@@ -73,7 +75,17 @@ function locationErrorMessage(error: GeolocationPositionError): string {
   }
 }
 
+/** Browsers give the position only on HTTPS (or localhost). */
+function insecureMessage(): string | null {
+  if (typeof window !== 'undefined' && window.isSecureContext === false) {
+    return 'Current location works only on the secure (https://) website address.';
+  }
+  return null;
+}
+
 function readCurrentPosition(): Promise<GeolocationPosition> {
+  const insecure = insecureMessage();
+  if (insecure) return Promise.reject(new Error(insecure));
   if (!navigator.geolocation) {
     return Promise.reject(new Error('This browser does not support current location.'));
   }
@@ -109,6 +121,9 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   );
   const [addressError, setAddressError] = useState<string | null>(null);
   const [isTracking, setIsTracking] = useState(false);
+  const [trackingError, setTrackingError] = useState<string | null>(null);
+  // Several screens (shell + home) can ask for tracking; it stops when the last one lets go.
+  const trackingUsersRef = useRef(0);
 
   const geocodeAbortRef = useRef<AbortController | null>(null);
   const watchIdRef = useRef<number | null>(null);
@@ -162,13 +177,19 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   );
 
   const requestCurrentLocation = useCallback(async () => {
-    const position = await readCurrentPosition();
-    const location = positionToLocation(position);
-    saveLocation(location);
-    return location;
+    try {
+      const position = await readCurrentPosition();
+      const location = positionToLocation(position);
+      setTrackingError(null);
+      saveLocation(location);
+      return location;
+    } catch (e) {
+      setTrackingError(e instanceof Error ? e.message : 'Unable to determine your current location.');
+      throw e;
+    }
   }, [saveLocation]);
 
-  const stopLiveTracking = useCallback(() => {
+  const clearWatch = useCallback(() => {
     if (watchIdRef.current != null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
@@ -176,12 +197,22 @@ export function LocationProvider({ children }: { children: ReactNode }) {
     setIsTracking(false);
   }, []);
 
+  const stopLiveTracking = useCallback(() => {
+    trackingUsersRef.current = Math.max(0, trackingUsersRef.current - 1);
+    if (trackingUsersRef.current === 0) clearWatch();
+  }, [clearWatch]);
+
   const startLiveTracking = useCallback(() => {
-    if (!navigator.geolocation || watchIdRef.current != null) return;
+    trackingUsersRef.current += 1;
+    const insecure = insecureMessage();
+    if (insecure) { setTrackingError(insecure); return; }
+    if (!navigator.geolocation) { setTrackingError('This browser does not support current location.'); return; }
+    if (watchIdRef.current != null) return;
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
         const next = positionToLocation(position);
+        setTrackingError(null);
         setCurrentLocation((previous) => {
           if (previous && !hasMovedEnough(previous, next) && previous.address) {
             return { ...previous, accuracy: next.accuracy, updatedAt: next.updatedAt };
@@ -192,20 +223,23 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           return withoutAddress;
         });
       },
-      () => {
-        // Keep the last known location when watch callbacks fail intermittently.
+      (error) => {
+        // Keep the last known location; report the problem. A denied permission stops tracking for good.
+        setTrackingError(locationErrorMessage(error));
+        if (error.code === error.PERMISSION_DENIED) clearWatch();
       },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
     );
     setIsTracking(true);
-  }, [resolveAddress]);
+  }, [resolveAddress, clearWatch]);
 
   useEffect(() => {
     return () => {
       geocodeAbortRef.current?.abort();
-      stopLiveTracking();
+      trackingUsersRef.current = 0;
+      clearWatch();
     };
-  }, [stopLiveTracking]);
+  }, [clearWatch]);
 
   return (
     <LocationContext.Provider
@@ -214,6 +248,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         addressStatus,
         addressError,
         isTracking,
+        trackingError,
         saveLocation,
         requestCurrentLocation,
         startLiveTracking,
@@ -229,4 +264,47 @@ export function useCurrentLocation() {
   const context = useContext(LocationContext);
   if (!context) throw new Error('useCurrentLocation must be used within LocationProvider');
   return context;
+}
+
+/**
+ * Live location while the calling screen is open: starts automatically when the customer has already allowed
+ * location for this site (never pops a permission prompt on its own), and stops when the screen closes.
+ * `enable()` is for a "Use current location" tap: asks for permission, then keeps tracking.
+ */
+export function useLiveLocation() {
+  const ctx = useCurrentLocation();
+  const { startLiveTracking, stopLiveTracking, requestCurrentLocation } = ctx;
+  const holding = useRef(false);
+
+  const hold = useCallback(() => {
+    if (holding.current) return;
+    holding.current = true;
+    startLiveTracking();
+  }, [startLiveTracking]);
+
+  useEffect(() => {
+    let status: PermissionStatus | null = null;
+    let cancelled = false;
+    const onChange = () => { if (status?.state === 'granted') hold(); };
+    navigator.permissions?.query({ name: 'geolocation' as PermissionName })
+      .then((s) => {
+        if (cancelled) return;
+        status = s;
+        if (s.state === 'granted') hold();
+        s.addEventListener('change', onChange);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      status?.removeEventListener('change', onChange);
+      if (holding.current) { holding.current = false; stopLiveTracking(); }
+    };
+  }, [hold, stopLiveTracking]);
+
+  const enable = useCallback(async () => {
+    await requestCurrentLocation();
+    hold();
+  }, [requestCurrentLocation, hold]);
+
+  return { ...ctx, enable };
 }

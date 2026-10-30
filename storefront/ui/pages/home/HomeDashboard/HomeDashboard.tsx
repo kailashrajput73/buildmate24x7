@@ -7,9 +7,10 @@ import { AppRoutes } from '../../../routes/appRoutes';
 import type { SignupFlowArgs } from '../../../routes/appRoutes';
 import type { HomeCategory } from '../../../services/catalog/catalogModels';
 import { useSession } from '../../../session/SessionContext';
-import { useCurrentLocation } from '../../../session/LocationContext';
+import { useLiveLocation } from '../../../session/LocationContext';
 import { useCart } from '../../../session/CartContext';
 import { CategoryImage } from '../../../shared/CategoryImage';
+import { ComingSoonBadge } from '../../../shared/ComingSoonBadge';
 import { userInitials } from '../../../shared/userInitials';
 import mock from './HomeDashboard.mock.json';
 import {
@@ -25,6 +26,8 @@ import {
   LocationText,
   LocationLabel,
   LocationAddress,
+  LocateButton,
+  LocationError,
   SearchBar,
   SearchField,
   SearchPlaceholder,
@@ -68,7 +71,12 @@ export function HomeDashboard({ categories, onCategoryTap }: HomeDashboardProps)
   const theme = useTheme();
   const { user, isLoggedIn, isPartner, account } = useSession();
   const { totalQuantity: cartCount } = useCart();
-  const { currentLocation, addressStatus } = useCurrentLocation();
+  const { currentLocation, addressStatus, isTracking, trackingError, enable: enableLocation } = useLiveLocation();
+  const [locating, setLocating] = useState(false);
+  const locateNow = async () => {
+    setLocating(true);
+    try { await enableLocation(); } catch { /* message shown from trackingError */ } finally { setLocating(false); }
+  };
   const [saved, setSaved] = useState<Address | null>(null);
   const [unread, setUnread] = useState(0);
 
@@ -170,6 +178,11 @@ export function HomeDashboard({ categories, onCategoryTap }: HomeDashboardProps)
             </LocationText>
             <i className="pi pi-chevron-down" aria-hidden="true" />
           </LocationBar>
+          <LocateButton type="button" onClick={locateNow} disabled={locating} aria-label="Use current location">
+            <i className={locating ? 'pi pi-spin pi-spinner' : 'pi pi-compass'} aria-hidden="true" />
+            <span>{locating ? 'Locating…' : isTracking ? 'Live location on' : 'Use current location'}</span>
+          </LocateButton>
+          {trackingError && <LocationError role="alert">{trackingError}</LocationError>}
 
           <SearchBar>
             <SearchField type="button" onClick={openSearch}>
@@ -199,7 +212,10 @@ export function HomeDashboard({ categories, onCategoryTap }: HomeDashboardProps)
                 $tint={category.iconBackground}
                 $index={i}
                 onClick={() => onCategoryTap(category)}
+                style={category.comingSoon ? { opacity: 0.6, filter: 'grayscale(0.35)' } : undefined}
+                aria-label={category.comingSoon ? `${category.name}, coming soon` : undefined}
               >
+                {category.comingSoon && <ComingSoonBadge $floating>Coming soon</ComingSoonBadge>}
                 <CardMedia>
                   <CategoryImage
                     imageAsset={category.imageAsset}
@@ -212,7 +228,7 @@ export function HomeDashboard({ categories, onCategoryTap }: HomeDashboardProps)
                 <CardBody>
                   <CardName>{category.name}</CardName>
                   <CardCount>
-                    {category.itemCount} {section.itemCountSuffix}
+                    {category.comingSoon ? 'Coming soon' : `${category.itemCount} ${section.itemCountSuffix}`}
                   </CardCount>
                 </CardBody>
               </CategoryCard>

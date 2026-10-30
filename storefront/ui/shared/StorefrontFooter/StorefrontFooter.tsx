@@ -116,7 +116,7 @@ export function StorefrontFooter({ webOnly }: StorefrontFooterProps) {
               {categories.map((category) => (
                 <li key={category.id}>
                   <FooterLink type="button" onClick={() => openCategory(category)}>
-                    {category.name}
+                    {category.name}{category.comingSoon ? ' (coming soon)' : ''}
                   </FooterLink>
                 </li>
               ))}

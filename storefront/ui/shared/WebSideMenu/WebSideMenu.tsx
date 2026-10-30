@@ -5,6 +5,7 @@ import type { HomeCategory } from '../../services/catalog/catalogModels';
 import { useCatalog, categoryHref } from '../../session/CatalogContext';
 import shellMock from '../../pages/shell/MainShell/MainShell.mock.json';
 import mock from './WebSideMenu.mock.json';
+import { ComingSoonBadge } from '../ComingSoonBadge';
 import {
   Sidebar,
   SidebarScroll,
@@ -83,12 +84,13 @@ export function WebSideMenu({ activeTab, onSelectTab, showAi }: WebSideMenuProps
         <NavList>
           {categories.map((category) => (
             <li key={category.id}>
-              <CategoryItem type="button" onClick={() => openCategory(category)}>
+              <CategoryItem type="button" onClick={() => openCategory(category)}
+                style={category.comingSoon ? { opacity: 0.6 } : undefined}>
                 <CategoryThumb $tint={category.iconBackground}>
                   <img src={category.imageAsset} alt="" loading="lazy" />
                 </CategoryThumb>
                 <CategoryName>{category.name}</CategoryName>
-                <CategoryCount>{category.itemCount}</CategoryCount>
+                {category.comingSoon ? <ComingSoonBadge>Soon</ComingSoonBadge> : <CategoryCount>{category.itemCount}</CategoryCount>}
               </CategoryItem>
             </li>
           ))}

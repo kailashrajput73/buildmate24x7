@@ -1,14 +1,10 @@
-const NOMINATIM_REVERSE = 'https://nominatim.openstreetmap.org/reverse';
+import { api } from '@/lib/api';
 
-let lastRequestAt = 0;
-
-async function waitForNominatimSlot() {
-  const elapsed = Date.now() - lastRequestAt;
-  if (elapsed < 1100) {
-    await new Promise((resolve) => setTimeout(resolve, 1100 - elapsed));
-  }
-  lastRequestAt = Date.now();
-}
+/**
+ * Address lookups go through the BuildMate API (GET /api/geo/reverse), which caches results and talks to the
+ * geocoding provider (OpenStreetMap by default, Google when configured on the server). Browsers no longer call
+ * OpenStreetMap directly, so a busy live site isn't rate-limited or blocked by it.
+ */
 
 export function formatCoordinates(latitude: number, longitude: number): string {
   return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
@@ -22,52 +18,33 @@ export interface GeocodedPlace {
   pincode?: string;
 }
 
-/** Address parts for a map position (OpenStreetMap Nominatim; at most one request a second). */
+type ApiPlace = { address: string; area?: string | null; city?: string | null; state?: string | null; pincode?: string | null };
+
+function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new DOMException('Aborted', 'AbortError'));
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
+}
+
+/** Address parts for a map position. */
 export async function reverseGeocodeDetails(latitude: number, longitude: number, signal?: AbortSignal): Promise<GeocodedPlace> {
-  await waitForNominatimSlot();
-  const params = new URLSearchParams({ format: 'jsonv2', lat: String(latitude), lon: String(longitude), zoom: '18', addressdetails: '1' });
-  const response = await fetch(`${NOMINATIM_REVERSE}?${params.toString()}`, { signal, headers: { Accept: 'application/json' } });
-  if (!response.ok) throw new Error('Address lookup failed.');
-  const p = (await response.json()) as { display_name?: string; address?: Record<string, string> };
-  const a = p.address ?? {};
+  const q = new URLSearchParams({ lat: latitude.toFixed(6), lng: longitude.toFixed(6) });
+  const p = await abortable(api<ApiPlace>(`/api/geo/reverse?${q.toString()}`), signal);
   return {
-    address: p.display_name?.trim() ?? formatCoordinates(latitude, longitude),
-    area: a.road ?? a.neighbourhood ?? a.suburb ?? a.village ?? a.hamlet,
-    city: a.city ?? a.town ?? a.village ?? a.county ?? a.state_district,
-    state: a.state,
-    pincode: a.postcode?.replace(/\s/g, ''),
+    address: p.address?.trim() || formatCoordinates(latitude, longitude),
+    area: p.area ?? undefined,
+    city: p.city ?? undefined,
+    state: p.state ?? undefined,
+    pincode: p.pincode ?? undefined,
   };
 }
 
-export async function reverseGeocode(
-  latitude: number,
-  longitude: number,
-  signal?: AbortSignal,
-): Promise<string> {
-  await waitForNominatimSlot();
-
-  const params = new URLSearchParams({
-    format: 'jsonv2',
-    lat: String(latitude),
-    lon: String(longitude),
-    zoom: '18',
-    addressdetails: '1',
-  });
-
-  const response = await fetch(`${NOMINATIM_REVERSE}?${params.toString()}`, {
-    signal,
-    headers: { Accept: 'application/json' },
-  });
-
-  if (!response.ok) {
-    throw new Error('Address lookup failed.');
-  }
-
-  const payload = (await response.json()) as { display_name?: string };
-  const address = payload.display_name?.trim();
-  if (!address) {
-    throw new Error('No address was found for this location.');
-  }
-
-  return address;
+export async function reverseGeocode(latitude: number, longitude: number, signal?: AbortSignal): Promise<string> {
+  const place = await reverseGeocodeDetails(latitude, longitude, signal);
+  if (!place.address) throw new Error('No address was found for this location.');
+  return place.address;
 }

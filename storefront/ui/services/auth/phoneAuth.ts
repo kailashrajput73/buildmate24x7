@@ -6,7 +6,7 @@ import {
 } from 'firebase/auth';
 import { api, ApiError } from '@/lib/api';
 import type { AuthResult } from '@/lib/types';
-import { firebaseAuth, isFirebaseConfigured } from '../../firebase';
+import { authMode, firebaseAuth, firebaseProjectId, isFirebaseConfigured } from '../../firebase';
 
 /**
  * Phone sign-in for the website. Firebase sends and checks the OTP; the BuildMate API then turns the verified number
@@ -43,8 +43,15 @@ function loadProof(): Proof | null {
   try { return JSON.parse(sessionStorage.getItem(PROOF_KEY) ?? 'null'); } catch { return null; }
 }
 
+const SETUP_MISSING = 'Phone login is not set up on this website yet (Firebase settings missing). Please contact BuildMate support.';
+
 export async function sendPhoneOtp(mobileNumber: string): Promise<void> {
   const phone = digits10(mobileNumber);
+  if (!/^[6-9]\d{9}$/.test(phone)) throw Object.assign(new Error('Enter a valid 10-digit mobile number.'), { code: 'auth/invalid-phone-number' });
+  if (authMode === 'missing') {
+    console.error('[BuildMate auth] NEXT_PUBLIC_FIREBASE_* were not set when this site was built. See FIREBASE_SETUP.md.');
+    throw new Error(SETUP_MISSING);
+  }
   if (!isFirebaseConfigured) {
     await api('/api/auth/otp/request', { method: 'POST', body: { phone } });
     return;
@@ -57,6 +64,10 @@ export async function sendPhoneOtp(mobileNumber: string): Promise<void> {
   recaptchaVerifier = new RecaptchaVerifier(auth, RECAPTCHA_CONTAINER_ID, { size: 'invisible' });
   try {
     confirmationResult = await signInWithPhoneNumber(auth, `+91${phone}`, recaptchaVerifier);
+  } catch (e) {
+    // Logged with the Firebase code so set-up problems (domain, billing, API key) are visible in the browser console.
+    console.error('[BuildMate auth] signInWithPhoneNumber failed', { project: firebaseProjectId, host: location.host, code: (e as { code?: string })?.code, error: e });
+    throw e;
   } finally {
     clearRecaptcha();
   }
@@ -69,8 +80,14 @@ export async function confirmPhoneOtp(code: string, mobileNumber: string): Promi
     saveProof({ kind: 'otp', phone, code });
     return;
   }
+  if (authMode === 'missing') throw new Error(SETUP_MISSING);
   if (!confirmationResult) throw new Error('Request a verification code before entering an OTP.');
-  await confirmationResult.confirm(code);
+  try {
+    await confirmationResult.confirm(code.trim());
+  } catch (e) {
+    console.error('[BuildMate auth] OTP confirm failed', { code: (e as { code?: string })?.code, error: e });
+    throw e;
+  }
   confirmationResult = null;
   saveProof({ kind: 'firebase', phone });
 }
@@ -80,7 +97,20 @@ export type SignupDetails = {
   name?: string;
   email?: string;
   partnerType?: 'Plumber' | 'Electrician' | 'Contractor' | 'Builder' | 'Flooring' | 'Other';
+  /** Refer & Earn code; used by the API only when the account is created. */
+  referralCode?: string;
 };
+
+const REF_KEY = 'bm_referral_code';
+/** Keeps a code from an invite link (/login?ref=CODE) until sign-up. */
+export function rememberReferral(code: string | null) {
+  const c = code?.trim().toUpperCase();
+  if (!c || !/^[A-Z0-9]{4,12}$/.test(c)) return;
+  try { sessionStorage.setItem(REF_KEY, c); } catch { /* ignore */ }
+}
+export function rememberedReferral(): string {
+  try { return sessionStorage.getItem(REF_KEY) ?? ''; } catch { return ''; }
+}
 
 /**
  * Signs in to BuildMate with the verified number. Without signup details an existing account is used; a new number
@@ -131,8 +161,22 @@ export function firebaseAuthMessage(error: unknown): string {
       return 'App verification failed. Check the Firebase authorized domains and try again.';
     case 'auth/billing-not-enabled':
       return 'Firebase phone authentication requires billing to be enabled for this project.';
+    case 'auth/unauthorized-domain':
+      return `This website address (${typeof location !== 'undefined' ? location.hostname : 'domain'}) is not allowed in Firebase yet. Add it under Authentication → Settings → Authorized domains.`;
+    case 'auth/invalid-api-key':
+    case 'auth/api-key-not-valid.-please-pass-a-valid-api-key.':
+      return 'The website\'s Firebase API key is wrong. Check NEXT_PUBLIC_FIREBASE_API_KEY and rebuild the site.';
+    case 'auth/network-request-failed':
+      return 'No internet connection. Check your network and try again.';
+    case 'auth/missing-phone-number':
+      return 'Enter your mobile number.';
+    case 'firebase_token_invalid':
+    case 'firebase_token_expired':
+      return 'We could not confirm your sign-in with the server. Please verify your number again.';
+    case 'firebase_not_configured':
+      return 'Phone login is not set up on the server yet. Please contact BuildMate support.';
     default:
-      if (error instanceof Error && error.message) return error.message;
-      return 'Phone verification failed. Please try again.';
+      if (error instanceof Error && error.message) return code ? `${error.message}` : error.message;
+      return code ? `Phone verification failed (${code}). Please try again.` : 'Phone verification failed. Please try again.';
   }
 }

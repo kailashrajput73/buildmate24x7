@@ -1,7 +1,10 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/config.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../core/theme.dart';
@@ -373,11 +376,19 @@ class _BannerStripState extends State<_BannerStrip> {
                   child: ClipRRect(
                     borderRadius: AppRadius.lgAll,
                     child: Stack(fit: StackFit.expand, children: [
-                      NetImage(b.mobileImageUrl ?? b.imageUrl),
+                      // Brand gradient underneath: shows while the picture loads, or if it can't be loaded.
+                      const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(colors: [Color(0xFF0B3E86), Color(0xFF1A63C7)]))),
+                      _BannerImage(b.mobileImageUrl ?? b.imageUrl),
+                      // Darker on the left so the white title stays readable on any picture.
+                      const DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: [Color(0xB3000000), Color(0x33000000), Color(0x00000000)], stops: [0, 0.55, 1]),
+                        ),
+                      ),
                       Padding(
                         padding: const EdgeInsets.all(AppSpacing.space4),
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-                          SizedBox(width: 220, child: Text(b.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 19, height: 1.15))),
+                          SizedBox(width: 220, child: Text(b.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 19, height: 1.15))),
                           if (b.subtitle != null)
                             Padding(padding: const EdgeInsets.only(top: 6), child: SizedBox(width: 220, child: Text(b.subtitle!, maxLines: 2, style: const TextStyle(color: Colors.white70, fontSize: 12)))),
                         ]),
@@ -401,4 +412,26 @@ class _BannerStripState extends State<_BannerStrip> {
             ),
         ]),
       ]);
+}
+
+
+/// Banner picture without the grey placeholder box, so the gradient behind it shows until the picture arrives.
+class _BannerImage extends StatelessWidget {
+  const _BannerImage(this.url);
+  final String? url;
+
+  @override
+  Widget build(BuildContext context) {
+    final u = AppConfig.imageUrl(url);
+    if (u.isEmpty) return const SizedBox.shrink();
+    if (u.toLowerCase().endsWith('.svg')) {
+      return SvgPicture.network(u, fit: BoxFit.cover, alignment: Alignment.centerRight, placeholderBuilder: (_) => const SizedBox.shrink());
+    }
+    return CachedNetworkImage(
+      imageUrl: u,
+      fit: BoxFit.cover,
+      placeholder: (_, __) => const SizedBox.shrink(),
+      errorWidget: (_, __, ___) => const SizedBox.shrink(),
+    );
+  }
 }

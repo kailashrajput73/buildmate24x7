@@ -48,9 +48,10 @@ public enum OtpAudience { Partner, Customer }
 public record OtpRequest(string Phone, OtpAudience? Audience = null);
 /// <param name="Audience">Which account to sign in to. Null = whichever exists (partner first); a new number then gets "signup_required".</param>
 /// <param name="PartnerType">For new partner accounts: the profession chosen at sign-up.</param>
-public record OtpVerifyRequest(string Phone, string Code, OtpAudience? Audience, string? Name, string? Email = null, PartnerType? PartnerType = null);
+/// <param name="ReferralCode">Refer &amp; Earn code entered at sign-up (used only when the account is created).</param>
+public record OtpVerifyRequest(string Phone, string Code, OtpAudience? Audience, string? Name, string? Email = null, PartnerType? PartnerType = null, string? ReferralCode = null);
 /// <summary>Sign-in with a Firebase phone-auth ID token (website and app). Same account rules as <see cref="OtpVerifyRequest"/>.</summary>
-public record FirebaseLoginRequest(string IdToken, OtpAudience? Audience = null, string? Name = null, string? Email = null, PartnerType? PartnerType = null);
+public record FirebaseLoginRequest(string IdToken, OtpAudience? Audience = null, string? Name = null, string? Email = null, PartnerType? PartnerType = null, string? ReferralCode = null);
 public record StaffLoginRequest(string Email, string Password);
 public record RefreshRequest(string RefreshToken);
 
@@ -79,10 +80,13 @@ public class AuthService : IAuthService
     private readonly OtpOptions _otp;
     private readonly IHostEnvironment _env;
     private readonly IFirebaseTokenVerifier _firebase;
+    private readonly BuildMate.Services.Partners.IMemberService _members;
     private readonly PasswordHasher<AppUser> _hasher = new();
 
-    public AuthService(AppDbContext db, ISmsSender sms, IOptions<JwtOptions> jwt, IOptions<OtpOptions> otp, IHostEnvironment env, IFirebaseTokenVerifier firebase)
+    public AuthService(AppDbContext db, ISmsSender sms, IOptions<JwtOptions> jwt, IOptions<OtpOptions> otp, IHostEnvironment env, IFirebaseTokenVerifier firebase,
+        BuildMate.Services.Partners.IMemberService members)
     {
+        _members = members;
         _firebase = firebase;
         _db = db;
         _sms = sms;
@@ -110,6 +114,11 @@ public class AuthService : IAuthService
             var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Phone == phone && u.UserType == userType, ct);
             if (user is { IsActive: false }) return;
         }
+
+        // Outside development the "Log" SMS sender only writes the code to the server log — nobody would receive it.
+        // Fail clearly instead of answering "OTP sent". Production login uses Firebase (POST /api/auth/firebase).
+        if (!_env.IsDevelopment() && _sms is LogSmsSender && !_otp.TestNumbers.ContainsKey(phone))
+            throw new AppException("SMS OTP is not set up on the server. Please use the app or website login (Firebase).", 503, "otp_sms_not_configured");
 
         var code = _otp.TestNumbers.TryGetValue(phone, out var fixedCode)
             ? fixedCode
@@ -140,13 +149,13 @@ public class AuthService : IAuthService
         }
         otp.Consumed = true;
         await _db.SaveChangesAsync(ct);
-        return await SignInByPhoneAsync(phone, req.Audience, req.Name, req.Email, req.PartnerType, ct);
+        return await SignInByPhoneAsync(phone, req.Audience, req.Name, req.Email, req.PartnerType, req.ReferralCode, ct);
     }
 
     public async Task<AuthResult> FirebaseLoginAsync(FirebaseLoginRequest req, CancellationToken ct = default)
     {
         var identity = await _firebase.VerifyAsync(req.IdToken, ct);
-        return await SignInByPhoneAsync(identity.Phone, req.Audience, req.Name, req.Email, req.PartnerType, ct);
+        return await SignInByPhoneAsync(identity.Phone, req.Audience, req.Name, req.Email, req.PartnerType, req.ReferralCode, ct);
     }
 
     /// <summary>
@@ -155,7 +164,7 @@ public class AuthService : IAuthService
     /// then the customer account; a number with neither gets 409 "signup_required" so the client can ask for name and
     /// profession and call again (the Firebase token stays valid for an hour).
     /// </summary>
-    private async Task<AuthResult> SignInByPhoneAsync(string phone, OtpAudience? audience, string? name, string? email, PartnerType? partnerType, CancellationToken ct)
+    private async Task<AuthResult> SignInByPhoneAsync(string phone, OtpAudience? audience, string? name, string? email, PartnerType? partnerType, string? referralCode, CancellationToken ct)
     {
         var accounts = await _db.Users.Include(u => u.PartnerProfile)
             .Where(u => u.Phone == phone && (u.UserType == UserType.Partner || u.UserType == UserType.Customer)).ToListAsync(ct);
@@ -182,6 +191,7 @@ public class AuthService : IAuthService
             if (userType == UserType.Partner)
                 user.PartnerProfile = new PartnerProfile { PartnerType = partnerType ?? PartnerType.Other, KycStatus = KycStatus.NotSubmitted };
             _db.Users.Add(user);
+            await _members.ApplyReferralAsync(user, referralCode, ct);
         }
         else if (!user.IsActive)
         {

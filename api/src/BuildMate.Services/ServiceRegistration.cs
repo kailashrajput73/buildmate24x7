@@ -71,6 +71,8 @@ public static class ServiceRegistration
         services.AddHttpClient<IFirebaseTokenVerifier, FirebaseTokenVerifier>(c => c.Timeout = TimeSpan.FromSeconds(10));
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<ISettingsService, SettingsService>();
+        services.Configure<GeocodingOptions>(config.GetSection("Geocoding"));
+        services.AddHttpClient<IGeocodingService, GeocodingService>(c => c.Timeout = TimeSpan.FromSeconds(10));
         services.AddScoped<BuildMate.Services.Orders.IInvoiceNumbers, BuildMate.Services.Orders.InvoiceNumbers>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<ICatalogAdminService, CatalogAdminService>();
@@ -80,6 +82,7 @@ public static class ServiceRegistration
         services.AddScoped<IRackService, RackService>();
         services.AddScoped<IPurchaseService, PurchaseService>();
         services.AddScoped<IPartnerService, PartnerService>();
+        services.AddScoped<IMemberService, MemberService>();
         services.AddScoped<ICartService, CartService>();
         services.AddScoped<IOrderService, OrderService>();
         services.AddScoped<ICheckoutService, CheckoutService>();
@@ -89,6 +92,7 @@ public static class ServiceRegistration
         services.AddScoped<IContentService, ContentService>();
         services.AddScoped<IStaffService, StaffService>();
         services.AddScoped<IAccountService, AccountService>();
+        services.AddScoped<IWishlistService, WishlistService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IExcelService, ExcelService>();
         services.AddScoped<DbSeeder>();

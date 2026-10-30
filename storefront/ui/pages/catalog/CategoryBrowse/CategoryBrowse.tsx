@@ -11,7 +11,8 @@ import { CartIconButton } from '../../../shared/CartIconButton';
 import { StorefrontHeader } from '../../../shared/StorefrontHeader';
 import { CircularProgress } from '../../../shared/CircularProgress';
 import { CategoryImage } from '../../../shared/CategoryImage';
-import { buildGroups, sizeMm, type CatalogItem, type ProductGroup } from '../../../services/catalog/buildmateCatalog';
+import { WithWishlistHeart } from '../../../shared/WishlistHeart';
+import { buildGroups, compareTypes, sizeMm, typeRank, type CatalogItem, type ProductGroup } from '../../../services/catalog/buildmateCatalog';
 import pipesMock from '../PipesFittingCategory/PipesFittingCategory.mock.json';
 import {
   Screen, AppHeaderSlot, Header, HeaderInner, BackSlot, SearchSlot, HeaderTitle, ToolbarHeading, FilterRow, HeaderIconButton,
@@ -104,6 +105,7 @@ function StateMsg({ icon, title, subtitle }: { icon: string; title: string; subt
 function ProductCard({ group, onOpen }: { group: ProductGroup; onOpen: () => void }) {
   const theme = useTheme();
   return (
+    <WithWishlistHeart productId={group.openId} name={group.title}>
     <Card type="button" onClick={onOpen} aria-label={`${group.title}, from ₹${group.minPrice.toFixed(0)}`}>
       <CardMedia>
         <CategoryImage imageAsset={group.imageUrl ?? imageForType(group.type)} fallbackIcon={defaultIcon} fallbackIconColor={theme.colors.outline}
@@ -124,6 +126,7 @@ function ProductCard({ group, onOpen }: { group: ProductGroup; onOpen: () => voi
         <CardTitle title={group.title}>{group.title}</CardTitle>
       </CardBody>
     </Card>
+    </WithWishlistHeart>
   );
 }
 
@@ -152,7 +155,8 @@ export function CategoryBrowse({ categoryId, categoryName }: { categoryId: numbe
   }, [categoryId]);
 
   const all = useMemo(() => (state.status === 'done' ? buildGroups(state.items) : []), [state]);
-  const types = useMemo(() => [...new Set(all.map((g) => g.type))], [all]);
+  // Fixed store order: UPVC, PVC, CPVC, then Other — in the side bar, the chips and the "All" list.
+  const types = useMemo(() => [...new Set(all.map((g) => g.type))].sort(compareTypes), [all]);
   const typeCounts = useMemo(() => Object.fromEntries(types.map((t) => [t, all.filter((g) => g.type === t).length])), [all, types]);
   // Sub categories as set up in admin (e.g. Pipes, Fittings), in admin order; new ones appear automatically.
   const { raw: catalogTree } = useCatalog();
@@ -184,7 +188,7 @@ export function CategoryBrowse({ categoryId, categoryName }: { categoryId: numbe
       case 'priceHighLow': return [...r].sort((a, b) => b.minPrice - a.minPrice);
       case 'discount': return [...r].sort((a, b) => b.maxDiscount - a.maxDiscount);
       case 'whatsNew': return [...r].reverse();
-      default: return r;
+      default: return [...r].sort((a, b) => typeRank(a.type) - typeRank(b.type)); // stable: keeps catalogue order within a type
     }
   }, [all, type, subCategory, brand, cls, size, sort]);
 

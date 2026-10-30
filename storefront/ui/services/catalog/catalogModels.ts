@@ -46,4 +46,7 @@ export interface HomeCategory {
   iconColor: string;
   iconBackground: string;
   imageAsset: string;
+  /** No products yet: shown dimmed with a "Coming soon" badge; opens the Coming soon page. Switches on by itself
+   *  once admin adds a product. */
+  comingSoon?: boolean;
 }

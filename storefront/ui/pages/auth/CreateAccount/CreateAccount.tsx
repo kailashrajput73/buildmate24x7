@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from '@/ui/router';
 import { AppRoutes } from '../../../routes/appRoutes';
 import type { SignupFlowArgs } from '../../../routes/appRoutes';
@@ -8,6 +8,7 @@ import { LoginFlowOutlinedField } from '../../../shared/LoginFlowOutlinedField';
 import { LoginFlowContinueButton } from '../../../shared/LoginFlowContinueButton';
 import { LoginFlowTermsFooter } from '../../../shared/LoginFlowTermsFooter';
 import { AuthWebLayout } from '../../../shared/AuthWebLayout';
+import { rememberedReferral } from '../../../services/auth/phoneAuth';
 import createAccountMock from './CreateAccount.mock.json';
 import {
   Screen,
@@ -31,6 +32,8 @@ export function CreateAccount() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [referral, setReferral] = useState('');
+  // Code from an invite link (/login?ref=CODE).
+  useEffect(() => { const c = rememberedReferral(); if (c) setReferral((r) => r || c); }, []);
 
   const handleContinue = () => {
     const mobile = args?.mobileNumber;

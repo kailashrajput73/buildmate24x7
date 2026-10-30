@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import 'api.dart';
 
@@ -44,6 +45,9 @@ class PhoneAuth {
     if (!usesFirebase) {
       await _api.post('/api/auth/otp/request', {'phone': phone});
       return;
+    }
+    if (Firebase.apps.isEmpty) {
+      throw ApiException(0, 'Phone login is not set up in this build (google-services.json missing). Please contact support.');
     }
     final done = Completer<void>();
     try {
@@ -112,6 +116,12 @@ class PhoneAuth {
         'too-many-requests' => 'Too many attempts. Please wait a few minutes and try again.',
         'invalid-phone-number' => 'Enter a valid 10-digit mobile number.',
         'network-request-failed' => 'No internet connection. Check your network and try again.',
-        _ => e.message ?? 'Could not verify your number. Please try again.',
+        // Firebase Console set-up problems — shown with the code so they can be fixed quickly.
+        'app-not-authorized' || 'invalid-app-credential' || 'missing-client-identifier' =>
+          'This app is not registered for phone login yet (package name / SHA fingerprints in Firebase). [${e.code}]',
+        'operation-not-allowed' => 'Phone login is turned off in Firebase (Authentication > Sign-in method > Phone). [${e.code}]',
+        'quota-exceeded' => 'The SMS limit for today has been reached. Please try again later. [${e.code}]',
+        'billing-not-enabled' => 'SMS sending needs billing enabled on the Firebase project. [${e.code}]',
+        _ => '${e.message ?? 'Could not verify your number. Please try again.'} [${e.code}]',
       };
 }

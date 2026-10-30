@@ -78,6 +78,7 @@ export function MyRewards() {
   const navigate = useNavigate();
   const theme = useTheme();
   const { ready, isLoggedIn, isPartner } = useSession();
+  void isPartner;
   const [balance, setBalance] = useState(0);
   const [earned, setEarned] = useState(0);
   const [pointValue, setPointValue] = useState(0);
@@ -105,9 +106,10 @@ export function MyRewards() {
     }
   }, []);
 
+  // Every signed-in user has a points balance (orders for partners, Refer & Earn for everyone).
   useEffect(() => {
-    if (isPartner) void refresh();
-  }, [isPartner, refresh]);
+    if (isLoggedIn) void refresh();
+  }, [isLoggedIn, refresh]);
 
   const totalEarned = earned || entries.filter(isEarned).reduce((sum, e) => sum + e.points, 0);
   const totalRedeemed = entries.filter((e) => !isEarned(e)).reduce((sum, e) => sum + e.points, 0);
@@ -210,11 +212,11 @@ export function MyRewards() {
               {mock._historyTitle}
             </HistoryTitle>
 
-            {ready && !isPartner ? (
+            {ready && !isLoggedIn ? (
               <Empty>
                 <EmptyIcon><i className="pi pi-star-fill" aria-hidden /></EmptyIcon>
-                <EmptyTitle>Rewards are for trade partners</EmptyTitle>
-                <EmptySubtitle>Plumbers, electricians, contractors and other trade partners earn points on every order once their KYC is approved.</EmptySubtitle>
+                <EmptyTitle>Log in to see your reward points</EmptyTitle>
+                <EmptySubtitle>Earn points on orders and when friends join with your Refer &amp; Earn code.</EmptySubtitle>
               </Empty>
             ) : error ? (
               <Empty>

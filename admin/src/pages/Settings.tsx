@@ -70,6 +70,8 @@ export default function Settings() {
         <Section title="Rewards & app">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Value of 1 reward point (₹)" hint="Shown to partners in the app"><NumberInput value={s.rewardPointValue} onChange={(v) => set('rewardPointValue', v)} /></Field>
+            <Field label="Refer & Earn — points for the inviter" hint="Given when someone signs up with their code. 0 = no points."><NumberInput value={s.referralRewardPoints ?? 0} onChange={(v) => set('referralRewardPoints', v)} /></Field>
+            <Field label="Refer & Earn — welcome points" hint="Given to the new user who used a code. 0 = no points."><NumberInput value={s.referralWelcomePoints ?? 0} onChange={(v) => set('referralWelcomePoints', v)} /></Field>
             <Field label="Minimum app version" hint="Older apps are asked to update"><Input value={s.minAppVersion ?? ''} onChange={(e) => set('minAppVersion', e.target.value)} placeholder="1.0.0" /></Field>
             <Field label="Play Store link"><Input value={s.androidAppUrl ?? ''} onChange={(e) => set('androidAppUrl', e.target.value)} /></Field>
             <Field label="App Store link"><Input value={s.iosAppUrl ?? ''} onChange={(e) => set('iosAppUrl', e.target.value)} /></Field>

@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 import { useSession } from '../../session/SessionContext';
 import { AppRoutes } from '../../routes/appRoutes';
 import { useCart } from '../../session/CartContext';
+import { useWishlist } from '../../services/wishlist/wishlist';
 import mock from './StorefrontHeader.mock.json';
 import {
   Header,
@@ -41,6 +42,7 @@ export function StorefrontHeader({ webOnly, sticky = true }: StorefrontHeaderPro
   const { items } = useCart();
   const { isLoggedIn, isPartner, user, ready } = useSession();
   const count = items.length;
+  const saved = useWishlist().length;
   // Unread notifications for a signed-in customer or partner (the kit showed a fixed demo number).
   const [unread, setUnread] = useState(0);
   useEffect(() => {
@@ -101,10 +103,11 @@ export function StorefrontHeader({ webOnly, sticky = true }: StorefrontHeaderPro
           <CartButton
             type="button"
             title={_tooltips.wishlist}
-            aria-label={_tooltips.wishlist}
+            aria-label={saved > 0 ? `${_tooltips.wishlist}, ${saved} saved` : _tooltips.wishlist}
             onClick={() => navigate('/wishlist')}
           >
-            <i className="pi pi-heart" aria-hidden />
+            <i className={saved > 0 ? 'pi pi-heart-fill' : 'pi pi-heart'} aria-hidden />
+            {saved > 0 && <NotificationBadge key={saved}>{capBadge(saved, 99)}</NotificationBadge>}
           </CartButton>
           <CartButton
             type="button"

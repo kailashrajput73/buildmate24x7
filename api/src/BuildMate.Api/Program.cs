@@ -78,6 +78,10 @@ builder.Services.AddRateLimiter(o =>
     o.AddPolicy("login", ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(5) }));
+    // Address lookups (location bar): 30 / minute per IP; results are cached server-side.
+    o.AddPolicy("geo", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1) }));
 });
 
 builder.Services.AddEndpointsApiExplorer();
@@ -103,6 +107,12 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
 });
 
 var app = builder.Build();
+
+// Payment set-up problems are logged at start-up so they show in the server log before the first failed checkout.
+{
+    var cf = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<BuildMate.Services.Payments.CashfreeOptions>>().Value;
+    foreach (var problem in cf.Problems()) app.Logger.LogWarning("Cashfree set-up: {Problem}", problem);
+}
 
 // ---------------------------------------------------------------- Database
 using (var scope = app.Services.CreateScope())

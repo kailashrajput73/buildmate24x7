@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { AppRoutes } from '../../../routes/appRoutes';
 import { useSession } from '../../../session/SessionContext';
 import { loadProfile, refreshSessionUser, savePersonal as savePersonalApi, uploadKyc } from '../../../services/profile/buildmateProfile';
+import { ReferCard } from './ReferCard';
 import type { BuildMateProfile } from '../../../services/profile/buildmateProfile';
 import type { ProfileDocument } from '../../../services/profile/profileModels';
 import { profileValidators as v } from '../../../services/profile/profileValidators';
@@ -146,8 +147,14 @@ export function ProfileContent({ showBack = false }: ProfileContentProps) {
     attempt(async () => {
       if (!details) return;
       const gstin = values.number.toUpperCase();
-      await savePersonalApi(details, { fullName: details.personal.fullName, email: details.personal.email, gstin });
-      if (file) await uploadKyc('Gst', gstin, file);
+      if (details.isPartner) {
+        await savePersonalApi(details, { fullName: details.personal.fullName, email: details.personal.email, gstin });
+        if (file) await uploadKyc('Gst', gstin, file);
+      } else {
+        // Customers keep the GSTIN with their KYC; it needs the certificate.
+        if (!file) throw new Error('Attach your GST certificate.');
+        await uploadKyc('Gst', gstin, file, gstin);
+      }
     }, `${_sections.gst.snackName} saved`);
 
   const sectionProps = (key: SectionKey) => ({
@@ -172,7 +179,7 @@ export function ProfileContent({ showBack = false }: ProfileContentProps) {
     }
   };
 
-  const pending = details?.isPartner && (details.kycStatus === 'Pending');
+  const pending = details?.kycStatus === 'Pending';
   const balance = Math.round(details?.rewardBalance ?? 0);
   const initials = userInitials(user.name);
 
@@ -249,7 +256,8 @@ export function ProfileContent({ showBack = false }: ProfileContentProps) {
                 onSave={savePersonal}
               />
 
-              {details.isPartner && (
+              {/* KYC for every account: customers and partners (same /api/account/kyc endpoints). */}
+              {(
                 <>
                   <ProfileSection
                     {...sectionProps('aadhaar')}
@@ -285,9 +293,11 @@ export function ProfileContent({ showBack = false }: ProfileContentProps) {
               )}
             </Sections>
 
+            <ReferCard onSnack={showSnack} />
+
             <AccountTitle>{_account.title}</AccountTitle>
             <AccountRow>
-              {details.isPartner && (
+              {(
               <AccountTile type="button" onClick={() => navigate(AppRoutes.myRewards)}>
                 <i className="pi pi-star-fill" aria-hidden />
                 <AccountText>

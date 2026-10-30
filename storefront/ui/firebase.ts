@@ -11,20 +11,36 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID?.trim() ?? '',
 };
 
+const hasFirebaseConfig = [firebaseConfig.apiKey, firebaseConfig.authDomain, firebaseConfig.projectId, firebaseConfig.appId].every(Boolean);
+
 /**
- * Firebase phone OTP is used when configured. Without it (local demo with the mock API) the site falls back to the
- * API's own OTP (code 123456 on the mock). NEXT_PUBLIC_AUTH_MODE=otp forces the fallback.
+ * Which phone login the site uses.
+ * - "firebase": Firebase phone auth (real SMS) — the only mode for production.
+ * - "otp": the API's own OTP. Only when NEXT_PUBLIC_AUTH_MODE=otp is set explicitly (local demo with the mock API),
+ *   or in `next dev` without Firebase settings. A production build never falls back to it silently.
+ * - "missing": production build without the NEXT_PUBLIC_FIREBASE_* values — login shows a clear set-up error.
+ *   NEXT_PUBLIC_* values are inlined by `next build`, so they must be present when the site is BUILT.
  */
-export const isFirebaseConfigured =
-  process.env.NEXT_PUBLIC_AUTH_MODE !== 'otp' &&
-  [firebaseConfig.apiKey, firebaseConfig.authDomain, firebaseConfig.projectId, firebaseConfig.appId].every(Boolean);
+export const authMode: 'firebase' | 'otp' | 'missing' =
+  process.env.NEXT_PUBLIC_AUTH_MODE === 'otp'
+    ? 'otp'
+    : hasFirebaseConfig
+      ? 'firebase'
+      : process.env.NODE_ENV === 'production'
+        ? 'missing'
+        : 'otp';
+
+export const isFirebaseConfigured = authMode === 'firebase';
+
+/** Public project id the site was built with (for diagnostics; not a secret). */
+export const firebaseProjectId = firebaseConfig.projectId;
 
 let app: FirebaseApp | null = null;
 let authInstance: Auth | null = null;
 
 /** Browser-only; never called during server rendering. */
 export function firebaseAuth(): Auth {
-  if (!isFirebaseConfigured) throw new Error('Firebase is not configured. Set NEXT_PUBLIC_FIREBASE_* in .env.local.');
+  if (!isFirebaseConfigured) throw new Error('Phone login is not set up on this website yet (Firebase settings missing). Please contact BuildMate support.');
   if (!authInstance) {
     app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
     authInstance = getAuth(app);

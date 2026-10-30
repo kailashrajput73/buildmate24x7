@@ -27,13 +27,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
-    }
-
     defaultConfig {
-        // Must match the Android app registered in Firebase (google-services.json).
-        applicationId = "com.buildmate24x7.app"
+        // Must match the Android app registered in Firebase. The store's Firebase project (buildmate24x7) has this
+        // Android app registered, and its google-services.json is issued for this package name.
+        applicationId = "com.buildmate.customerapp"
         // Cashfree, mobile_scanner and Firebase Auth need 23+.
         minSdk = maxOf(flutter.minSdkVersion, 23)
         targetSdk = flutter.targetSdkVersion
@@ -57,6 +54,12 @@ android {
         release {
             signingConfig = if (keystorePropertiesFile.exists()) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 

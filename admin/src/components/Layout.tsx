@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import {
-  BarChart3, Boxes, FileText, ClipboardList, FolderTree, Home, Image, LogOut, Menu, Package, PlugZap, ScanLine, Settings, ShieldCheck, Tag, Truck, Users, Wrench, Warehouse, X, Layers,
+  BarChart3, Boxes, FileText, ClipboardList, FolderTree, Home, Image, LogOut, Menu, Package, PlugZap, ScanLine, Settings, ShieldCheck, Tag, Truck, Users, UserRound, Wrench, Warehouse, X, Layers,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
@@ -54,6 +54,7 @@ export default function Layout() {
     ] },
     { title: 'Partners', items: [
       { to: '/partners', label: 'Referral partners', icon: <Users />, perm: P.partnersView, count: k?.pendingKyc },
+      { to: '/customers', label: 'Customers', icon: <UserRound />, perm: P.partnersView },
     ] },
     { title: 'Website & app', items: [
       { to: '/content', label: 'Home page content', icon: <Image />, perm: P.content },

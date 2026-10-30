@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from '@/ui/router';
 import { AppRoutes } from '../../../routes/appRoutes';
 import type { OtpVerificationArgs } from '../../../routes/appRoutes';
-import { firebaseAuthMessage, sendPhoneOtp } from '../../../services/auth/phoneAuth';
+import { firebaseAuthMessage, rememberReferral, sendPhoneOtp } from '../../../services/auth/phoneAuth';
+import { authMode } from '../../../firebase';
 import { AuthValidators } from '../../../shared/authValidators';
 import { LoginFlowIconBadge } from '../../../shared/LoginFlowIconBadge';
 import { LoginFlowModeToggle } from '../../../shared/LoginFlowModeToggle';
@@ -39,12 +40,16 @@ export function Login() {
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
+    // Invite link: /login?ref=CODE fills the referral code on the sign-up form.
+    rememberReferral(new URLSearchParams(window.location.search).get('ref'));
     return () => {
       mounted.current = false;
     };
   }, []);
 
-  const canContinue = AuthValidators.mobile(mobile) === null;
+  // Firebase settings were missing when the site was built: say so up front instead of failing on "Send OTP".
+  const setupMissing = authMode === 'missing';
+  const canContinue = !setupMissing && AuthValidators.mobile(mobile) === null;
 
   const handleContinue = async () => {
     const value = mobile.trim();
@@ -99,6 +104,13 @@ export function Login() {
             }}
           />
           <Hint>We'll send a 6-digit OTP to verify this number</Hint>
+          {setupMissing && (
+            <ErrorText role="alert">
+              Phone login is not available right now: this website was built without its Firebase settings. Please
+              contact BuildMate support.
+            </ErrorText>
+          )}
+          {authMode === 'otp' && <Hint>Demo login: no SMS is sent. Use code 123456 on the demo server.</Hint>}
           {error && <ErrorText role="alert">{error}</ErrorText>}
           <LoginFlowContinueButton
             label="Send OTP"

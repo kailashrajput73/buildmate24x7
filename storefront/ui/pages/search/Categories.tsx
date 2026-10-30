@@ -4,6 +4,7 @@ import { useNavigate } from '@/ui/router';
 import { useCatalog, categoryHref } from '../../session/CatalogContext';
 import { SitePage, PageColumn, PageTitle, PageSubtitle } from '../../shared/SitePage';
 import { CategoryImage } from '../../shared/CategoryImage';
+import { ComingSoonBadge } from '../../shared/ComingSoonBadge';
 import { textStyle } from '../../theme';
 
 const List = styled.div`
@@ -62,10 +63,11 @@ export function Categories() {
         <PageSubtitle>Everything we stock at the store, by category.</PageSubtitle>
         <List>
           {categories.map((c) => (
-            <Tile key={c.id} href={categoryHref(c.id)} onClick={(e) => { e.preventDefault(); navigate(categoryHref(c.id)); }}>
+            <Tile key={c.id} href={categoryHref(c.id)} onClick={(e) => { e.preventDefault(); navigate(categoryHref(c.id)); }}
+              style={c.comingSoon ? { opacity: 0.6, filter: 'grayscale(0.35)' } : undefined}>
               <Art><CategoryImage imageAsset={c.imageAsset} fallbackIcon="pi-box" fallbackIconColor={theme.colors.outline} fallbackBackground={theme.colors.surfaceContainer} fit="cover" /></Art>
               <Name>{c.name}</Name>
-              <Meta>{c.itemCount} {c.itemCount === 1 ? 'item' : 'items'}</Meta>
+              <Meta>{c.comingSoon ? <ComingSoonBadge>Coming soon</ComingSoonBadge> : `${c.itemCount} ${c.itemCount === 1 ? 'item' : 'items'}`}</Meta>
             </Tile>
           ))}
         </List>

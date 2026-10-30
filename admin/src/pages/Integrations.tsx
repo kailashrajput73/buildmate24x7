@@ -23,6 +23,7 @@ export default function Integrations() {
 
   return (
     <>
+      <PaymentsCheck />
       <PageHeader title="ERP sync" subtitle="Every sale, invoice, purchase and product change is queued for your accounting/ERP system and retried until it's accepted." />
       {data && (
         <Section className="mb-4">
@@ -62,6 +63,41 @@ export default function Integrations() {
           </table>
         )}
       </div>
+    </>
+  )
+}
+
+type PaymentsInfo = { provider: string; environment: string; keysSet: boolean; clientIdEnding?: string | null; returnUrl: string; webhookUrl: string; problems: string[] }
+
+/** Cashfree set-up at a glance, with a read-only key check. */
+function PaymentsCheck() {
+  const { data, error } = useQuery({ queryKey: ['payments-check'], queryFn: () => api.get<PaymentsInfo>('/api/admin/integrations/payments') })
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const test = useAction(() => api.post<{ ok: boolean; message: string }>('/api/admin/integrations/payments/test'), { onSuccess: (r) => setResult(r as { ok: boolean; message: string }) })
+  return (
+    <>
+      <PageHeader title="Online payments" subtitle="Cashfree checkout for the website and app. Sandbox keys work only in sandbox, live keys only in production." />
+      <ErrorBox error={error} />
+      {data && (
+        <Section className="mb-6">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+            <div>Mode: <Badge tone={data.environment === 'production' ? 'success' : 'warn'}>{data.environment === 'production' ? 'Live (production)' : 'Test (sandbox)'}</Badge></div>
+            <div>Keys: <b>{data.keysSet ? `set${data.clientIdEnding ? ` (…${data.clientIdEnding})` : ''}` : 'missing'}</b></div>
+            <Button size="sm" variant="secondary" busy={test.isPending} onClick={() => test.mutate(undefined)} disabled={!data.keysSet}>Test connection</Button>
+          </div>
+          {result && <p className={`mt-2 text-sm ${result.ok ? 'text-leaf-700' : 'text-brick-700'}`}>{result.message}</p>}
+          <dl className="mt-3 grid gap-1 text-sm sm:grid-cols-[10rem_1fr]">
+            <dt className="text-ink-soft">Return address</dt><dd className="num break-all">{data.returnUrl || '—'}</dd>
+            <dt className="text-ink-soft">Webhook address</dt><dd className="num break-all">{data.webhookUrl || '—'}</dd>
+          </dl>
+          <p className="mt-2 text-xs text-ink-soft">Add the webhook address in the Cashfree dashboard (Developers → Webhooks) so paid orders are confirmed automatically.</p>
+          {data.problems.length > 0 ? (
+            <ul className="mt-3 list-disc space-y-1 rounded-md bg-brick-50 py-2 pl-6 pr-3 text-sm text-brick-700">
+              {data.problems.map((p) => <li key={p}>{p}</li>)}
+            </ul>
+          ) : <p className="mt-3 text-sm text-leaf-700">No set-up problems found.</p>}
+        </Section>
+      )}
     </>
   )
 }

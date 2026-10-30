@@ -19,7 +19,29 @@ public class AppUser : BaseEntity
     public DateTime? LastLoginAt { get; set; }
 
     public PartnerProfile? PartnerProfile { get; set; }
+    /// <summary>Retail customers: KYC documents and reward points (partners keep theirs on PartnerProfile).</summary>
+    public CustomerProfile? CustomerProfile { get; set; }
     public ICollection<Address> Addresses { get; set; } = new List<Address>();
+
+    /// <summary>Personal invite code (Refer &amp; Earn), created the first time the user opens Refer &amp; Earn.</summary>
+    public string? ReferralCode { get; set; }
+    /// <summary>Who invited this user (code entered at sign-up).</summary>
+    public long? ReferredById { get; set; }
+}
+
+/// <summary>KYC and reward points for retail customers (one per customer account, created when first needed).</summary>
+public class CustomerProfile : BaseEntity
+{
+    public long UserId { get; set; }
+    public AppUser User { get; set; } = default!;
+    public string? Gstin { get; set; }
+    public KycStatus KycStatus { get; set; } = KycStatus.NotSubmitted;
+    public DateTime? KycSubmittedAt { get; set; }
+    public long? KycReviewedById { get; set; }
+    public DateTime? KycReviewedAt { get; set; }
+    public string? KycRemarks { get; set; }
+    public decimal RewardBalance { get; set; }
+    public ICollection<KycDocument> Documents { get; set; } = new List<KycDocument>();
 }
 
 public class Role : BaseEntity
@@ -67,8 +89,11 @@ public class PartnerProfile : BaseEntity
 
 public class KycDocument : BaseEntity
 {
-    public long PartnerProfileId { get; set; }
-    public PartnerProfile PartnerProfile { get; set; } = default!;
+    /// <summary>Exactly one of PartnerProfileId / CustomerProfileId is set.</summary>
+    public long? PartnerProfileId { get; set; }
+    public PartnerProfile? PartnerProfile { get; set; }
+    public long? CustomerProfileId { get; set; }
+    public CustomerProfile? CustomerProfile { get; set; }
     public KycDocumentType DocumentType { get; set; }
     /// <summary>Stored masked (e.g. XXXX-XXXX-1234) — never the full Aadhaar number.</summary>
     public string? DocumentNumberMasked { get; set; }
@@ -118,6 +143,13 @@ public class RewardTransaction : BaseEntity
     public long? OrderId { get; set; }
     public string? Note { get; set; }
     public long? CreatedById { get; set; }
+}
+
+/// <summary>A product saved to a signed-in user's wishlist (shared by the website and the app).</summary>
+public class WishlistItem : BaseEntity
+{
+    public long UserId { get; set; }
+    public long ProductId { get; set; }
 }
 
 public class DeviceToken : BaseEntity

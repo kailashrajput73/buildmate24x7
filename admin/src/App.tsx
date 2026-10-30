@@ -21,6 +21,7 @@ const Purchases = lazy(() => import('./pages/Purchases'))
 const PurchaseNew = lazy(() => import('./pages/PurchaseNew'))
 const Racks = lazy(() => import('./pages/Racks'))
 const Partners = lazy(() => import('./pages/Partners'))
+const Customers = lazy(() => import('./pages/Customers'))
 const PartnerDetail = lazy(() => import('./pages/PartnerDetail'))
 const ServiceRequests = lazy(() => import('./pages/ServiceRequests'))
 const Content = lazy(() => import('./pages/Content'))
@@ -62,6 +63,7 @@ export default function App() {
           <Route path="purchases/new" element={<Guard perm={P.purchases}><PurchaseNew /></Guard>} />
           <Route path="racks" element={<Guard perm={P.stockView}><Racks /></Guard>} />
           <Route path="partners" element={<Guard perm={P.partnersView}><Partners /></Guard>} />
+          <Route path="customers" element={<Guard perm={P.partnersView}><Customers /></Guard>} />
           <Route path="partners/:id" element={<Guard perm={P.partnersView}><PartnerDetail /></Guard>} />
           <Route path="content" element={<Guard perm={P.content}><Content /></Guard>} />
           <Route path="reports" element={<Guard perm={P.reports}><Reports /></Guard>} />

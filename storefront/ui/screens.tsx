@@ -15,6 +15,7 @@ export { OrderConfirmation } from './pages/checkout/OrderConfirmation';
 export { MyRewards } from './pages/rewards/MyRewards';
 export { Profile } from './pages/profile/Profile';
 export { CategoryBrowse } from './pages/catalog/CategoryBrowse/CategoryBrowse';
+export { CategoryComingSoon } from './pages/catalog/CategoryComingSoon/CategoryComingSoon';
 export { ProductView } from './pages/catalog/ProductView/ProductView';
 export { rememberAfterLogin } from './pages/auth/afterLogin';
 export { Search } from './pages/search/Search';

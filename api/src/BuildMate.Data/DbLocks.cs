@@ -28,6 +28,9 @@ public static class DbLocks
     public static async Task<PartnerProfile?> LockPartnerAsync(this AppDbContext db, long userId, CancellationToken ct = default) =>
         (await db.PartnerProfiles.FromSqlRaw("SELECT * FROM partner_profiles WHERE user_id = {0} FOR UPDATE", userId).ToListAsync(ct)).FirstOrDefault();
 
+    public static async Task<CustomerProfile?> LockCustomerProfileAsync(this AppDbContext db, long userId, CancellationToken ct = default) =>
+        (await db.CustomerProfiles.FromSqlRaw("SELECT * FROM customer_profiles WHERE user_id = {0} FOR UPDATE", userId).ToListAsync(ct)).FirstOrDefault();
+
     /// <summary>Locks a quotation and loads its lines (pricing by staff vs. acceptance by the customer).</summary>
     public static async Task<Quotation?> LockQuotationAsync(this AppDbContext db, long id, CancellationToken ct = default)
     {

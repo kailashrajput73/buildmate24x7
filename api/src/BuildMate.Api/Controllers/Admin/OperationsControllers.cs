@@ -138,6 +138,38 @@ public class StockController : AdminControllerBase
     public Task<StockMovementDto> Adjust(StockAdjustRequest req, CancellationToken ct) => _stock.AdjustAsync(req, ct);
 }
 
+/// <summary>Retail customers: KYC review, reward points and referrals (partners stay on /api/admin/partners).</summary>
+[Route("api/admin/customers")]
+public class CustomersController : AdminControllerBase
+{
+    private readonly IMemberService _members;
+    public CustomersController(IMemberService members) => _members = members;
+
+    [HttpGet, Authorize(Policy = Permissions.PartnersView)]
+    public Task<PagedResult<CustomerKycListDto>> List([FromQuery] CustomerKycQuery q, CancellationToken ct) => _members.ListCustomersAsync(q, ct);
+
+    [HttpGet("{userId:long}"), Authorize(Policy = Permissions.PartnersView)]
+    public Task<CustomerKycDetailDto> Get(long userId, CancellationToken ct) => _members.GetCustomerAsync(userId, ct);
+
+    [HttpPost("{userId:long}/kyc"), Authorize(Policy = Permissions.KycApprove)]
+    public Task<CustomerKycDetailDto> Kyc(long userId, KycDecision d, CancellationToken ct) => _members.DecideCustomerKycAsync(userId, d, ct);
+
+    [HttpGet("{userId:long}/kyc/documents/{docId:long}"), Authorize(Policy = Permissions.KycApprove)]
+    public async Task<IActionResult> KycDocument(long userId, long docId, CancellationToken ct)
+    {
+        var (stream, type, _) = await _members.OpenCustomerDocumentAsync(userId, docId, ct);
+        Response.Headers.CacheControl = "no-store";
+        return File(stream, type);
+    }
+
+    [HttpPost("{userId:long}/rewards"), Authorize(Policy = Permissions.RewardsAdjust)]
+    public Task<RewardTxnDto> AdjustRewards(long userId, RewardAdjust dto, CancellationToken ct) => _members.AdjustCustomerRewardsAsync(userId, dto, ct);
+
+    [HttpGet("{userId:long}/rewards"), Authorize(Policy = Permissions.PartnersView)]
+    public Task<PagedResult<RewardTxnDto>> Rewards(long userId, [FromQuery] int page = 1, CancellationToken ct = default) =>
+        _members.RewardHistoryAsync(userId, new PageRequest(page, 30), ct);
+}
+
 [Route("api/admin/partners")]
 public class PartnersController : AdminControllerBase
 {
@@ -202,7 +234,7 @@ public class PartnersController : AdminControllerBase
     [HttpGet("{userId:long}/kyc/documents/{docId:long}"), Authorize(Policy = Permissions.KycApprove)]
     public async Task<IActionResult> KycDocument(long userId, long docId, CancellationToken ct)
     {
-        var doc = await _db.KycDocuments.AsNoTracking().FirstOrDefaultAsync(d => d.Id == docId && d.PartnerProfile.UserId == userId, ct)
+        var doc = await _db.KycDocuments.AsNoTracking().FirstOrDefaultAsync(d => d.Id == docId && d.PartnerProfile != null && d.PartnerProfile.UserId == userId, ct)
                   ?? throw new NotFoundException("Document");
         var (stream, type) = await _files.OpenAsync(doc.FileKey, ct);
         Response.Headers.CacheControl = "no-store";

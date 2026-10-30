@@ -195,6 +195,33 @@ public class AppUserConfig : IEntityTypeConfiguration<AppUser>
         e.HasIndex(x => new { x.UserType, x.Phone }).IsUnique().HasFilter("phone IS NOT NULL");
         e.HasIndex(x => x.Email).IsUnique().HasFilter("email IS NOT NULL");
         e.HasOne(x => x.Role).WithMany(r => r.Users).HasForeignKey(x => x.RoleId).OnDelete(DeleteBehavior.Restrict);
+        e.Property(x => x.ReferralCode).HasMaxLength(12);
+        e.HasIndex(x => x.ReferralCode).IsUnique().HasFilter("referral_code IS NOT NULL");
+        e.HasIndex(x => x.ReferredById);
+        e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.ReferredById).OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
+public class WishlistItemConfig : IEntityTypeConfiguration<WishlistItem>
+{
+    public void Configure(EntityTypeBuilder<WishlistItem> e)
+    {
+        e.HasIndex(x => new { x.UserId, x.ProductId }).IsUnique();
+        e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        e.HasOne<Product>().WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class CustomerProfileConfig : IEntityTypeConfiguration<CustomerProfile>
+{
+    public void Configure(EntityTypeBuilder<CustomerProfile> e)
+    {
+        e.HasIndex(x => x.UserId).IsUnique();
+        e.HasIndex(x => x.KycStatus);
+        e.Property(x => x.Gstin).HasMaxLength(15);
+        e.Property(x => x.RewardBalance).HasPrecision(14, 2);
+        e.HasOne(x => x.User).WithOne(u => u.CustomerProfile).HasForeignKey<CustomerProfile>(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.KycReviewedById).OnDelete(DeleteBehavior.SetNull);
     }
 }
 
@@ -228,6 +255,7 @@ public class KycDocumentConfig : IEntityTypeConfiguration<KycDocument>
     public void Configure(EntityTypeBuilder<KycDocument> e)
     {
         e.HasOne(x => x.PartnerProfile).WithMany(p => p.Documents).HasForeignKey(x => x.PartnerProfileId).OnDelete(DeleteBehavior.Cascade);
+        e.HasOne(x => x.CustomerProfile).WithMany(p => p.Documents).HasForeignKey(x => x.CustomerProfileId).OnDelete(DeleteBehavior.Cascade);
     }
 }
 

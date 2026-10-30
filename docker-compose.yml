@@ -25,6 +25,7 @@ services:
       Cashfree__ClientSecret: ${CASHFREE_CLIENT_SECRET}
       Cashfree__WebReturnUrl: ${SITE_URL}/checkout/return?order={orderId}
       Cashfree__NotifyUrl: ${PUBLIC_API_URL}/api/payments/cashfree/webhook
+      Firebase__ProjectId: ${FIREBASE_PROJECT_ID:-buildmate24x7}
       Sms__Provider: ${SMS_PROVIDER:-Log}
       Sms__Msg91AuthKey: ${MSG91_AUTH_KEY}
       Sms__Msg91OtpTemplateId: ${MSG91_OTP_TEMPLATE_ID}
@@ -43,7 +44,15 @@ services:
   storefront:
     build:
       context: ./storefront
-      args: { API_URL: "http://api:8080", NEXT_PUBLIC_CASHFREE_MODE: "${CASHFREE_ENV:-sandbox}" }
+      args:
+        API_URL: "http://api:8080"
+        # Firebase web app config of project buildmate24x7 (public values; set them in the .env next to this file).
+        NEXT_PUBLIC_FIREBASE_API_KEY: "${NEXT_PUBLIC_FIREBASE_API_KEY}"
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:-buildmate24x7.firebaseapp.com}"
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: "${NEXT_PUBLIC_FIREBASE_PROJECT_ID:-buildmate24x7}"
+        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:-buildmate24x7.firebasestorage.app}"
+        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:-384018735885}"
+        NEXT_PUBLIC_FIREBASE_APP_ID: "${NEXT_PUBLIC_FIREBASE_APP_ID:-1:384018735885:web:52cf804bbb61127d88c644}"
     environment: { API_URL: "http://api:8080" }
     depends_on: [api]
     ports: ["3000:3000"]

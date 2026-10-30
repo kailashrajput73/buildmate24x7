@@ -15,7 +15,7 @@ The look follows the design kit the client supplied (`theme/` = their `AppColors
 ## First-time setup
 
 Requires Flutter 3.29+ (Dart 3.7+), Android Studio (for the Android SDK) and JDK 17. The `android/` project is
-included (package `com.buildmate24x7.app`, minSdk 23, Kotlin DSL Gradle, launcher icons from the logo), so no
+included (package `com.buildmate.customerapp`, minSdk 23, Kotlin DSL Gradle, launcher icons from the logo), so no
 `flutter create` is needed.
 
 ```bash
@@ -48,22 +48,25 @@ Release builds without `android/key.properties` are signed with the debug key �
 
 ## Firebase phone login (required)
 
-The client's files point at **two different Firebase projects**: the website's `.env` uses project `buildmate24x7`,
-the Android `google-services.json` uses `buildmate-24x7` with package `com.example.customerapp`. Both work — the API
-accepts tokens from either (`Firebase:ProjectId` = `buildmate24x7,buildmate-24x7`) — but one project is simpler.
+Full guide for web + app: ../FIREBASE_SETUP.md.
 
-1. In the Firebase console of the project you keep, add an Android app with package **`com.buildmate24x7.app`**,
-   and add the **SHA-1 and SHA-256** of
-   the debug and release signing keys (`cd android && ./gradlew signingReport`). Phone auth fails without them.
-2. Download that app's `google-services.json` to `android/app/`.
-3. Nothing to change in Gradle: `android/app/build.gradle.kts` applies the Google Services plugin automatically
-   when `google-services.json` is present.
-4. Authentication → Sign-in method → enable **Phone**. Real SMS needs the **Blaze** plan; for testing add test numbers
-   (Authentication → Settings → Phone numbers for testing).
-5. Put the project id in the API's `Firebase:ProjectId`.
+The app's package name is **`com.buildmate.customerapp`** — the Android app the store registered in Firebase project
+**`buildmate24x7`** (the same project as the website). Its `google-services.json` is not in this repository.
 
-Against the mock API (no Firebase), build with `--dart-define=AUTH_MODE=otp`: the app then uses the API's own OTP
-(code `123456`).
+1. Put that `google-services.json` in `android/app/`. `build-apk.bat` then builds with real SMS login
+   (`AUTH_MODE=firebase`); without it, or if the file is for another package, it builds the demo OTP (`123456`).
+2. Firebase console → Project settings → Your apps → `com.buildmate.customerapp` → **Add fingerprint**: add the
+   **SHA-1 and SHA-256** of every key that signs the app. `build-apk.bat` writes the current key's fingerprints to
+   `firebase-sha.txt` (debug key until `android/key.properties` exists). For Play Store installs also add the
+   **App signing key** fingerprints from Play Console → Setup → App integrity. Phone auth fails without them
+   (`app-not-authorized` / `invalid-app-credential`).
+3. Download `google-services.json` again after adding fingerprints and replace the one in `android/app/`.
+4. Authentication → Sign-in method → enable **Phone**. Real SMS needs the **Blaze** (billing) plan; for testing add
+   numbers under Authentication → Settings → Phone numbers for testing.
+5. The API's `Firebase:ProjectId` already includes `buildmate24x7`.
+
+Firebase error codes are shown in the login error message (e.g. `[app-not-authorized]`) to make set-up problems easy
+to spot.
 
 ## Play Store release
 

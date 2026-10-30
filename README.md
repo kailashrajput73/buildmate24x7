@@ -19,6 +19,8 @@ The admin panel drives both apps: products, prices, images, categories, home ban
 minimum order, hours, support number), partner approval and reward rules all come from the API, so a change in admin
 shows up on the website and in the app without a release.
 
+> **Phone login (Firebase) for the website and app: see [FIREBASE_SETUP.md](FIREBASE_SETUP.md).**
+
 ## Look and feel: the client's design kit
 
 All three apps follow the design the client supplied (their React web app and Flutter app): flat white surfaces,
@@ -208,6 +210,27 @@ bank details, numbered terms, "For, SHIVANI ELECTROCHEM SERVICES" / Authorised S
 - **Round off:** the bill is rounded to the rupee at checkout, so the amount charged online equals the invoice total.
 - **Delivery charge** is a line on the invoice at 18% GST with SAC 996511 (confirmed by the store).
 - One component draws it everywhere: `admin/src/components/InvoiceSheet.tsx` (copied to `storefront/components/`).
+
+## Accounts: KYC, reward points, Refer & Earn, wishlist (2026-10-30)
+
+- **KYC for everyone.** Customers and partners upload Aadhaar / PAN / GST on the profile page (`/api/account/kyc`).
+  Partners keep their partner profile; customers get a `customer_profiles` row. Admin → **Customers** reviews customer
+  KYC (approve / reject with a reason) and adjusts their points; partners stay on Admin → Referral partners.
+- **Reward points for everyone** (`/api/account/rewards`). Partners still earn on orders; everyone can earn
+  Refer & Earn points.
+- **Refer & Earn.** Each user gets a code (`BM` + 6 characters) on the profile page with Copy / WhatsApp / Share. The
+  invite link is `/login?ref=CODE`, which fills the code on the sign-up form. Points per referral are set in
+  Admin → Settings ("Refer & Earn — points for the inviter / welcome points"); both are **0 until the store sets them**.
+- **Wishlist on the account** (`/api/account/wishlist`): follows the user across devices; guests keep a browser list
+  that is merged in at login.
+- **Location bar**: "Use current location" + live tracking while the home page is open (HTTPS only). Addresses are
+  looked up by the API (`GET /api/geo/reverse`, cached; OpenStreetMap by default, `Geocoding:Provider=Google` +
+  `Geocoding:GoogleApiKey` for Google).
+- **Categories**: all active categories are shown; empty ones are dimmed with "Coming soon" and open the Coming soon
+  page. A category switches on by itself once it has a product (the site refreshes its category list every 5 minutes).
+
+**Existing databases:** run `api/db/2026-10-30_customer_kyc_referrals_wishlist.sql` by hand (backup first, staging
+first). It only adds tables/columns; nothing is deleted.
 
 ## Things to decide or finish before launch
 

@@ -230,6 +230,76 @@ public class MyServiceRequestsController : ControllerBase
     public Task<ServiceRequestDto> Cancel(long id, CancellationToken ct) => _svc.CancelMineAsync(_me.RequireId(), id, ct);
 }
 
+/// <summary>KYC, reward points and Refer &amp; Earn for every signed-in shopper (customers and partners).</summary>
+[ApiController]
+[Route("api/account")]
+[Authorize(Policy = Policies.Shopper)]
+public class MemberController : ControllerBase
+{
+    private readonly IMemberService _members;
+    private readonly ICurrentUser _me;
+
+    public MemberController(IMemberService members, ICurrentUser me)
+    {
+        _members = members;
+        _me = me;
+    }
+
+    [HttpGet("kyc")]
+    public Task<MyKycDto> Kyc(CancellationToken ct) => _members.GetKycAsync(_me.RequireId(), ct);
+
+    [HttpPost("kyc/documents"), RequestSizeLimit(10 * 1024 * 1024)]
+    public async Task<KycDocumentDto> UploadKyc([FromForm] KycDocumentType type, [FromForm] string? number, IFormFile file, CancellationToken ct)
+    {
+        await using var s = file.OpenReadStream();
+        return await _members.UploadKycAsync(_me.RequireId(), type, number, s, file.FileName, file.Length, ct);
+    }
+
+    public record KycSubmit(string? Gstin);
+
+    [HttpPost("kyc/submit")]
+    public Task<MyKycDto> SubmitKyc(KycSubmit? body, CancellationToken ct) => _members.SubmitKycAsync(_me.RequireId(), body?.Gstin, ct);
+
+    [HttpGet("rewards")]
+    public Task<RewardSummaryDto> Rewards(CancellationToken ct) => _members.RewardsAsync(_me.RequireId(), ct);
+
+    [HttpGet("rewards/history")]
+    public Task<PagedResult<RewardTxnDto>> RewardHistory([FromQuery] int page = 1, CancellationToken ct = default) =>
+        _members.RewardHistoryAsync(_me.RequireId(), new PageRequest(page, 30), ct);
+
+    [HttpGet("referral")]
+    public Task<ReferralDto> Referral(CancellationToken ct) => _members.GetReferralAsync(_me.RequireId(), ct);
+}
+
+/// <summary>Account wishlist (product ids), shared by the website and the app.</summary>
+[ApiController]
+[Route("api/account/wishlist")]
+[Authorize(Policy = Policies.Shopper)]
+public class WishlistController : ControllerBase
+{
+    private readonly IWishlistService _wishlist;
+    private readonly ICurrentUser _me;
+
+    public WishlistController(IWishlistService wishlist, ICurrentUser me)
+    {
+        _wishlist = wishlist;
+        _me = me;
+    }
+
+    [HttpGet]
+    public Task<List<long>> Get(CancellationToken ct) => _wishlist.IdsAsync(_me.RequireId(), ct);
+
+    [HttpPost("{productId:long}")]
+    public Task<List<long>> Add(long productId, CancellationToken ct) => _wishlist.AddAsync(_me.RequireId(), productId, ct);
+
+    [HttpDelete("{productId:long}")]
+    public Task<List<long>> Remove(long productId, CancellationToken ct) => _wishlist.RemoveAsync(_me.RequireId(), productId, ct);
+
+    /// <summary>Adds what the user saved in the browser before logging in.</summary>
+    [HttpPost("merge")]
+    public Task<List<long>> Merge([FromBody] List<long> productIds, CancellationToken ct) => _wishlist.MergeAsync(_me.RequireId(), productIds ?? new(), ct);
+}
+
 /// <summary>Referral-partner self service: registration profile, KYC, rewards.</summary>
 [ApiController]
 [Route("api/partner")]

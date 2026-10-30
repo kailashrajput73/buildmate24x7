@@ -241,6 +241,31 @@ public class IntegrationsController : AdminControllerBase
         _erp = erp;
     }
 
+    /// <summary>Cashfree set-up check: environment, addresses, problems (no secrets returned).</summary>
+    [HttpGet("payments")]
+    public object Payments([FromServices] Microsoft.Extensions.Options.IOptions<BuildMate.Services.Payments.CashfreeOptions> opt)
+    {
+        var o = opt.Value;
+        return new
+        {
+            provider = "Cashfree",
+            environment = o.Environment,
+            keysSet = o.KeysSet,
+            clientIdEnding = o.ClientId.Length >= 4 ? o.ClientId[^4..] : null,
+            returnUrl = o.WebReturnUrl,
+            webhookUrl = o.NotifyUrl,
+            problems = o.Problems(),
+        };
+    }
+
+    /// <summary>Tries the keys against Cashfree (read-only call; nothing is created).</summary>
+    [HttpPost("payments/test")]
+    public async Task<object> TestPayments([FromServices] BuildMate.Services.Payments.IPaymentGateway gateway, CancellationToken ct)
+    {
+        var (ok, message) = await gateway.TestConnectionAsync(ct);
+        return new { ok, message };
+    }
+
     [HttpGet("erp")]
     public async Task<object> Erp([FromQuery] OutboxStatus? status, [FromQuery] int page = 1, CancellationToken ct = default)
     {

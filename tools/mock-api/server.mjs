@@ -38,6 +38,7 @@ const fail = (status, msg, code) => { throw new HttpError(status, msg, code) }
 
 // ------------------------------------------------------------------ data
 const settings = {
+  referralRewardPoints: 0, referralWelcomePoints: 0,
   storeName: 'BuildMate 24x7', legalName: 'Shivani Electrochem Services', addressLine: '16/18 E, Sahajanand Society, Vill Baroi, Ta-Mundra, Dist-Bhuj', city: 'Mundra (Kutchh)', state: 'Gujarat', pincode: '370421',
   gstin: '24AUWPC0904B1Z5', pan: 'AUWPC0904B', bankName: 'Axis Bank', bankBranch: 'Baroi', bankAccountNo: '918020016036424', bankIfsc: 'UTIB0002227', invoiceLogoUrl: '/ses-logo.png',
   supportPhone: '9000000000', supportEmail: 'support@buildmate24x7.in', whatsAppNumber: '9000000000', openingHours: 'Open 24x7',
@@ -430,6 +431,25 @@ const on = (method, pattern, fn) => routes.push({ method, re: new RegExp('^' + p
 
 // auth
 on('POST', '/api/auth/staff/login', ({ body }) => { const u = users.find((x) => x.userType === 'Staff' && x.email === (body.email ?? '').toLowerCase()); if (!u || body.password !== 'Admin@12345') fail(401, 'Incorrect email or password.', 'invalid_credentials'); return issue(u) })
+// Address for a map position (location bar). Same contract as the real API: cached, 1 request/second to OpenStreetMap.
+const geoCache = new Map(); let geoLast = 0
+on('GET', '/api/geo/reverse', async ({ q }) => {
+  const lat = Number(q.lat), lng = Number(q.lng)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) fail(400, 'Invalid location.', 'geo_invalid')
+  const key = `${lat.toFixed(4)},${lng.toFixed(4)}`
+  if (geoCache.has(key)) return geoCache.get(key)
+  const coords = `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+  try {
+    const wait = geoLast + 1100 - Date.now(); if (wait > 0) await new Promise((r) => setTimeout(r, wait)); geoLast = Date.now()
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&lat=${lat}&lon=${lng}`,
+      { headers: { 'User-Agent': 'BuildMate24x7-dev/1.0 (support@buildmate24x7.com)', 'Accept-Language': 'en-IN,en' }, signal: AbortSignal.timeout(8000) })
+    if (!r.ok) throw new Error(String(r.status))
+    const p = await r.json(), a = p.address ?? {}
+    const place = { address: p.display_name?.trim() || coords, area: a.road ?? a.neighbourhood ?? a.suburb ?? a.village ?? null,
+      city: a.city ?? a.town ?? a.village ?? a.county ?? a.state_district ?? null, state: a.state ?? null, pincode: a.postcode?.replace(/\s/g, '') ?? null }
+    geoCache.set(key, place); return place
+  } catch { fail(502, 'Address lookup is unavailable right now.', 'geo_unavailable') }
+})
 on('POST', '/api/auth/otp/request', ({ body }) => { if (!/^\d{10}$/.test((body.phone ?? '').replace(/\D/g, '').slice(-10))) fail(400, 'Enter a valid 10-digit mobile number.'); return { message: 'OTP sent.' } })
 // Same account rules as AuthService.SignInByPhoneAsync: an audience picks/creates that account; without one the
 // partner account wins, then the customer account; a new number gets 409 signup_required.
@@ -446,6 +466,7 @@ function signInByPhone(phone, { audience, name, email, partnerType } = {}) {
     isNew = true
     u = { id: 1000 + users.length, userType: type, name: name?.trim() ?? '', phone, email: null, isActive: true, createdAt: iso(now()), preferredLanguage: 'en' }; users.push(u)
     if (type === 'Partner') partners.push({ userId: u.id, partnerType: partnerType || 'Other', businessName: null, addressLine: null, area: null, city: null, state: null, pincode: null, gstin: null, kycStatus: 'NotSubmitted', documents: [], rewardBalance: 0, createdByAdmin: false, locationVerified: false, managerId: null, createdAt: iso(now()) })
+    applyReferral(u, arguments[1]?.referralCode)
   } else if (!u.isActive) fail(403, 'This account is disabled. Please contact the store.')
   if (!u.name && name) u.name = name.trim()
   if (!u.email && email?.includes('@') && !users.some((x) => x.email === email.trim().toLowerCase())) u.email = email.trim().toLowerCase()
@@ -731,6 +752,87 @@ on('POST', '/api/service-requests/:id/cancel', ({ me, p }) => { const r = servic
 const srDto = (r) => ({ ...r, assignedPartnerName: user(r.assignedPartnerId)?.name ?? null, assignedPartnerPhone: user(r.assignedPartnerId)?.phone ?? null })
 
 // partner self
+
+// ---------------------------------------------------------------- Customer KYC, rewards, Refer & Earn, wishlist
+// Same contracts as the real API (MemberService / WishlistService): customers get a customer profile; partners use
+// their partner profile.
+const customerProfiles = new Map() // userId → { kycStatus, kycSubmittedAt, kycReviewedAt, kycRemarks, gstin, rewardBalance, documents }
+const custProfile = (uid) => { if (!customerProfiles.has(uid)) customerProfiles.set(uid, { kycStatus: 'NotSubmitted', kycSubmittedAt: null, kycReviewedAt: null, kycRemarks: null, gstin: null, rewardBalance: 0, documents: [] }); return customerProfiles.get(uid) }
+const wishlists = new Map() // userId → [productId newest first]
+const CODE_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+const ensureCode = (u) => { while (!u.referralCode) { const c = 'BM' + Array.from({ length: 6 }, () => CODE_ABC[Math.floor(Math.random() * CODE_ABC.length)]).join(''); if (!users.some((x) => x.referralCode === c)) u.referralCode = c } return u.referralCode }
+const postPoints = (u, type, points, note) => {
+  if (!points) return
+  const holder = u.userType === 'Partner' ? partnerOf(u.id) : custProfile(u.id)
+  holder.rewardBalance = r2(holder.rewardBalance + points)
+  rewardTxns.push({ id: rtId++, partnerUserId: u.id, createdAt: iso(now()), type, points, balanceAfter: holder.rewardBalance, orderId: null, orderNo: null, note })
+}
+function applyReferral(u, code) {
+  const c = String(code ?? '').trim().toUpperCase(); if (!c) return
+  const ref = users.find((x) => x.referralCode === c && x.isActive); if (!ref || ref.phone === u.phone) return
+  u.referredById = ref.id
+  if (settings.referralRewardPoints > 0) postPoints(ref, 'Referral', settings.referralRewardPoints, `Referral: ${u.name} joined with your code`)
+  if (settings.referralWelcomePoints > 0) postPoints(u, 'Referral', settings.referralWelcomePoints, `Welcome bonus (invited by ${ref.name})`)
+}
+const shopper = (me) => { const u = me(); if (!u || (u.userType !== 'Partner' && u.userType !== 'Customer')) fail(403, 'Sign in as a customer or partner.'); return u }
+const kycOf = (u) => {
+  if (u.userType === 'Partner') { const pr = partnerOf(u.id); return { userType: 'Partner', status: pr.kycStatus, remarks: pr.kycRemarks ?? null, submittedAt: pr.kycSubmittedAt ?? null, gstin: pr.gstin ?? null, documents: pr.documents ?? [] } }
+  const c = custProfile(u.id); return { userType: 'Customer', status: c.kycStatus, remarks: c.kycRemarks, submittedAt: c.kycSubmittedAt, gstin: c.gstin, documents: c.documents }
+}
+const docTypeOf = (files, body) => String(body?.type ?? files?.type ?? 'Aadhaar')
+on('GET', '/api/account/kyc', ({ me }) => kycOf(shopper(me)))
+on('POST', '/api/account/kyc/documents', ({ me, body, files }) => {
+  const u = shopper(me); const type = docTypeOf(files, body); const num = String(body?.number ?? '').replace(/\W/g, '')
+  const d = { id: Date.now(), documentType: type, documentNumberMasked: num ? 'X'.repeat(Math.max(0, num.length - 4)) + num.slice(-4) : null, fileKey: `private/kyc/${u.id}/${type}.png`, uploadedAt: iso(now()) }
+  const holder = u.userType === 'Partner' ? partnerOf(u.id) : custProfile(u.id)
+  if (holder.kycStatus === 'Approved') fail(400, 'Your KYC is already approved. Contact the store to change documents.')
+  holder.documents = [...(holder.documents ?? []).filter((x) => x.documentType !== type), d]
+  return d
+})
+on('POST', '/api/account/kyc/submit', ({ me, body }) => {
+  const u = shopper(me); const holder = u.userType === 'Partner' ? partnerOf(u.id) : custProfile(u.id)
+  if (!(holder.documents ?? []).some((d) => d.documentType === 'Aadhaar' || d.documentType === 'Pan')) fail(400, 'Upload your Aadhaar or PAN card to continue.')
+  if (body?.gstin) { if (String(body.gstin).trim().length !== 15) fail(400, 'GSTIN must be 15 characters.'); holder.gstin = String(body.gstin).trim().toUpperCase() }
+  if (holder.kycStatus !== 'Approved') { holder.kycStatus = 'Pending'; holder.kycSubmittedAt = iso(now()); holder.kycRemarks = null }
+  return kycOf(u)
+})
+on('GET', '/api/account/rewards', ({ me }) => {
+  const u = shopper(me); const mine = rewardTxns.filter((r) => r.partnerUserId === u.id)
+  const earned = mine.filter((r) => (r.type === 'Earned' || r.type === 'Referral') && r.points > 0)
+  const balance = u.userType === 'Partner' ? partnerOf(u.id).rewardBalance : custProfile(u.id).rewardBalance
+  return { balance, lifetimeEarned: r2(earned.reduce((s, r) => s + r.points, 0)), thisMonthEarned: r2(earned.filter((r) => istDate(r.createdAt).slice(0, 7) === istDate(now()).slice(0, 7)).reduce((s, r) => s + r.points, 0)), pointValueRupees: settings.rewardPointValue, recent: mine.slice(-10).reverse() }
+})
+on('GET', '/api/account/rewards/history', ({ me, q }) => page(rewardTxns.filter((r) => r.partnerUserId === shopper(me).id).reverse(), { ...q, pageSize: 30 }))
+on('GET', '/api/account/referral', ({ me }) => {
+  const u = shopper(me); const code = ensureCode(u)
+  return { code, referredCount: users.filter((x) => x.referredById === u.id).length, pointsEarned: r2(rewardTxns.filter((r) => r.partnerUserId === u.id && r.type === 'Referral' && r.points > 0).reduce((s, r) => s + r.points, 0)), referrerPoints: settings.referralRewardPoints, welcomePoints: settings.referralWelcomePoints, referredByName: users.find((x) => x.id === u.referredById)?.name ?? null }
+})
+const liveIds = (ids) => ids.filter((id) => products.some((p) => p.id === id && p.isActive))
+on('GET', '/api/account/wishlist', ({ me }) => liveIds(wishlists.get(shopper(me).id) ?? []))
+on('POST', '/api/account/wishlist/merge', ({ me, body }) => { const u = shopper(me); const have = wishlists.get(u.id) ?? []; const add = (Array.isArray(body) ? body : []).map(Number).filter((id) => !have.includes(id) && products.some((p) => p.id === id)); wishlists.set(u.id, [...add, ...have].slice(0, 200)); return liveIds(wishlists.get(u.id)) })
+on('POST', '/api/account/wishlist/:pid', ({ me, p }) => { const u = shopper(me); const id = Number(p.pid); if (!products.some((x) => x.id === id && x.isActive)) fail(404, 'Product not found.'); const have = wishlists.get(u.id) ?? []; if (!have.includes(id)) wishlists.set(u.id, [id, ...have]); return liveIds(wishlists.get(u.id)) })
+on('DELETE', '/api/account/wishlist/:pid', ({ me, p }) => { const u = shopper(me); wishlists.set(u.id, (wishlists.get(u.id) ?? []).filter((x) => x !== Number(p.pid))); return liveIds(wishlists.get(u.id)) })
+
+// Admin: retail customers (KYC review, points)
+const customerRow = (u) => { const c = customerProfiles.get(u.id); return { userId: u.id, name: u.name, phone: u.phone, createdAt: u.createdAt, kycStatus: c?.kycStatus ?? 'NotSubmitted', kycSubmittedAt: c?.kycSubmittedAt ?? null, rewardBalance: c?.rewardBalance ?? 0, referralCode: u.referralCode ?? null, documentCount: c?.documents.length ?? 0 } }
+const customerDetail = (u) => { const c = customerProfiles.get(u.id); return { userId: u.id, name: u.name, phone: u.phone, email: u.email, createdAt: u.createdAt, kycStatus: c?.kycStatus ?? 'NotSubmitted', kycSubmittedAt: c?.kycSubmittedAt ?? null, kycReviewedAt: c?.kycReviewedAt ?? null, kycRemarks: c?.kycRemarks ?? null, gstin: c?.gstin ?? null, rewardBalance: c?.rewardBalance ?? 0, referralCode: u.referralCode ?? null, referredByName: users.find((x) => x.id === u.referredById)?.name ?? null, documents: c?.documents ?? [] } }
+const customerOf = (id) => users.find((u) => u.id == id && u.userType === 'Customer') ?? fail(404, 'Customer not found.')
+on('GET', '/api/admin/customers', ({ q }) => {
+  let list = users.filter((u) => u.userType === 'Customer').map(customerRow)
+  if (q.status) list = list.filter((r) => r.kycStatus === q.status)
+  if (q.search) { const s = q.search.toLowerCase(); list = list.filter((r) => r.name.toLowerCase().includes(s) || (r.phone ?? '').includes(s) || (r.referralCode ?? '').toLowerCase() === s) }
+  list.sort((a, b) => (b.kycStatus === 'Pending') - (a.kycStatus === 'Pending') || b.createdAt.localeCompare(a.createdAt))
+  return page(list, q)
+})
+on('GET', '/api/admin/customers/:id', ({ p }) => customerDetail(customerOf(p.id)))
+on('POST', '/api/admin/customers/:id/kyc', ({ p, body }) => { const u = customerOf(p.id); if (!body.approve && !String(body.remarks ?? '').trim()) fail(400, 'Please give a reason so the customer knows what to fix.'); const c = custProfile(u.id); Object.assign(c, { kycStatus: body.approve ? 'Approved' : 'Rejected', kycReviewedAt: iso(now()), kycRemarks: body.remarks?.trim() || null }); return customerDetail(u) })
+on('GET', '/api/admin/customers/:id/kyc/documents/:doc', () => ({ __file: join(ART, 'switch.svg') }))
+on('POST', '/api/admin/customers/:id/rewards', ({ p, body }) => { const u = customerOf(p.id); if (!body.points) fail(400, 'Points cannot be zero.'); if (!String(body.note ?? '').trim()) fail(400, 'Add a note explaining the adjustment.'); const c = custProfile(u.id); if (c.rewardBalance + body.points < 0) fail(409, `Only ${c.rewardBalance} points available.`); postPoints(u, body.points < 0 && /redeem/i.test(body.note) ? 'Redeemed' : 'Adjusted', body.points, body.note.trim()); return rewardTxns.at(-1) })
+on('GET', '/api/admin/customers/:id/rewards', ({ p, q }) => page(rewardTxns.filter((r) => r.partnerUserId == p.id).reverse(), q))
+
+// Admin: payments set-up check (the mock has no Cashfree keys; checkout skips straight to "paid").
+on('GET', '/api/admin/integrations/payments', () => ({ provider: 'Cashfree', environment: 'sandbox', keysSet: false, clientIdEnding: null, returnUrl: 'http://localhost:3000/checkout/return?order={orderId}', webhookUrl: 'http://localhost:5080/api/payments/cashfree/webhook', problems: ['Demo server: Cashfree is simulated (no keys). Real payments use the BuildMate API with CASHFREE_CLIENT_ID / CASHFREE_CLIENT_SECRET.'] }))
+on('POST', '/api/admin/integrations/payments/test', () => ({ ok: false, message: 'Demo server: there are no Cashfree keys to test.' }))
 on('GET', '/api/partner/profile', ({ me }) => partnerDetail(partnerOf(me().id)))
 on('PUT', '/api/partner/profile', ({ me, body }) => { const pr = partnerOf(me().id); const { name, email, preferredLanguage, ...rest } = body; Object.assign(me(), { name, email, preferredLanguage: preferredLanguage ?? 'en' }); Object.assign(pr, rest); return partnerDetail(pr) })
 on('POST', '/api/partner/kyc/documents', ({ me }) => { const pr = partnerOf(me().id); const d = { id: Date.now(), documentType: 'Aadhaar', documentNumberMasked: 'XXXXXXXX1234', fileKey: 'private/kyc/x.png', uploadedAt: iso(now()) }; pr.documents = [...(pr.documents ?? []), d]; return d })
@@ -1178,6 +1280,14 @@ http.createServer(async (req, res) => {
     const u = uploads.get(url.pathname.slice('/files/uploads/'.length))
     if (u) { res.writeHead(200, { 'Content-Type': u.type, 'Cache-Control': 'max-age=3600' }); return res.end(u.data) }
   }
+  // Home banners live in the website's public folder; serve them here too so the app can show them.
+  if (url.pathname.startsWith('/banners/')) {
+    const f = join(HERE, '..', '..', 'storefront', 'public', 'banners', url.pathname.slice('/banners/'.length).replace(/[^a-z0-9.-]/gi, ''))
+    if (existsSync(f)) {
+      const type = f.endsWith('.svg') ? 'image/svg+xml' : f.endsWith('.png') ? 'image/png' : f.endsWith('.webp') ? 'image/webp' : 'image/jpeg'
+      res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'max-age=3600' }); return res.end(readFileSync(f))
+    }
+  }
   if (url.pathname.startsWith('/files/mock/')) {
     const f = join(ART, url.pathname.slice('/files/mock/'.length).replace(/[^a-z0-9.-]/gi, ''))
     if (existsSync(f)) { res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'max-age=3600' }); return res.end(readFileSync(f)) }
@@ -1196,7 +1306,7 @@ http.createServer(async (req, res) => {
     if (r.method !== req.method) continue
     const m = r.re.exec(url.pathname)
     if (!m) continue
-    const needsAuth = !url.pathname.startsWith('/api/auth/') && !url.pathname.startsWith('/api/catalog/')
+    const needsAuth = !url.pathname.startsWith('/api/auth/') && !url.pathname.startsWith('/api/catalog/') && !url.pathname.startsWith('/api/geo/')
     try {
       if (needsAuth && !uid) throw new HttpError(401, 'Please log in.')
       if (url.pathname.startsWith('/api/admin/') && user(uid)?.userType !== 'Staff') throw new HttpError(403, "You don't have access to this.")

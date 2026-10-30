@@ -95,6 +95,7 @@ export function ChooseProfession() {
         name: args.fullName || undefined,
         email: args.email || undefined,
         partnerType,
+        referralCode: args.referralCode || undefined,
       }));
       if (partnerType && result.user.userType === 'Partner') {
         await api('/api/partner/profile', {

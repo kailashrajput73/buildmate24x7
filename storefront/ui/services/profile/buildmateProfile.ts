@@ -45,18 +45,41 @@ const statusOf = (p: PartnerDetail, present: boolean): VerificationStatus | unde
 
 const joinAddress = (...parts: (string | null | undefined)[]) => parts.filter((x) => x && x.trim()).join(', ');
 
+/** GET /api/account/kyc — KYC of the signed-in customer or partner. */
+interface MyKyc {
+  userType: string; status: PartnerDetail['kycStatus']; remarks?: string | null; submittedAt?: string | null;
+  gstin?: string | null; documents: KycDocument[];
+}
+
 export async function loadProfile(account: AuthUser): Promise<BuildMateProfile> {
   const phone = account.phone ? `+91 ${account.phone}` : '';
   if (account.userType !== 'Partner') {
-    const addresses = await api<Address[]>('/api/account/addresses').catch(() => [] as Address[]);
+    // Customers have KYC and reward points too (customer profile on the API).
+    const [addresses, kyc, rewards] = await Promise.all([
+      api<Address[]>('/api/account/addresses').catch(() => [] as Address[]),
+      api<MyKyc>('/api/account/kyc').catch(() => null),
+      api<{ balance: number }>('/api/account/rewards').catch(() => null),
+    ]);
     const a = addresses.find((x) => x.isDefault) ?? addresses[0];
+    const k: PartnerDetail = {
+      userId: account.id, name: account.name ?? '', partnerType: '', kycStatus: kyc?.status ?? 'NotSubmitted',
+      kycRemarks: kyc?.remarks ?? null, rewardBalance: rewards?.balance ?? 0, gstin: kyc?.gstin ?? null, documents: kyc?.documents ?? [],
+    };
+    const aadhaar = latest(k, 'Aadhaar');
+    const pan = latest(k, 'Pan');
+    const gst = latest(k, 'Gst');
     return {
       isPartner: false,
       personal: {
         fullName: account.name ?? '', mobileNumber: phone, email: account.email ?? '', businessName: '',
         address: a ? joinAddress(a.line1, a.line2, a.landmark, a.city, a.pincode) : '',
       },
-      aadhaar: { number: '' }, pan: { number: '' }, gst: { number: '' }, rewardBalance: 0,
+      aadhaar: { number: aadhaar?.documentNumberMasked ?? '', document: docOf(aadhaar), status: statusOf(k, !!aadhaar) },
+      pan: { number: pan?.documentNumberMasked ?? '', document: docOf(pan), status: statusOf(k, !!pan) },
+      gst: { number: k.gstin ?? gst?.documentNumberMasked ?? '', document: docOf(gst), status: statusOf(k, !!(k.gstin || gst)) },
+      kycStatus: k.kycStatus,
+      kycRemarks: k.kycRemarks,
+      rewardBalance: k.rewardBalance,
     };
   }
   const p = await api<PartnerDetail>('/api/partner/profile');
@@ -99,15 +122,27 @@ export async function savePersonal(profile: BuildMateProfile, v: { fullName: str
   });
 }
 
-/** Uploads one KYC document and sends the partner's KYC for review. */
-export async function uploadKyc(type: KycDocType, number: string, file: File) {
+/** Uploads one KYC document and sends the KYC for review (customers and partners; same endpoints). */
+export async function uploadKyc(type: KycDocType, number: string, file: File, gstin?: string) {
   const form = new FormData();
   form.append('type', type);
   if (number) form.append('number', number);
   form.append('file', file);
-  await apiUpload('/api/partner/kyc/documents', form);
-  await api('/api/partner/kyc/submit', { method: 'POST' });
+  await apiUpload('/api/account/kyc/documents', form);
+  try {
+    await api('/api/account/kyc/submit', { method: 'POST', body: { gstin: gstin || null } });
+  } catch (e) {
+    // A GST certificate alone is saved; the KYC goes for review once Aadhaar or PAN is uploaded too.
+    if (type === 'Gst' && e instanceof Error && /Aadhaar or PAN/i.test(e.message)) return;
+    throw e;
+  }
 }
+
+/** GET /api/account/referral — the user's Refer & Earn code (created on first request). */
+export interface Referral {
+  code: string; referredCount: number; pointsEarned: number; referrerPoints: number; welcomePoints: number; referredByName?: string | null;
+}
+export const loadReferral = () => api<Referral>('/api/account/referral');
 
 /** Refreshes the signed-in user (name, email, KYC status) so the header and checkout see the change. */
 export async function refreshSessionUser() {

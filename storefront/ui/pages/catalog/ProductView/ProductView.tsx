@@ -148,7 +148,7 @@ export function ProductView({ initial }: { initial: ProductDetail }) {
             <TitleRow>
               <Title>{p.name}</Title>
               <HeartButton type="button" $on={saved} aria-pressed={saved} aria-label={saved ? 'Remove from wishlist' : 'Save to wishlist'}
-                onClick={() => setSnack((prev) => ({ id: (prev?.id ?? 0) + 1, message: toggleWishlist(p.id) ? 'Saved to your wishlist' : 'Removed from your wishlist' }))}>
+                onClick={() => toggleWishlist(p.id)}>
                 <i className={`pi ${saved ? 'pi-heart-fill' : 'pi-heart'}`} aria-hidden="true" />
               </HeartButton>
             </TitleRow>

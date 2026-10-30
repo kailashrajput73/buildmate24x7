@@ -22,6 +22,25 @@ public class CashfreeOptions
     public string NotifyUrl { get; set; } = "";
 
     public string BaseUrl => Environment == "production" ? "https://api.cashfree.com/pg" : "https://sandbox.cashfree.com/pg";
+
+    public bool KeysSet => !string.IsNullOrWhiteSpace(ClientId) && !string.IsNullOrWhiteSpace(ClientSecret);
+
+    /// <summary>Set-up problems that stop payments from working (shown in admin → Integrations and logged at start-up).</summary>
+    public List<string> Problems()
+    {
+        var p = new List<string>();
+        if (Environment is not ("sandbox" or "production")) p.Add($"Cashfree:Environment must be \"sandbox\" or \"production\" (now \"{Environment}\").");
+        if (!KeysSet) p.Add("Cashfree keys are empty: set CASHFREE_CLIENT_ID and CASHFREE_CLIENT_SECRET (Cashfree dashboard → Developers → API keys).");
+        foreach (var (name, url) in new[] { ("WebReturnUrl (SITE_URL)", WebReturnUrl), ("NotifyUrl (PUBLIC_API_URL)", NotifyUrl) })
+        {
+            if (string.IsNullOrWhiteSpace(url)) { p.Add($"{name} is empty."); continue; }
+            if (url.Contains("example.com", StringComparison.OrdinalIgnoreCase) || url.Contains("localhost", StringComparison.OrdinalIgnoreCase))
+                p.Add($"{name} still points to {new Uri(url, UriKind.RelativeOrAbsolute)} — set the real public address.");
+            else if (Environment == "production" && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                p.Add($"{name} must use https:// in production.");
+        }
+        return p;
+    }
 }
 
 public record GatewayOrderRequest(
@@ -38,6 +57,8 @@ public interface IPaymentGateway
     Task<GatewayStatus> GetStatusAsync(string gatewayOrderId, CancellationToken ct = default);
     Task<string> RefundAsync(string gatewayOrderId, decimal amount, string refundId, string note, CancellationToken ct = default);
     bool VerifyWebhook(string rawBody, string? signature, string? timestamp);
+    /// <summary>Checks the keys against Cashfree without creating anything (looks up an order id that doesn't exist).</summary>
+    Task<(bool Ok, string Message)> TestConnectionAsync(CancellationToken ct = default);
     string? ExtractOrderIdFromWebhook(string rawBody);
 }
 
@@ -65,8 +86,51 @@ public class CashfreeGateway : IPaymentGateway
         return req;
     }
 
+    /// <summary>Cashfree's own error code and message from an error response, for logs and the admin check.</summary>
+    private static (string? Code, string? Message) ErrorOf(string raw)
+    {
+        try
+        {
+            using var d = JsonDocument.Parse(raw);
+            string? Get(string n) => d.RootElement.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+            return (Get("code") ?? Get("type"), Get("message"));
+        }
+        catch (JsonException) { return (null, null); }
+    }
+
+    public async Task<(bool Ok, string Message)> TestConnectionAsync(CancellationToken ct = default)
+    {
+        if (!_opt.KeysSet) return (false, "Cashfree keys are not set.");
+        try
+        {
+            using var req = Request(HttpMethod.Get, "/orders/bm-connection-test-" + Guid.NewGuid().ToString("N")[..8]);
+            using var res = await _http.SendAsync(req, ct);
+            var raw = await res.Content.ReadAsStringAsync(ct);
+            var (code, message) = ErrorOf(raw);
+            return (int)res.StatusCode switch
+            {
+                404 => (true, $"Connected to Cashfree {_opt.Environment}: the keys are valid."),
+                401 or 403 => (false, $"Cashfree rejected the keys ({message ?? code ?? res.StatusCode.ToString()}). Check that they are {_opt.Environment} keys and that this server's IP is allowed in the Cashfree dashboard."),
+                >= 200 and < 300 => (true, $"Connected to Cashfree {_opt.Environment}."),
+                _ => (false, $"Cashfree answered {(int)res.StatusCode}: {message ?? code ?? "unexpected response"}"),
+            };
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+            return (false, $"Could not reach Cashfree ({_opt.BaseUrl}): {e.Message}");
+        }
+    }
+
     public async Task<GatewayOrderResult> CreateOrderAsync(GatewayOrderRequest r, CancellationToken ct = default)
     {
+        if (!_opt.KeysSet)
+        {
+            _log.LogError("Cashfree payment not started: {Problems}", string.Join(" ", _opt.Problems()));
+            throw new AppException("Online payment isn't set up yet. Please try again later or contact the store.", 503, "payment_not_configured");
+        }
+        if (_opt.Environment == "production" && !string.IsNullOrEmpty(r.ReturnUrl) && !r.ReturnUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            throw new AppException("Online payment needs the secure (https://) website address.", 400, "payment_return_url_insecure");
+
         var body = new Dictionary<string, object?>
         {
             ["order_id"] = r.GatewayOrderId,
@@ -92,7 +156,10 @@ public class CashfreeGateway : IPaymentGateway
         var raw = await res.Content.ReadAsStringAsync(ct);
         if (!res.IsSuccessStatusCode)
         {
-            _log.LogError("Cashfree create order failed {Status}: {Body}", res.StatusCode, raw);
+            var (code, message) = ErrorOf(raw);
+            _log.LogError("Cashfree create order failed {Status} {Code}: {Message} — {Body}", (int)res.StatusCode, code, message, raw);
+            if ((int)res.StatusCode is 401 or 403)
+                throw new AppException("Online payment isn't available right now (payment gateway set-up). Please contact the store.", 502, "payment_gateway_auth");
             throw new AppException("Could not start payment. Please try again.", 502, "payment_gateway_error");
         }
 

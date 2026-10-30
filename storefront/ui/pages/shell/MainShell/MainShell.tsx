@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from '@/ui/router';
 import { AppRoutes } from '../../../routes/appRoutes';
 import type { CategoryBrowseArgs } from '../../../routes/appRoutes';
 import type { HomeCategory } from '../../../services/catalog/catalogModels';
+import { useLiveLocation } from '../../../session/LocationContext';
 import { useCatalog, categoryHref } from '../../../session/CatalogContext';
 import { useSession } from '../../../session/SessionContext';
 import { HomeDashboard } from '../../home/HomeDashboard';
@@ -46,8 +47,9 @@ export function MainShell() {
   const requestedTab = (location.state as { tab?: string } | null)?.tab;
   const [index, setIndex] = useState(() => tabIndex(requestedTab));
   const [lastLocationKey, setLastLocationKey] = useState(location.key);
-  // The kit tracked the device location here on every visit; BuildMate asks only when the customer taps the
-  // location bar (ChooseLocation), so the site never prompts for location just for opening the home page.
+  // Live location while the shell is open, once the customer has allowed it (from "Use current location" or the
+  // ChooseLocation page). It never pops a permission prompt just for opening the home page; stops on leaving.
+  useLiveLocation();
   void isLoggedIn;
 
   if (location.key !== lastLocationKey) {
