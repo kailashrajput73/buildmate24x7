@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, ErrorBox, Field, Input } from '../components/ui'
 import { useAuth } from '../lib/auth'
+import { ApiError } from '../lib/api'
 
 export default function Login() {
   const { login } = useAuth()
@@ -8,12 +9,32 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>(null)
+  const [retryAt, setRetryAt] = useState(0)
+  const [remaining, setRemaining] = useState(0)
+  const submitting = useRef(false)
+  useEffect(() => {
+    const tick = () => setRemaining(Math.max(0, Math.ceil((retryAt - Date.now()) / 1000)))
+    tick()
+    if (!retryAt) return
+    const timer = window.setInterval(tick, 1000)
+    return () => window.clearInterval(timer)
+  }, [retryAt])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (submitting.current || Date.now() < retryAt) return
+    submitting.current = true
     setBusy(true)
     setError(null)
-    try { await login(email, password) } catch (err) { setError(err) } finally { setBusy(false) }
+    try { await login(email.trim(), password) } catch (err) {
+      if (err instanceof ApiError && err.status === 429) {
+        // Older deployments omit Retry-After; use the existing five-minute login window.
+        const seconds = err.retryAfterSeconds ?? 300
+        setRemaining(seconds)
+        setRetryAt(Date.now() + seconds * 1000)
+        setError(new Error('Too many sign-in attempts. Wait for the countdown, then try once. If this continues, contact your administrator.'))
+      } else { setError(err) }
+    } finally { submitting.current = false; setBusy(false) }
   }
 
   return (
@@ -53,7 +74,8 @@ export default function Login() {
             <Input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
           </Field>
           <ErrorBox error={error} />
-          <Button type="submit" busy={busy} className="w-full">Sign in</Button>
+          {remaining > 0 && <p role="status" className="text-sm text-ink-soft">Try again in {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, '0')}</p>}
+          <Button type="submit" busy={busy} disabled={remaining > 0} className="w-full">Sign in</Button>
         </form>
       </div>
     </div>

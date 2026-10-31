@@ -243,15 +243,15 @@ public class IntegrationsController : AdminControllerBase
 
     /// <summary>Cashfree set-up check: environment, addresses, problems (no secrets returned).</summary>
     [HttpGet("payments")]
-    public object Payments([FromServices] Microsoft.Extensions.Options.IOptions<BuildMate.Services.Payments.CashfreeOptions> opt)
+    public async Task<object> Payments([FromServices] BuildMate.Services.Payments.CashfreeSettingsService settings, CancellationToken ct)
     {
-        var o = opt.Value;
+        var o = await settings.ResolveAsync(null, ct);
         return new
         {
             provider = "Cashfree",
             environment = o.Environment,
             keysSet = o.KeysSet,
-            clientIdEnding = o.ClientId.Length >= 4 ? o.ClientId[^4..] : null,
+            clientIdEnding = (string?)null,
             returnUrl = o.WebReturnUrl,
             webhookUrl = o.NotifyUrl,
             problems = o.Problems(),

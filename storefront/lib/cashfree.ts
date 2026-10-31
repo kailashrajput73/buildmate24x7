@@ -27,9 +27,10 @@ export async function startPayment(r: CheckoutResult) {
     return
   }
   if (!r.paymentSessionId) throw new Error('The payment could not be started. Please try again.')
+  if (r.environment !== 'sandbox' && r.environment !== 'production') throw new Error('Invalid payment environment returned by the server.')
   await loadSdk()
   // The mode always follows the API's Cashfree environment (sandbox keys ↔ sandbox, live keys ↔ production).
-  const mode = (r.environment === 'production' ? 'production' : 'sandbox') as 'sandbox' | 'production'
+  const mode = r.environment
   const result = await window.Cashfree!({ mode }).checkout({ paymentSessionId: r.paymentSessionId, redirectTarget: '_self' }) as { error?: { message?: string } } | undefined
   if (result?.error) throw new Error(result.error.message || 'The payment page could not be opened. Please try again.')
 }

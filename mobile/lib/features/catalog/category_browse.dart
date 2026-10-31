@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api.dart';
-import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
 import '../../data/providers.dart';
@@ -38,12 +37,8 @@ class CatalogItem {
 
 /// One card: a product family (all sizes of one item from one brand) or a single product.
 class ProductGroup {
-  ProductGroup(this.title, this.type, this.openId, this.unit, {this.brand = '', this.cls, this.itemKey = ''});
+  ProductGroup(this.title, this.type, this.openId, this.unit);
   final String title, type, unit;
-  /// Brand, class (Sch 40 / SDR 11…) and the item without them ("pipe", "coupler") — to offer the same item from
-  /// other brands and classes on the product page.
-  final String brand, itemKey;
-  final String? cls;
   int openId;
   final items = <CatalogItem>[];
   String? imageUrl;
@@ -51,39 +46,29 @@ class ProductGroup {
   bool inStock = false;
 }
 
-String _strip(String s, String? word, {bool end = false}) {
-  if (word == null || word.isEmpty) return s;
-  final w = RegExp.escape(word);
-  return s.replaceFirst(RegExp(end ? '\\s+$w\$' : '^$w\\s+', caseSensitive: false), '');
+String catalogClass(CatalogItem i) {
+  for (final key in ['Class', 'SDR', 'Schedule']) {
+    final value = i.spec(key)?.trim();
+    if (value != null && value.isNotEmpty) {
+      if (RegExp(r'^(class|sdr|sch)', caseSensitive: false).hasMatch(value)) return value;
+      return '${key == 'Schedule' ? 'Sch' : key} $value';
+    }
+  }
+  return '';
+}
+int compareSizes(String a, String b) {
+  double number(String s) => double.tryParse(RegExp(r'\d+(?:\.\d+)?').firstMatch(s)?.group(0) ?? '') ?? double.infinity;
+  final order = number(a).compareTo(number(b));
+  return order == 0 ? a.compareTo(b) : order;
 }
 
-/// "King CPVC Coupler SDR 11" − brand − material − class → "coupler".
-String _itemKey(CatalogItem i, String? material, String? cls) {
-  var f = (i.family ?? i.name.split(' – ').first).trim();
-  f = _strip(f, i.brandName);
-  f = _strip(f, material);
-  f = _strip(f, cls, end: true);
-  return f.trim().toLowerCase();
-}
-
-/// Size in mm when the size starts with millimetres ("15 mm (½")", "80×65 mm").
-double? sizeMm(CatalogItem i) {
-  final s = (i.spec('Size') ?? i.variantLabel ?? '').trim();
-  final m = RegExp(r'^(\d+(?:\.\d+)?)\s*(?:[×x]\s*\d+(?:\.\d+)?\s*)?mm', caseSensitive: false).firstMatch(s);
-  return m == null ? null : double.parse(m.group(1)!);
-}
-
-/// Same grouping as the website: by material (pipes & fittings) when most items have one, else by sub category.
+/// One card per explicit family; the rail follows the configured subcategories.
 List<ProductGroup> buildGroups(List<CatalogItem> items) {
-  final byMaterial = items.where((i) => i.spec('Material') != null).length > items.length / 2;
   final groups = <String, ProductGroup>{};
   for (final i in items) {
-    final key = i.family != null ? 'f:${i.family}' : 'p:${i.id}';
+    final key = i.family != null ? 'f:${i.brandId}:${i.family}' : 'p:${i.id}';
     final g = groups.putIfAbsent(key, () {
-      final material = i.spec('Material');
-      final cls = i.spec('Class') ?? i.spec('SDR') ?? i.spec('Schedule');
-      return ProductGroup(i.family ?? i.name, byMaterial ? (material?.toUpperCase() ?? 'Other') : (i.subCategoryName ?? 'Other'), i.id, i.unit,
-          brand: i.brandName, cls: cls, itemKey: _itemKey(i, byMaterial ? material : null, cls));
+      return ProductGroup(i.family ?? i.name, i.subCategoryName ?? 'Other', i.id, i.unit);
     });
     g.items.add(i);
     if (g.imageUrl == null && i.imageUrl != null && !i.imageUrl!.startsWith('/files/mock/')) g.imageUrl = i.imageUrl;
@@ -111,97 +96,68 @@ class CategoryBrowseScreen extends ConsumerStatefulWidget {
   ConsumerState<CategoryBrowseScreen> createState() => _CategoryBrowseState();
 }
 
-enum _Sort { recommended, priceLow, priceHigh, discount }
-
 class _CategoryBrowseState extends ConsumerState<CategoryBrowseScreen> {
-  String? _type;
-  int? _brand;
-  _Sort _sort = _Sort.recommended;
-
+  Map<String, dynamic> _filters = {};
+  int _page = 1;
+  late Future<(Paged<ProductCard>, List<Json>, Json)> _result;
+  @override
+  void initState() { super.initState(); _load(); }
+  @override
+  void didUpdateWidget(covariant CategoryBrowseScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.categoryId != widget.categoryId) {
+      _filters = {};
+      _page = 1;
+      _load();
+    }
+  }
+  void _load() {
+    final api = ref.read(apiProvider);
+    final query = {'categoryId': widget.categoryId, ..._filters};
+    _result = Future.wait<dynamic>([
+      api.get<Json>('/api/catalog/products', {...query, 'collapse': true, 'page': _page, 'pageSize': 24}),
+      api.get<List<dynamic>>('/api/catalog/types', {'categoryId': widget.categoryId}),
+      api.get<Json>('/api/catalog/facets', query),
+    ]).then((r) => (Paged.fromJson(r[0] as Json, ProductCard.fromJson), (r[1] as List).cast<Json>(), r[2] as Json));
+  }
+  void _set(Map<String, dynamic> patch, {bool reset = false}) => setState(() { _filters = {...(reset ? <String, dynamic>{} : _filters), ...patch}..removeWhere((k, v) => v == null || v == ''); _page = 1; _load(); });
+  Widget _select(String key, String label, List<Json> options, {bool ids = false}) => DropdownButton<String>(
+    value: _filters[key]?.toString(), hint: Text(label),
+    items: [DropdownMenuItem(value: '', child: Text('All $label')), for (final option in options) DropdownMenuItem(value: '${option[ids ? 'id' : 'value']}', child: Text('${option[ids ? 'name' : 'value']}'))],
+    onChanged: (v) => _set({key: ids && v != null && v.isNotEmpty ? int.parse(v) : v, if (key == 'brandId') ...{'class': null, 'size': null, 'length': null}}),
+  );
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final res = ref.watch(categoryItemsProvider(widget.categoryId));
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        title: Text(widget.title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-        actions: [
-          IconButton(tooltip: 'Search', icon: const Icon(Icons.search_rounded), onPressed: () => context.push('/products', extra: CatalogQuery(categoryId: widget.categoryId))),
-          IconButton(tooltip: 'Cart', icon: const Icon(Icons.shopping_cart_outlined), onPressed: () => context.push('/cart')),
-        ],
-      ),
-      body: res.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => ErrorView(e, onRetry: () => ref.invalidate(categoryItemsProvider(widget.categoryId))),
-        data: (items) {
-          final all = buildGroups(items);
-          final types = <String, int>{};
-          for (final g in all) {
-            types[g.type] = (types[g.type] ?? 0) + 1;
-          }
-          final brands = <int, String>{for (final i in items) i.brandId: i.brandName};
-          var groups = all.where((g) => (_type == null || g.type == _type) && (_brand == null || g.items.any((i) => i.brandId == _brand))).toList();
-          switch (_sort) {
-            case _Sort.priceLow:
-              groups.sort((a, b) => a.minPrice.compareTo(b.minPrice));
-            case _Sort.priceHigh:
-              groups.sort((a, b) => b.minPrice.compareTo(a.minPrice));
-            case _Sort.discount:
-              groups.sort((a, b) => b.maxDiscount.compareTo(a.maxDiscount));
-            case _Sort.recommended:
-              break;
-          }
-          if (all.isEmpty) return const EmptyView(icon: Icons.inventory_2_outlined, title: 'No products here yet');
-          return Column(children: [
-            // Filter row: sort and brand, as dropdown pills.
-            Container(
-              color: AppColors.surface,
-              padding: const EdgeInsets.fromLTRB(AppSpacing.space3, 0, AppSpacing.space3, AppSpacing.space2),
-              child: Row(children: [
-                _Pill<_Sort>(
-                  label: switch (_sort) { _Sort.recommended => 'Sort by', _Sort.priceLow => 'Price ↑', _Sort.priceHigh => 'Price ↓', _Sort.discount => 'Discount' },
-                  options: const {_Sort.recommended: 'Recommended', _Sort.priceLow: 'Price (lowest first)', _Sort.priceHigh: 'Price (highest first)', _Sort.discount: 'Discount'},
-                  onSelected: (v) => setState(() => _sort = v),
-                ),
-                const SizedBox(width: AppSpacing.space2),
-                _Pill<int?>(
-                  label: _brand == null ? 'Brand' : brands[_brand]!,
-                  options: {null: 'All brands', for (final e in brands.entries) e.key: e.value},
-                  onSelected: (v) => setState(() => _brand = v),
-                ),
-              ]),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                if (types.length > 1)
-                  Container(
-                    width: 96,
-                    color: AppColors.surface,
-                    child: ListView(children: [
-                      _TypeRow(label: 'All', count: all.length, selected: _type == null, onTap: () => setState(() => _type = null), art: widget.title),
-                      for (final e in types.entries)
-                        _TypeRow(label: e.key, count: e.value, selected: _type == e.key, onTap: () => setState(() => _type = e.key), art: '${widget.title} ${e.key}'),
-                    ]),
-                  ),
-                Expanded(
-                  child: groups.isEmpty
-                      ? const EmptyView(icon: Icons.filter_alt_off_outlined, title: 'Nothing matches these filters')
-                      : GridView.builder(
-                          padding: const EdgeInsets.all(AppSpacing.space3),
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                              maxCrossAxisExtent: 200, mainAxisExtent: 236, crossAxisSpacing: AppSpacing.space3, mainAxisSpacing: AppSpacing.space3),
-                          itemCount: groups.length,
-                          itemBuilder: (_, i) => _GroupCard(groups[i], categoryName: widget.title),
-                        ),
-                ),
-              ]),
-            ),
-          ]);
-        },
-      ),
+    final category = ref.watch(categoriesProvider).valueOrNull?.where((c) => c.id == widget.categoryId).firstOrNull;
+    return Scaffold(backgroundColor: AppColors.background, appBar: AppBar(title: Text(widget.title), actions: [IconButton(onPressed: () => context.push('/cart'), icon: const Icon(Icons.shopping_cart_outlined))]),
+      body: FutureBuilder<(Paged<ProductCard>, List<Json>, Json)>(future: _result, builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+        if (snapshot.hasError) return ErrorView(snapshot.error!, onRetry: () => setState(_load));
+        final (page, types, facets) = snapshot.data!;
+        final type = types.where((t) => t['id'] == _filters['typeId']).firstOrNull;
+        final subs = (category?.subCategories ?? []).where((s) => type == null || (type['subCategoryIds'] as List).contains(s.id));
+        List<Json> facet(String key) => (facets[key] as List? ?? []).cast<Json>();
+        return Row(children: [
+          SizedBox(width: 105, child: Material(color: AppColors.surface, child: ListView(children: [
+            _TypeRow(label: 'All', count: category?.productCount ?? 0, selected: !_filters.containsKey('typeId'), art: widget.title, onTap: () => _set({}, reset: true)),
+            for (final t in types) _TypeRow(label: '${t['name']}', count: (facet('types').where((f) => f['id'] == t['id']).firstOrNull?['count'] as num?)?.toInt() ?? 0, selected: t['id'] == _filters['typeId'], art: '${t['name']}', onTap: () => _set({'typeId': t['id']}, reset: true)),
+            const Padding(padding: EdgeInsets.all(8), child: Text('Sub-Category')),
+            ListTile(key: const ValueKey('all-subcategories'), dense: true, selected: !_filters.containsKey('subCategoryId'), title: const Text('All'), onTap: () => _set({'typeId': _filters['typeId']}, reset: true)),
+            for (final sub in subs) ListTile(dense: true, selected: _filters['subCategoryId'] == sub.id, title: Text(sub.name), onTap: () => _set({'typeId': _filters['typeId'], 'subCategoryId': sub.id}, reset: true)),
+          ]))),
+          Expanded(child: Column(children: [
+            SingleChildScrollView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 8), child: Row(children: [
+              _select('brandId', 'Brand', facet('brands'), ids: true), const SizedBox(width: 12),
+              _select('class', 'Class', facet('classes')), const SizedBox(width: 12),
+              _select('size', 'Size', facet('sizes')), const SizedBox(width: 12),
+              _select('length', 'Length', facet('lengths')),
+              TextButton(onPressed: () => _set({}, reset: true), child: const Text('Clear')),
+            ])),
+            Expanded(child: page.items.isEmpty ? EmptyView(icon: Icons.inventory_2_outlined, title: category?.productCount == 0 ? 'Coming Soon' : 'No matching products', body: 'Try another filter.') : GridView.builder(padding: const EdgeInsets.all(12), gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 230, mainAxisExtent: 350, crossAxisSpacing: 10, mainAxisSpacing: 10), itemCount: page.items.length, itemBuilder: (_, i) => ProductTile(page.items[i]))),
+            Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, children: [TextButton(onPressed: _page <= 1 ? null : () => setState(() { _page--; _load(); }), child: const Text('Previous')), Text('$_page · ${page.total} families'), TextButton(onPressed: !page.hasMore ? null : () => setState(() { _page++; _load(); }), child: const Text('Next'))]),
+          ])),
+        ]);
+      }),
     );
   }
 }
@@ -233,91 +189,3 @@ class _TypeRow extends StatelessWidget {
       );
 }
 
-class _GroupCard extends StatelessWidget {
-  const _GroupCard(this.g, {required this.categoryName});
-  final ProductGroup g;
-  final String categoryName;
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final many = g.items.length > 1;
-    return Material(
-      color: AppColors.surface,
-      borderRadius: AppRadius.mdAll,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => context.push('/product/${g.openId}'),
-        child: Container(
-          decoration: BoxDecoration(borderRadius: AppRadius.mdAll, border: Border.all(color: AppColors.divider)),
-          padding: const EdgeInsets.all(AppSpacing.space2),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(
-              child: Stack(children: [
-                Positioned.fill(
-                  child: ClipRRect(
-                    borderRadius: AppRadius.smAll,
-                    child: ColoredBox(
-                      color: AppColors.surfaceContainer,
-                      child: g.imageUrl != null ? NetImage(g.imageUrl, fit: BoxFit.contain) : CategoryArt(name: '$categoryName ${g.type}', fit: BoxFit.contain),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  right: 4,
-                  bottom: 4,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space2, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: g.inStock ? AppColors.accentGreenContainer : AppColors.surfaceVariant,
-                      borderRadius: AppRadius.smAll,
-                      border: Border.all(color: g.inStock ? AppColors.accentGreen : AppColors.outlineVariant),
-                    ),
-                    child: Column(children: [
-                      Text(g.inStock ? 'ADD' : 'SOLD OUT',
-                          style: theme.textTheme.labelMedium?.copyWith(color: g.inStock ? AppColors.onAccentGreenContainer : AppColors.outline, fontWeight: FontWeight.w800)),
-                      Text(many ? '${g.items.length} sizes' : '1 product', style: theme.textTheme.labelSmall?.copyWith(fontSize: 9, color: AppColors.onSurfaceVariant)),
-                    ]),
-                  ),
-                ),
-              ]),
-            ),
-            const SizedBox(height: AppSpacing.space2),
-            Text.rich(TextSpan(children: [
-              if (many) TextSpan(text: 'from ', style: theme.textTheme.labelSmall?.copyWith(color: AppColors.outline)),
-              TextSpan(text: money(g.minPrice), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-              TextSpan(text: ' /${g.unit}', style: theme.textTheme.labelSmall?.copyWith(color: AppColors.outline)),
-            ])),
-            Text(g.maxDiscount > 0 ? 'discount ${qty(g.maxDiscount.roundToDouble())}%' : ' ',
-                style: theme.textTheme.labelSmall?.copyWith(color: AppColors.success, fontWeight: FontWeight.w600)),
-            Text(g.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600)),
-          ]),
-        ),
-      ),
-    );
-  }
-}
-
-class _Pill<T> extends StatelessWidget {
-  const _Pill({required this.label, required this.options, required this.onSelected});
-  final String label;
-  final Map<T, String> options;
-  final ValueChanged<T> onSelected;
-  @override
-  Widget build(BuildContext context) => PopupMenuButton<T>(
-        onSelected: onSelected,
-        itemBuilder: (_) => [for (final e in options.entries) PopupMenuItem<T>(value: e.key, child: Text(e.value))],
-        child: Container(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space3),
-          decoration: BoxDecoration(borderRadius: AppRadius.smAll, border: Border.all(color: AppColors.primary)),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 120),
-              child: Text(label, overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(color: AppColors.primary, fontWeight: FontWeight.w600)),
-            ),
-            const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: AppColors.primary),
-          ]),
-        ),
-      );
-}

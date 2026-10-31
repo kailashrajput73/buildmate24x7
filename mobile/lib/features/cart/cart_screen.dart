@@ -38,10 +38,10 @@ class CartScreen extends ConsumerWidget {
                 child: ListView(padding: const EdgeInsets.only(bottom: 16), children: [
                   for (final i in c.items)
                     Dismissible(
-                      key: ValueKey(i.productId),
+                      key: ValueKey('${i.productId}:${i.purchaseUnit}'),
                       direction: DismissDirection.endToStart,
                       background: Container(color: BM.brick, alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), child: const Icon(Icons.delete_outline, color: Colors.white)),
-                      onDismissed: (_) => _run(context, () => ctl.remove(i.productId)),
+                      onDismissed: (_) => _run(context, () => ctl.remove(i.productId, purchaseUnit: i.purchaseUnit)),
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -51,12 +51,12 @@ class CartScreen extends ConsumerWidget {
                           ),
                           const SizedBox(width: 12),
                           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(i.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                            Text(i.purchaseUnit == 'Box' ? '${i.name} (box of ${qty(i.packSize ?? 0)})' : i.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
                             Text('${money(i.unitPrice)} / ${i.unit}${i.discountPercent > 0 ? ' · ${qty(i.discountPercent)}% off' : ''}', style: const TextStyle(color: BM.inkSoft, fontSize: 13)),
                             if (i.issue != null) Text(i.issue!, style: const TextStyle(color: BM.brick, fontWeight: FontWeight.w600, fontSize: 13)),
                             const SizedBox(height: 6),
                             Row(children: [
-                              QtyStepper(compact: true, value: i.quantity, max: i.availableQty > 0 ? i.availableQty : null, onChanged: (v) => _run(context, () => ctl.setQty(i.productId, v))),
+                              QtyStepper(compact: true, value: i.quantity, max: i.availableQty > 0 ? i.availableQty : null, onChanged: (v) => _run(context, () => ctl.setQty(i.productId, v, purchaseUnit: i.purchaseUnit))),
                               const Spacer(),
                               Text(money(i.lineTotal), style: const TextStyle(fontWeight: FontWeight.w800)),
                             ]),

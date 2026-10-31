@@ -1,6 +1,8 @@
+export type CatalogFields = { typeId?: number; typeName?: string; class?: string; familyId?: number; productFamily?: string; familyImageUrl?: string; size?: string; length?: string; packSize?: number; packMrp?: number; boxPrice?: number; boxDiscountType?: string; boxDiscountValue?: number }
 export type Paged<T> = { items: T[]; total: number; page: number; pageSize: number }
 
 export type ProductCard = {
+  catalog?: CatalogFields
   id: number; code: string; name: string; brandName: string; categoryId: number; unit: string; imageUrl?: string | null
   mrp: number; listPrice: number; discountPercent: number; price: number; inStock: boolean; rewardPoints?: number | null
   /** Size family, e.g. "King CPVC Coupler SDR 11". On collapsed listings `name` is the family and `variantCount` > 1. */
@@ -35,6 +37,7 @@ export type AuthUser = { id: number; name: string; phone?: string; email?: strin
 export type AuthResult = { accessToken: string; refreshToken: string; user: AuthUser; isNewUser: boolean }
 
 export type CartLine = {
+  purchaseUnit?: "Piece" | "Box"; packSize?: number; baseQuantity?: number
   productId: number; code: string; name: string; brandName: string; unit: string; imageUrl?: string; quantity: number
   listPrice: number; discountPercent: number; unitPrice: number; lineTotal: number; mrp: number; availableQty: number; issue?: string | null
 }
@@ -49,7 +52,7 @@ export type OrderSummary = { id: number; orderNo: string; createdAt: string; sta
 export type OrderDetail = OrderSummary & {
   scheduledAt?: string; paidAt?: string; subTotal: number; discountTotal: number; taxTotal: number; shippingFee: number; amountPaid: number
   shipLine1?: string; shipCity?: string; shipPincode?: string; customerNotes?: string; cancelReason?: string
-  items: { id: number; productId: number; productName: string; productCode: string; imageUrl?: string; quantity: number; unitPrice: number; lineTotal: number }[]
+  items: { id: number; productId: number; productName: string; productCode: string; imageUrl?: string; purchaseUnit?: string; packSize?: number; purchaseQuantity?: number; quantity: number; unitPrice: number; lineTotal: number }[]
   events: { at: string; action: string; details?: string }[]
   dispatch?: { invoiceNo: string; dispatchedAt: string }
 }

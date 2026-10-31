@@ -101,7 +101,7 @@ public class OrderService : IOrderService
             o.Items.OrderBy(i => i.Id).Select(i => new OrderItemDto(i.Id, i.ProductId, i.ProductCode, i.ProductName, i.HsnCode,
                 i.Product?.ImageUrls.FirstOrDefault(), i.Quantity, i.ListPrice, i.DiscountPercent, i.SpecialDiscountPercent, i.UnitPrice,
                 i.GstRate, i.TaxAmount, i.LineTotal, i.RewardPoints, i.AddedAtStore,
-                staffView && i.Product != null ? i.Product.Locations.Select(l => l.RackLocation.Label).OrderBy(x => x).ToList() : new List<string>())).ToList(),
+                staffView && i.Product != null ? i.Product.Locations.Select(l => l.RackLocation.Label).OrderBy(x => x).ToList() : new List<string>(), i.PurchaseUnit, i.PackSizeSnapshot, Packaging.PurchaseQuantity(i, i.Quantity), i.PackMrpSnapshot, i.BoxPriceSnapshot, i.BaseUnitSnapshot)).ToList(),
             staffView
                 ? o.Events.OrderBy(e => e.Id).Select(e => new OrderEventDto(e.CreatedAt, e.Action, e.Details, e.UserName)).ToList()
                 : o.Events.Where(e => CustomerVisibleEvents.Contains(e.Action)).OrderBy(e => e.Id).Select(e => new OrderEventDto(e.CreatedAt, e.Action, e.Details, null)).ToList(),
@@ -141,7 +141,7 @@ public class OrderService : IOrderService
             {
                 var productIds = order.Items.Select(i => i.ProductId).ToList();
                 var cartRows = await _db.CartItems.Where(c => c.UserId == order.UserId && productIds.Contains(c.ProductId)).ToListAsync(ct);
-                _db.CartItems.RemoveRange(cartRows);
+                _db.CartItems.RemoveRange(cartRows.Where(c => order.Items.Any(i => i.ProductId == c.ProductId && i.PurchaseUnit == c.PurchaseUnit)));
                 await _notify.NotifyAsync(order.UserId.Value, $"Order {order.OrderNo} confirmed",
                     order.FulfilmentType == FulfilmentType.StorePickup
                         ? "Payment received. We'll let you know when it's ready for pickup."
@@ -232,7 +232,7 @@ public class OrderService : IOrderService
                 interState ? 0 : half, interState ? 0 : tax - half, interState ? tax : 0, lineTotal);
         }
         foreach (var i in o.Items.OrderBy(i => i.Id))
-            lines.Add(Line(i.ProductCode, i.ProductName, i.HsnCode, i.Quantity, i.Product?.Unit ?? "pcs",
+            lines.Add(Line(i.ProductCode, i.PurchaseUnit == "Box" ? $"{i.ProductName} ({i.PackSizeSnapshot:0.###} {i.BaseUnitSnapshot} per box)" : i.ProductName, i.HsnCode, Packaging.PurchaseQuantity(i, i.Quantity), i.PurchaseUnit == "Box" ? "box" : i.BaseUnitSnapshot ?? i.Product?.Unit ?? "pcs",
                 i.DiscountPercent + i.SpecialDiscountPercent, i.GstRate, i.LineTotal, i.TaxAmount));
         if (o.ShippingFee > 0)
             lines.Add(Line(null, "Delivery charges", Pricing.DeliverySac, 1, "", 0, Pricing.DeliveryGstRate, o.ShippingFee, Pricing.InclusiveTax(o.ShippingFee, Pricing.DeliveryGstRate)));
@@ -254,7 +254,7 @@ public class OrderService : IOrderService
             new InvoiceBankDto(s.BankName, s.BankBranch, s.BankAccountNo, s.BankIfsc),
             placeOfSupply, GstStates.CodeFor(placeOfSupply), interState,
             lines, summary,
-            o.Items.Sum(i => i.Quantity), lines.Sum(l => l.TaxableValue), lines.Sum(l => l.Cgst), lines.Sum(l => l.Sgst), lines.Sum(l => l.Igst), taxTotal,
+            o.Items.Sum(i => Packaging.PurchaseQuantity(i, i.Quantity)), lines.Sum(l => l.TaxableValue), lines.Sum(l => l.Cgst), lines.Sum(l => l.Sgst), lines.Sum(l => l.Igst), taxTotal,
             o.RoundOff, o.GrandTotal, AmountInWords.Words(o.GrandTotal), o.AmountPaid, Math.Max(0, o.GrandTotal - o.AmountPaid),
             terms, o.RewardPointsEarned);
     }
@@ -264,7 +264,7 @@ public class OrderService : IOrderService
         o.Id, o.OrderNo, Channel = o.Channel.ToString(), CustomerKind = o.CustomerKind.ToString(), o.UserId,
         o.CustomerName, o.CustomerPhone, o.CustomerGstin, o.ShipState, o.SubTotal, o.DiscountTotal, o.TaxTotal,
         o.ShippingFee, o.RoundOff, o.GrandTotal, o.AmountPaid, InvoiceNo = o.Dispatch?.InvoiceNo, PaymentMethod = o.PaymentMethod.ToString(),
-        Items = o.Items.Select(i => new { i.ProductCode, i.ProductName, i.HsnCode, i.Quantity, i.ListPrice, i.DiscountPercent, i.SpecialDiscountPercent, i.UnitPrice, i.GstRate, i.TaxAmount, i.LineTotal })
+        Items = o.Items.Select(i => new { i.ProductCode, i.ProductName, i.HsnCode, i.Quantity, i.PurchaseUnit, i.PackSizeSnapshot, i.PackMrpSnapshot, i.BoxPriceSnapshot, i.BaseUnitSnapshot, i.ListPrice, i.DiscountPercent, i.SpecialDiscountPercent, i.UnitPrice, i.GstRate, i.TaxAmount, i.LineTotal })
     };
 }
 

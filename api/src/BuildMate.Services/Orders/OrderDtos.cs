@@ -6,7 +6,7 @@ namespace BuildMate.Services.Orders;
 
 public record CartLineDto(long ProductId, string Code, string Name, string BrandName, string Unit, string? ImageUrl,
     decimal Quantity, decimal ListPrice, decimal DiscountPercent, decimal UnitPrice, decimal LineTotal, decimal Mrp,
-    decimal AvailableQty, decimal? RewardPoints, string? Issue);
+    decimal AvailableQty, decimal? RewardPoints, string? Issue, string PurchaseUnit = "Piece", decimal? PackSize = null, decimal BaseQuantity = 0);
 
 public record CartDto(List<CartLineDto> Items, int ItemCount, decimal SubTotal, decimal DiscountTotal, decimal Total,
     decimal RewardPoints, decimal DeliveryFee, decimal FreeDeliveryAbove, decimal MinOrderValue,
@@ -14,7 +14,7 @@ public record CartDto(List<CartLineDto> Items, int ItemCount, decimal SubTotal, 
     // Total + delivery, rounded to the rupee — exactly what checkout charges.
     decimal RoundOff = 0, decimal Payable = 0);
 
-public record CartUpdate(long ProductId, decimal Quantity);
+public record CartUpdate(long ProductId, decimal Quantity, string PurchaseUnit = "Piece");
 
 // ---------------------------------------------------------------- Checkout
 
@@ -37,7 +37,7 @@ public record OrderListDto(long Id, string OrderNo, DateTime CreatedAt, SalesCha
 
 public record OrderItemDto(long Id, long ProductId, string ProductCode, string ProductName, string? HsnCode, string? ImageUrl,
     decimal Quantity, decimal ListPrice, decimal DiscountPercent, decimal SpecialDiscountPercent, decimal UnitPrice,
-    decimal GstRate, decimal TaxAmount, decimal LineTotal, decimal RewardPoints, bool AddedAtStore, List<string> RackLocations);
+    decimal GstRate, decimal TaxAmount, decimal LineTotal, decimal RewardPoints, bool AddedAtStore, List<string> RackLocations, string PurchaseUnit = "Piece", decimal? PackSize = null, decimal PurchaseQuantity = 0, decimal? PackMrp = null, decimal? BoxPrice = null, string? BaseUnit = null);
 
 public record OrderEventDto(DateTime At, string Action, string? Details, string? By);
 
@@ -61,7 +61,7 @@ public record OrderScheduleUpdate(FulfilmentType FulfilmentType, DateTime? Sched
 public record OrderStatusUpdate(OrderStatus Status, string? Note);
 
 /// <summary>Full replacement of order lines (used by the store manager before dispatch).</summary>
-public record OrderLineEdit(long ProductId, decimal Quantity, decimal SpecialDiscountPercent);
+public record OrderLineEdit(long ProductId, decimal Quantity, decimal SpecialDiscountPercent, string PurchaseUnit = "Piece");
 public record OrderEditRequest(List<OrderLineEdit> Lines, decimal? ShippingFee, string? Note);
 
 public record CancelRequest(string Reason, bool RefundOnline);

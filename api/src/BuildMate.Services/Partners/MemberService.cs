@@ -237,8 +237,8 @@ public class MemberService : IMemberService
         if (string.IsNullOrEmpty(c)) return;
         var referrer = await _db.Users.Include(u => u.PartnerProfile).Include(u => u.CustomerProfile)
             .FirstOrDefaultAsync(u => u.ReferralCode == c && u.IsActive, ct);
-        // Unknown code or own number: sign-up goes ahead without a referral (never blocks the account).
-        if (referrer == null || referrer.Phone == newUser.Phone) return;
+        if (referrer == null) throw new AppException("This referral code is not valid. Clear the optional code to continue without a referral.");
+        if (referrer.Phone == newUser.Phone) return;
 
         newUser.ReferredById = referrer.Id;
         var s = await _settings.GetAsync(ct);

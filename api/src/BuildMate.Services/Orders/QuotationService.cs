@@ -16,7 +16,7 @@ public record QuoteRequest(FulfilmentType FulfilmentType, long? AddressId, DateT
 public record QuotationLineDto(long Id, long ProductId, string Code, string Name, string? ImageUrl, string Unit, decimal Quantity,
     decimal ListPrice, decimal DiscountPercent, decimal SpecialDiscountPercent, decimal UnitPrice, decimal LineTotal, decimal RewardPoints,
     // Staff only (null for customers): what the product costs the store, and stock now.
-    decimal? AverageCost, decimal? AvailableQty);
+    decimal? AverageCost, decimal? AvailableQty, string PurchaseUnit = "Piece", decimal? PackSize = null, decimal BaseQuantity = 0);
 
 public record QuotationSummaryDto(long Id, string QuoteNo, DateTime CreatedAt, QuotationStatus Status, CustomerKind CustomerKind,
     string CustomerName, string? CustomerPhone, FulfilmentType FulfilmentType, int ItemCount, decimal SubTotal, decimal GrandTotal,
@@ -82,10 +82,20 @@ public class QuotationService : IQuotationService
     {
         foreach (var i in q.Items)
         {
-            i.UnitPrice = Pricing.UnitPrice(i.ListPrice, i.DiscountPercent, i.SpecialDiscountPercent);
-            i.LineTotal = Pricing.Round(i.UnitPrice * i.Quantity);
+            if (i.PurchaseUnit == "Box")
+            {
+                var boxes = Packaging.PurchaseQuantity(i, i.Quantity);
+                var price = Pricing.UnitPrice(i.BoxPriceSnapshot!.Value, 0, i.SpecialDiscountPercent);
+                i.UnitPrice = Pricing.Round(price / i.PackSizeSnapshot!.Value);
+                i.LineTotal = Pricing.Round(price * boxes);
+            }
+            else
+            {
+                i.UnitPrice = Pricing.UnitPrice(i.ListPrice, i.DiscountPercent, i.SpecialDiscountPercent);
+                i.LineTotal = Pricing.Round(i.UnitPrice * i.Quantity);
+            }
         }
-        q.SubTotal = Pricing.Round(q.Items.Sum(i => i.ListPrice * i.Quantity));
+        q.SubTotal = Pricing.Round(q.Items.Sum(i => i.PurchaseUnit == "Box" ? i.PackMrpSnapshot!.Value * Packaging.PurchaseQuantity(i, i.Quantity) : i.ListPrice * i.Quantity));
         var net = q.Items.Sum(i => i.LineTotal);
         q.DiscountTotal = Pricing.Round(q.SubTotal - net);
         var exact = Pricing.Round(net + q.ShippingFee);
@@ -135,12 +145,14 @@ public class QuotationService : IQuotationService
         foreach (var l in lines)
         {
             var p = products[l.ProductId];
-            q.Items.Add(new QuotationItem
+            var item = new QuotationItem
             {
-                ProductId = p.Id, ProductCode = p.Code, ProductName = p.Name, Quantity = l.Quantity,
+                ProductId = p.Id, ProductCode = p.Code, ProductName = p.Name, Quantity = Packaging.BaseQuantity(p, l.Quantity, l.PurchaseUnit),
                 ListPrice = p.ListPrice, DiscountPercent = Pricing.DiscountFor(p, v.Kind), GstRate = p.GstRate,
-                RewardPoints = v.Kind == CustomerKind.Partner ? Pricing.Round(p.RewardPointsPerUnit * l.Quantity) : 0,
-            });
+                RewardPoints = v.Kind == CustomerKind.Partner ? Pricing.Round(p.RewardPointsPerUnit * Packaging.BaseQuantity(p, l.Quantity, l.PurchaseUnit)) : 0,
+            };
+            Packaging.Snapshot(item, p, l.PurchaseUnit);
+            q.Items.Add(item);
         }
         Recalculate(q);
         _db.Quotations.Add(q);
@@ -270,9 +282,9 @@ public class QuotationService : IQuotationService
             if (a != null) addressText = string.Join(", ", new[] { a.Name, a.Line1, a.Line2, a.Landmark, a.City, a.Pincode }.Where(s => !string.IsNullOrWhiteSpace(s)));
         }
         var lines = q.Items.OrderBy(i => i.Id).Select(i => new QuotationLineDto(i.Id, i.ProductId, i.ProductCode, i.ProductName,
-            i.Product?.ImageUrls.FirstOrDefault(), i.Product?.Unit ?? "pcs", i.Quantity, i.ListPrice, i.DiscountPercent, i.SpecialDiscountPercent,
-            i.UnitPrice, i.LineTotal, i.RewardPoints,
-            staff ? i.Product?.AverageCost : null, staff ? i.Product?.AvailableQty : null)).ToList();
+            i.Product?.ImageUrls.FirstOrDefault(), i.PurchaseUnit == "Box" ? "box" : i.BaseUnitSnapshot ?? i.Product?.Unit ?? "pcs", Packaging.PurchaseQuantity(i, i.Quantity), i.PurchaseUnit == "Box" ? i.PackMrpSnapshot!.Value : i.ListPrice, i.DiscountPercent, i.SpecialDiscountPercent,
+            i.PurchaseUnit == "Box" ? Pricing.UnitPrice(i.BoxPriceSnapshot!.Value, 0, i.SpecialDiscountPercent) : i.UnitPrice, i.LineTotal, i.RewardPoints,
+            staff ? i.Product?.AverageCost : null, staff ? i.Product?.AvailableQty : null, i.PurchaseUnit, i.PackSizeSnapshot, i.Quantity)).ToList();
         // Before the store quotes, the amounts are the customer's regular prices (shown as "current price").
         return new QuotationDto(q.Id, q.QuoteNo, q.CreatedAt, EffectiveStatus(q, DateTime.UtcNow), q.CustomerKind, q.Channel, q.CustomerName,
             q.CustomerPhone, q.FulfilmentType, addressText, q.PreferredAt, q.CustomerNotes, lines, q.SubTotal,

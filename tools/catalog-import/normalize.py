@@ -198,7 +198,7 @@ def run():
             if pack: desc += f' Standard box: {pack} pcs.'
 
             aliases = [a.strip() for a in (ALIASES.get(fam, '') + ', ' + TYPE_ALIAS.get(typ, '')).split(',') if a.strip()]
-            specs = {'Material': typ}
+            specs = {'Material': typ, 'Item Type': 'Pipe' if sub == 'Pipes' else fam_title}
             if cls_label: specs['Class' if typ == 'PVC' else ('SDR' if 'SDR' in cls_label else 'Schedule')] = cls_label
             if size: specs['Size'] = size
             if length: specs['Length'] = length

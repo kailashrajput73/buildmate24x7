@@ -1,3 +1,4 @@
+import CatalogFields from '../components/CatalogFields'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Download, Printer, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -8,7 +9,7 @@ import { api } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
 import { money, qty } from '../lib/format'
 import { useAction } from '../lib/hooks'
-import { useBrands, useCategories, useGroups, useSubCategories } from '../lib/masters'
+import { useBrands, useCategories, useGroups, useSubCategories, useProductTypes } from '../lib/masters'
 import type { Product, ProductUpsert } from '../lib/types'
 
 const GST = [0, 5, 12, 18, 28]
@@ -18,7 +19,7 @@ const blank: ProductUpsert = {
   name: '', description: '', categoryId: 0, subCategoryId: undefined, brandId: 0, barcode: '', unit: 'pcs', hsnCode: '', gstRate: 18,
   mrp: 0, listPrice: 0, partnerDiscountPercent: 0, retailDiscountPercent: 0, rewardPointsPerUnit: 0, reorderLevel: 0, sequence: 0,
   imageUrls: [], isActive: true, showOnWeb: true, showOnApp: true, aliases: [], translations: {}, groupIds: [],
-  variantFamily: '', variantLabel: '', specs: [],
+  variantFamily: '', variantLabel: '', specs: [], catalog: { boxDiscountType: 'None', boxDiscountValue: 0 },
 }
 
 export default function ProductEdit() {
@@ -29,11 +30,12 @@ export default function ProductEdit() {
   const readOnly = !can(P.catalogManage)
   const { data, isLoading, error } = useQuery({ queryKey: ['product', id], queryFn: () => api.get<Product>(`/api/admin/products/${id}`), enabled: !isNew })
   const [f, setF] = useState<ProductUpsert>(blank)
-  useEffect(() => { if (data) setF({ ...blank, ...data }) }, [data])
+  useEffect(() => { if (data) setF({ ...blank, ...data, variantFamily: data.catalog?.productFamily ?? data.variantFamily }) }, [data])
   const set = <K extends keyof ProductUpsert>(k: K, v: ProductUpsert[K]) => setF((x) => ({ ...x, [k]: v }))
 
   const cats = useCategories().data ?? []
-  const subs = useSubCategories(f.categoryId || undefined).data ?? []
+  const productTypes = useProductTypes(f.categoryId || undefined).data ?? []
+  const subs = (useSubCategories(f.categoryId || undefined).data ?? []).filter(s => !f.catalog?.typeId || productTypes.find(t => t.id === f.catalog?.typeId)?.subCategoryIds.includes(s.id))
   const brands = useBrands().data ?? []
   const groups = useGroups().data ?? []
   const [qr, setQr] = useState<string>()
@@ -69,7 +71,7 @@ export default function ProductEdit() {
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Product name" className="sm:col-span-2"><Input required value={f.name} onChange={(e) => set('name', e.target.value)} placeholder="Astral CPVC Pro Pipe 1/2&quot; SDR 11 (3 m)" /></Field>
               <Field label="Category">
-                <Select required value={f.categoryId || ''} onChange={(e) => setF((x) => ({ ...x, categoryId: Number(e.target.value), subCategoryId: undefined }))}>
+                <Select required value={f.categoryId || ''} onChange={(e) => setF((x) => ({ ...x, categoryId: Number(e.target.value), subCategoryId: undefined, catalog: { ...x.catalog!, typeId: undefined, familyId: undefined } }))}>
                   <option value="">Choose…</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </Select>
               </Field>
@@ -79,7 +81,7 @@ export default function ProductEdit() {
                 </Select>
               </Field>
               <Field label="Brand">
-                <Select required value={f.brandId || ''} onChange={(e) => set('brandId', Number(e.target.value))}>
+                <Select required value={f.brandId || ''} onChange={(e) => setF(x => ({ ...x, brandId: Number(e.target.value), catalog: { ...x.catalog!, familyId: undefined } }))}>
                   <option value="">Choose…</option>{brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </Select>
               </Field>
@@ -94,7 +96,7 @@ export default function ProductEdit() {
           <Section title="Options & specifications" actions={<span className="text-xs text-ink-soft">Products with the same family show as one item with an option picker</span>}>
             <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
               <Field label="Product family" hint="Copy exactly from the other items, e.g. King CPVC Coupler SDR 11">
-                <Input value={f.variantFamily ?? ''} onChange={(e) => set('variantFamily', e.target.value)} placeholder="Leave blank if this item has no sizes" />
+                <Input value={f.variantFamily ?? ''} onChange={(e) => setF(x => ({ ...x, variantFamily: e.target.value, catalog: { ...x.catalog!, productFamily: e.target.value, familyId: undefined } }))} placeholder="Leave blank if this item has no sizes" />
               </Field>
               <Field label="Option(s) shown in picker" hint='One option: 20 mm (¾"). Several: Size: 1.5 sq.mm; Colour: Red; Length: 90 m'>
                 <Input value={f.variantLabel ?? ''} onChange={(e) => set('variantLabel', e.target.value)} placeholder='20 mm (¾")' />
@@ -105,6 +107,9 @@ export default function ProductEdit() {
             </div>
           </Section>
 
+          <Section title="Catalog hierarchy & packages" actions={<Link to="/catalog-structure" className="text-sm text-pipe-700">Manage Types & family images</Link>}>
+            <CatalogFields categoryId={f.categoryId} value={f.catalog} onChange={catalog => setF(x => ({ ...x, catalog, subCategoryId: catalog.typeId !== x.catalog?.typeId ? undefined : x.subCategoryId }))} />
+          </Section>
           <Section title="Pricing & tax" actions={<span className="text-xs text-ink-soft">All prices include GST</span>}>
             <div className="grid gap-3 sm:grid-cols-4">
               <Field label="MRP (₹)"><NumberInput value={f.mrp} onChange={(v) => set('mrp', v)} /></Field>

@@ -106,7 +106,8 @@ class AuthOtpFieldsState extends State<AuthOtpFields> {
                 focusNode: _nodes[index],
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.center,
-                maxLength: 1,
+                maxLength: AppConstants.otpLength,
+                autofillHints: index == 0 ? const [AutofillHints.oneTimeCode] : null,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w700,
                       color: AppColors.onSurface,

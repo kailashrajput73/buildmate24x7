@@ -28,7 +28,17 @@ class AuthUser {
         userType: j['userType'] as String, kycStatus: _s(j['kycStatus']), preferredLanguage: j['preferredLanguage'] as String? ?? 'en');
 }
 
+class CatalogFields {
+  final int? typeId, familyId;
+  final String? typeName, productClass, productFamily, size, length, familyImageUrl;
+  final double? packSize, packMrp, boxPrice;
+  CatalogFields.fromJson(Json j) : typeId = (j['typeId'] as num?)?.toInt(), familyId = (j['familyId'] as num?)?.toInt(),
+    typeName = _s(j['typeName']), productClass = _s(j['class']), productFamily = _s(j['productFamily']), size = _s(j['size']), length = _s(j['length']), familyImageUrl = _s(j['familyImageUrl']),
+    packSize = (j['packSize'] as num?)?.toDouble(), packMrp = (j['packMrp'] as num?)?.toDouble(), boxPrice = (j['boxPrice'] as num?)?.toDouble();
+}
+
 class ProductCard {
+  final CatalogFields? catalog;
   final int id, categoryId;
   final String code, name, brandName, unit;
   final String? imageUrl;
@@ -44,8 +54,9 @@ class ProductCard {
   bool get isFamily => variantCount > 1;
   ProductCard({required this.id, required this.categoryId, required this.code, required this.name, required this.brandName, required this.unit,
       this.imageUrl, required this.mrp, required this.listPrice, required this.discountPercent, required this.price, required this.inStock, this.rewardPoints,
-      this.family, this.variantLabel, this.variantCount = 1, this.fromPrice, this.variantSummary});
+      this.catalog, this.family, this.variantLabel, this.variantCount = 1, this.fromPrice, this.variantSummary});
   factory ProductCard.fromJson(Json j) => ProductCard(
+        catalog: j['catalog'] == null ? null : CatalogFields.fromJson(j['catalog'] as Json),
         id: _i(j['id']), categoryId: _i(j['categoryId']), code: j['code'] as String, name: j['name'] as String, brandName: j['brandName'] as String,
         unit: j['unit'] as String, imageUrl: _s(j['imageUrl']), mrp: _d(j['mrp']), listPrice: _d(j['listPrice']), discountPercent: _d(j['discountPercent']),
         price: _d(j['price']), inStock: j['inStock'] as bool? ?? false, rewardPoints: j['rewardPoints'] == null ? null : _d(j['rewardPoints']),
@@ -129,13 +140,16 @@ class StoreInfo {
   final String? whatsAppNumber, minAppVersion;
   final double minOrderValue, deliveryFee, freeDeliveryAbove;
   final bool homeDeliveryEnabled, storePickupEnabled;
+  final List<String> deliveryPincodes;
+  bool deliversTo(String pincode) => homeDeliveryEnabled && (deliveryPincodes.isEmpty || deliveryPincodes.contains(pincode.trim()));
   StoreInfo({required this.storeName, required this.supportPhone, required this.address, required this.openingHours, this.whatsAppNumber,
       this.minAppVersion, required this.minOrderValue, required this.deliveryFee, required this.freeDeliveryAbove,
-      required this.homeDeliveryEnabled, required this.storePickupEnabled});
+      required this.homeDeliveryEnabled, required this.storePickupEnabled, this.deliveryPincodes = const []});
   factory StoreInfo.fromJson(Json j) => StoreInfo(
         storeName: j['storeName'] as String? ?? 'BuildMate 24x7', supportPhone: j['supportPhone'] as String? ?? '', address: j['address'] as String? ?? '',
         openingHours: j['openingHours'] as String? ?? '', whatsAppNumber: _s(j['whatsAppNumber']), minAppVersion: _s(j['minAppVersion']),
         minOrderValue: _d(j['minOrderValue']), deliveryFee: _d(j['deliveryFee']), freeDeliveryAbove: _d(j['freeDeliveryAbove']),
+        deliveryPincodes: (j['deliveryPincodes'] as List? ?? []).cast<String>(),
         homeDeliveryEnabled: j['homeDeliveryEnabled'] as bool? ?? true, storePickupEnabled: j['storePickupEnabled'] as bool? ?? true);
 }
 
@@ -158,15 +172,17 @@ class HomeFeed {
 }
 
 class CartLine {
+  final String purchaseUnit;
+  final double? packSize;
   final int productId;
   final String code, name, brandName, unit;
   final String? imageUrl, issue;
   final double quantity, listPrice, discountPercent, unitPrice, lineTotal, availableQty;
   final double? rewardPoints;
-  CartLine({required this.productId, required this.code, required this.name, required this.brandName, required this.unit, this.imageUrl, this.issue,
+  CartLine({this.purchaseUnit = "Piece", this.packSize, required this.productId, required this.code, required this.name, required this.brandName, required this.unit, this.imageUrl, this.issue,
       required this.quantity, required this.listPrice, required this.discountPercent, required this.unitPrice, required this.lineTotal,
       required this.availableQty, this.rewardPoints});
-  factory CartLine.fromJson(Json j) => CartLine(
+  factory CartLine.fromJson(Json j) => CartLine(purchaseUnit: j["purchaseUnit"] as String? ?? "Piece", packSize: (j["packSize"] as num?)?.toDouble(),
         productId: _i(j['productId']), code: j['code'] as String, name: j['name'] as String, brandName: j['brandName'] as String, unit: j['unit'] as String,
         imageUrl: _s(j['imageUrl']), issue: _s(j['issue']), quantity: _d(j['quantity']), listPrice: _d(j['listPrice']),
         discountPercent: _d(j['discountPercent']), unitPrice: _d(j['unitPrice']), lineTotal: _d(j['lineTotal']), availableQty: _d(j['availableQty']),
@@ -219,14 +235,16 @@ class OrderSummary {
 }
 
 class OrderItem {
+  final String purchaseUnit;
+  final double? packSize, purchaseQuantity;
   final int productId;
   final String productName, productCode;
   final String? imageUrl;
   final double quantity, listPrice, discountPercent, specialDiscountPercent, unitPrice, lineTotal, rewardPoints;
-  OrderItem({required this.productId, required this.productName, required this.productCode, this.imageUrl, required this.quantity,
+  OrderItem({this.purchaseUnit = "Piece", this.packSize, this.purchaseQuantity, required this.productId, required this.productName, required this.productCode, this.imageUrl, required this.quantity,
       required this.listPrice, required this.discountPercent, required this.specialDiscountPercent, required this.unitPrice, required this.lineTotal,
       required this.rewardPoints});
-  factory OrderItem.fromJson(Json j) => OrderItem(
+  factory OrderItem.fromJson(Json j) => OrderItem(purchaseUnit: j["purchaseUnit"] as String? ?? "Piece", packSize: (j["packSize"] as num?)?.toDouble(), purchaseQuantity: (j["purchaseQuantity"] as num?)?.toDouble(),
         productId: _i(j['productId']), productName: j['productName'] as String, productCode: j['productCode'] as String, imageUrl: _s(j['imageUrl']),
         quantity: _d(j['quantity']), listPrice: _d(j['listPrice']), discountPercent: _d(j['discountPercent']),
         specialDiscountPercent: _d(j['specialDiscountPercent']), unitPrice: _d(j['unitPrice']), lineTotal: _d(j['lineTotal']), rewardPoints: _d(j['rewardPoints']));

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -64,6 +65,7 @@ class AccountScreen extends ConsumerWidget {
       backgroundColor: AppColors.background,
       appBar: AppBar(backgroundColor: AppColors.surface, title: const Text('Profile')),
       body: ListView(children: [
+        const _ReferralCard(),
         if (!isPartner && user != null)
           ListTile(
             contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -97,13 +99,13 @@ class AccountScreen extends ConsumerWidget {
         _tile(Icons.receipt_long_outlined, t('orders.title'), () => context.push('/orders')),
         _tile(Icons.request_quote_outlined, 'Quotations', () => context.go('/quotations')),
         _tile(Icons.shopping_cart_outlined, 'Cart', () => context.push('/cart')),
-        if (isPartner) _tile(Icons.stars_outlined, t('rewards.title'), () => context.push('/rewards')),
+        _tile(Icons.stars_outlined, '${t('rewards.title')} · ${qty(ref.watch(rewardsProvider).valueOrNull?.balance ?? 0)} pts', () => context.push('/rewards')),
         _tile(Icons.location_on_outlined, t('account.addresses'), () => context.push('/addresses')),
         _tile(Icons.notifications_outlined, t('account.notifications'), () => context.push('/notifications')),
         _tile(Icons.qr_code_scanner_rounded, 'Scan a product QR', () => context.push('/scan')),
         _tile(Icons.handyman_outlined, 'Book a plumber or electrician', () => context.push('/services')),
         if (isPartner) _tile(Icons.person_outline, 'Business details', () => context.push('/profile')),
-        if (isPartner) _tile(Icons.badge_outlined, 'KYC documents', () => context.push('/kyc')),
+        _tile(Icons.badge_outlined, 'KYC documents · ${ref.watch(memberKycProvider).valueOrNull?.kycStatus ?? 'Loading'}', () => context.push('/kyc')),
         ListTile(
           leading: const Icon(Icons.translate),
           title: Text(t('account.language')),
@@ -281,4 +283,23 @@ Future<void> showCustomerProfileSheet(BuildContext context, WidgetRef ref) {
       ]),
     ),
   );
+}
+
+class _ReferralCard extends ConsumerWidget {
+  const _ReferralCard();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Card(margin: const EdgeInsets.all(16), child: Padding(
+    padding: const EdgeInsets.all(16), child: ref.watch(referralProvider).when(
+      loading: () => const LinearProgressIndicator(),
+      error: (e, _) => ListTile(title: const Text('Refer & Earn'), subtitle: const Text('Could not load your referral code'), trailing: IconButton(icon: const Icon(Icons.refresh), onPressed: () => ref.invalidate(referralProvider))),
+      data: (r) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Refer & Earn', style: Theme.of(context).textTheme.titleLarge),
+        SelectableText('${r['code']}', style: Theme.of(context).textTheme.headlineSmall),
+        Text('${r['referredCount']} friends referred · ${r['pointsEarned']} points earned'),
+        Wrap(spacing: 12, children: [
+          TextButton.icon(icon: const Icon(Icons.copy), label: const Text('Copy'), onPressed: () async { await Clipboard.setData(ClipboardData(text: '${r['code']}')); if (context.mounted) toast(context, 'Referral code copied'); }),
+          TextButton.icon(icon: const Icon(Icons.share), label: const Text('Share on WhatsApp'), onPressed: () => launchUrl(Uri.https('wa.me', '/', {'text': 'Join me on BuildMate! Use referral code ${r['code']} when signing up. https://buildmate24x7.com'}), mode: LaunchMode.externalApplication)),
+        ]),
+      ]),
+    )));
 }

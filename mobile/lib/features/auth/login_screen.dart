@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -138,7 +139,8 @@ class _LoginState extends ConsumerState<LoginScreen> {
                           style: theme.textTheme.bodySmall?.copyWith(color: AppColors.onSurfaceVariant)),
                     ),
                     const SizedBox(height: AppSpacing.space6),
-                    LoginFlowContinueButton(label: 'Send OTP', enabled: _canContinue, loading: _loading, onPressed: _continue),
+                    if (PhoneAuth.usesFirebase && Firebase.apps.isEmpty) const Text('Phone login is unavailable in this build. Firebase could not initialize. Please contact support.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.error)),
+                    LoginFlowContinueButton(label: 'Send OTP', enabled: _canContinue && (!PhoneAuth.usesFirebase || Firebase.apps.isNotEmpty), loading: _loading, onPressed: _continue),
                     const Spacer(flex: 3),
                     const LoginFlowTermsFooter(),
                   ]),
@@ -326,10 +328,10 @@ class _OtpState extends ConsumerState<OtpScreen> {
 }
 
 class SignupArgs {
-  const SignupArgs({required this.proof, this.next, this.name = '', this.email = ''});
+  const SignupArgs({required this.proof, this.next, this.name = '', this.email = '', this.referralCode = ''});
   final PhoneProof proof;
   final String? next;
-  final String name, email;
+  final String name, email, referralCode;
 }
 
 /// Sign-up step 3: name (and optional email).
@@ -344,18 +346,20 @@ class _CreateAccountState extends State<CreateAccountScreen> {
   final _form = GlobalKey<FormState>();
   late final _name = TextEditingController(text: widget.args.name);
   late final _email = TextEditingController(text: widget.args.email);
+  late final _referral = TextEditingController(text: widget.args.referralCode);
 
   @override
   void dispose() {
     _name.dispose();
     _email.dispose();
+    _referral.dispose();
     super.dispose();
   }
 
   void _continue() {
     if (!(_form.currentState?.validate() ?? false)) return;
     context.push('/signup/profession',
-        extra: SignupArgs(proof: widget.args.proof, next: widget.args.next, name: _name.text.trim(), email: _email.text.trim()));
+        extra: SignupArgs(proof: widget.args.proof, next: widget.args.next, name: _name.text.trim(), email: _email.text.trim(), referralCode: _referral.text.trim().toUpperCase()));
   }
 
   @override
@@ -401,6 +405,10 @@ class _CreateAccountState extends State<CreateAccountScreen> {
                 validator: (v) => (v ?? '').trim().isEmpty || RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v!.trim()) ? null : 'Enter a valid email',
               ),
               const SizedBox(height: AppSpacing.space8),
+              TextFormField(controller: _referral, textCapitalization: TextCapitalization.characters, maxLength: 12,
+                decoration: const InputDecoration(labelText: 'Referral code (optional)', hintText: 'Enter code if a friend invited you'),
+                validator: (v) => (v ?? '').trim().isEmpty || RegExp(r'^[a-zA-Z0-9]{1,12}$').hasMatch(v!.trim()) ? null : 'Use letters and numbers only'),
+              const SizedBox(height: 24),
               LoginFlowContinueButton(label: 'Continue', enabled: true, onPressed: _continue),
             ]),
           ),
@@ -446,7 +454,7 @@ class _ProfessionState extends ConsumerState<ProfessionScreen> {
       final auth = ref.read(authProvider.notifier);
       final proof = await auth.phone.refresh(widget.args.proof);
       final user = await auth.signIn(proof,
-          audience: p.partnerType == null ? 'Customer' : 'Partner', name: widget.args.name, email: widget.args.email, partnerType: p.partnerType);
+          audience: p.partnerType == null ? 'Customer' : 'Partner', name: widget.args.name, email: widget.args.email, partnerType: p.partnerType, referralCode: widget.args.referralCode);
       if (!mounted) return;
       // New partners fill in business details and KYC next; the router sends them there.
       context.go(user.userType == 'Partner' ? '/register' : (widget.args.next ?? '/home'));

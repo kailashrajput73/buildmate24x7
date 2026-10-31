@@ -144,7 +144,7 @@ export function OrderConfirmation({ orderId }: { orderId: string | null }) {
             <LineList>
               {order.items.map((line) => (
                 <Line key={line.id}>
-                  <span>{fill(_labels.lineName, { qty: line.quantity, name: line.productName })}</span>
+                  <span>{fill(_labels.lineName, { qty: line.purchaseQuantity ?? line.quantity, name: line.purchaseUnit === "Box" ? `${line.productName} (box of ${line.packSize})` : line.productName })}</span>
                   <span>{formatInr(line.lineTotal)}</span>
                 </Line>
               ))}

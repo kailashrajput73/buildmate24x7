@@ -121,7 +121,7 @@ public class OrderAdminService : IOrderAdminService
     {
         if (dto.Lines == null || dto.Lines.Count == 0) throw new AppException("An order needs at least one item. Cancel it instead.");
         if (dto.Lines.Any(l => l.Quantity <= 0)) throw new AppException("Quantities must be more than zero.");
-        if (dto.Lines.GroupBy(l => l.ProductId).Any(g => g.Count() > 1)) throw new AppException("Each product should appear once.");
+        if (dto.Lines.GroupBy(l => new { l.ProductId, l.PurchaseUnit }).Any(g => g.Count() > 1)) throw new AppException("Each product and purchase unit should appear once.");
         if (dto.Lines.Any(l => l.SpecialDiscountPercent is < 0 or > 50)) throw new AppException("Special discount must be between 0 and 50%.");
         if (dto.Lines.Any(l => l.SpecialDiscountPercent > 0) && !_me.HasPermission(Permissions.OrdersSpecialDiscount))
             throw new ForbiddenException("You don't have permission to give special discounts.");
@@ -135,7 +135,7 @@ public class OrderAdminService : IOrderAdminService
         var changes = new List<string>();
 
         // Removed lines
-        foreach (var item in order.Items.Where(i => dto.Lines.All(l => l.ProductId != i.ProductId)).ToList())
+        foreach (var item in order.Items.Where(i => dto.Lines.All(l => l.ProductId != i.ProductId || l.PurchaseUnit != i.PurchaseUnit)).ToList())
         {
             if (order.StockReserved) products[item.ProductId].ReservedQty = Math.Max(0, products[item.ProductId].ReservedQty - item.Quantity);
             changes.Add($"Removed {item.ProductName} ×{item.Quantity:0.###}");
@@ -146,7 +146,7 @@ public class OrderAdminService : IOrderAdminService
         foreach (var line in dto.Lines)
         {
             if (!products.TryGetValue(line.ProductId, out var p)) throw new NotFoundException($"Product {line.ProductId}");
-            var item = order.Items.FirstOrDefault(i => i.ProductId == line.ProductId);
+            var item = order.Items.FirstOrDefault(i => i.ProductId == line.ProductId && i.PurchaseUnit == line.PurchaseUnit);
             var oldQty = item?.Quantity ?? 0;
             var delta = line.Quantity - oldQty;
             if (delta > 0 && p.AvailableQty < delta)
@@ -160,6 +160,7 @@ public class OrderAdminService : IOrderAdminService
                     ListPrice = p.ListPrice, DiscountPercent = Pricing.DiscountFor(p, order.CustomerKind), GstRate = p.GstRate,
                     AddedAtStore = true
                 };
+                Packaging.Snapshot(item, p, line.PurchaseUnit);
                 order.Items.Add(item);
                 changes.Add($"Added {p.Name} ×{line.Quantity:0.###}");
             }
@@ -168,6 +169,7 @@ public class OrderAdminService : IOrderAdminService
             if (item.SpecialDiscountPercent != line.SpecialDiscountPercent)
                 changes.Add($"{p.Name}: special discount {item.SpecialDiscountPercent:0.##}% → {line.SpecialDiscountPercent:0.##}%");
 
+            Packaging.PurchaseQuantity(item, line.Quantity);
             item.Quantity = line.Quantity;
             item.SpecialDiscountPercent = line.SpecialDiscountPercent;
             item.RewardPoints = order.CustomerKind == CustomerKind.Partner ? Pricing.Round(p.RewardPointsPerUnit * line.Quantity) : 0;

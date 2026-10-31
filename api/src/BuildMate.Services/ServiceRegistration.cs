@@ -59,7 +59,12 @@ public static class ServiceRegistration
         }
         else services.AddSingleton<IFileStorage, LocalFileStorage>();
 
-        services.AddHttpClient<IPaymentGateway, CashfreeGateway>(c => c.Timeout = TimeSpan.FromSeconds(20));
+        services.AddSingleton<PaymentSecrets>();
+        services.AddScoped<CashfreeSettingsService>();
+        services.AddScoped<IPaymentGateway, ConfiguredCashfreeGateway>();
+        services.AddHttpClient("cashfree", c => c.Timeout = TimeSpan.FromSeconds(20))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+            .RedactLoggedHeaders(new[] { "x-client-id", "x-client-secret" });
 
         if (config["Erp:Provider"] == "Webhook") services.AddHttpClient<IErpConnector, WebhookErpConnector>(c => c.Timeout = TimeSpan.FromSeconds(30));
         else services.AddScoped<IErpConnector, NoErpConnector>();

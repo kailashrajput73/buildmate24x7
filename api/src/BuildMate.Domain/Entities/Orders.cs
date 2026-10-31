@@ -6,6 +6,7 @@ namespace BuildMate.Domain.Entities;
 /// <summary>Server-side cart so the same basket follows the user across web and app.</summary>
 public class CartItem : BaseEntity
 {
+    public string PurchaseUnit { get; set; } = "Piece";
     public long UserId { get; set; }
     public AppUser User { get; set; } = default!;
     public long ProductId { get; set; }
@@ -68,8 +69,14 @@ public class Order : BaseEntity
     public Dispatch? Dispatch { get; set; }
 }
 
-public class OrderItem : BaseEntity
+public class OrderItem : BaseEntity, IPackageSnapshot
 {
+    public string PurchaseUnit { get; set; } = "Piece";
+    public decimal? PackSizeSnapshot { get; set; }
+    public decimal? PackMrpSnapshot { get; set; }
+    public decimal? BoxPriceSnapshot { get; set; }
+    public string? BaseUnitSnapshot { get; set; }
+
     public long OrderId { get; set; }
     public Order Order { get; set; } = default!;
     public long ProductId { get; set; }
@@ -178,8 +185,14 @@ public class Quotation : BaseEntity
     public ICollection<QuotationItem> Items { get; set; } = new List<QuotationItem>();
 }
 
-public class QuotationItem : BaseEntity
+public class QuotationItem : BaseEntity, IPackageSnapshot
 {
+    public string PurchaseUnit { get; set; } = "Piece";
+    public decimal? PackSizeSnapshot { get; set; }
+    public decimal? PackMrpSnapshot { get; set; }
+    public decimal? BoxPriceSnapshot { get; set; }
+    public string? BaseUnitSnapshot { get; set; }
+
     public long QuotationId { get; set; }
     public Quotation Quotation { get; set; } = default!;
     public long ProductId { get; set; }

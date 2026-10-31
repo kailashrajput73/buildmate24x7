@@ -8,6 +8,9 @@ public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
+    public DbSet<ProductType> ProductTypes => Set<ProductType>();
+    public DbSet<ProductTypeSubCategory> ProductTypeSubCategories => Set<ProductTypeSubCategory>();
+    public DbSet<CatalogFamily> CatalogFamilies => Set<CatalogFamily>();
     // Catalogue
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<SubCategory> SubCategories => Set<SubCategory>();

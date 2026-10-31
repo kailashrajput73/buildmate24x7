@@ -1,3 +1,4 @@
+import 'delivery_location_bar.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,7 +23,6 @@ class HomeScreen extends ConsumerWidget {
     final t = ref.watch(trProvider);
     final feed = ref.watch(homeProvider);
     final auth = ref.watch(authProvider);
-    final loggedIn = auth.status == AuthStatus.loggedIn;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -42,8 +42,8 @@ class HomeScreen extends ConsumerWidget {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(AppSpacing.space4, AppSpacing.space3, AppSpacing.space4, 0),
                   child: Column(children: [
-                    if (loggedIn) const _LocationBar(),
-                    if (loggedIn) const SizedBox(height: AppSpacing.space3),
+                    const DeliveryLocationBar(),
+                    const SizedBox(height: AppSpacing.space3),
                     _SearchBar(hint: t('home.search')),
                   ]),
                 ),
@@ -56,7 +56,7 @@ class HomeScreen extends ConsumerWidget {
                     const gap = AppSpacing.space3;
                     final w = (c.maxWidth - gap * 3) / 4;
                     return Wrap(spacing: gap, runSpacing: gap, children: [
-                      for (final cat in f.categories.where((x) => x.productCount > 0))
+                      for (final cat in f.categories)
                         SizedBox(width: w, child: _CategoryTile(cat)),
                     ]);
                   }),
@@ -128,8 +128,6 @@ class _HomeAppBar extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (auth.user?.userType == 'Partner')
-                IconButton(tooltip: 'My Rewards', onPressed: () => context.push('/rewards'), icon: const Icon(Icons.stars_rounded, color: AppColors.onSurfaceVariant)),
               IconButton(
                 tooltip: 'Cart',
                 onPressed: () => context.push('/cart'),
@@ -140,6 +138,7 @@ class _HomeAppBar extends ConsumerWidget {
                 onPressed: () => context.push('/notifications'),
                 icon: Badge(isLabelVisible: unread > 0, label: Text(unread > 99 ? '99+' : '$unread'), child: const Icon(Icons.notifications_outlined, color: AppColors.onSurfaceVariant)),
               ),
+              IconButton(tooltip: 'My Rewards', onPressed: () => context.push('/rewards'), icon: const Icon(Icons.stars_rounded, color: AppColors.onSurfaceVariant)),
               const SizedBox(width: AppSpacing.space1),
               InkWell(
                 customBorder: const CircleBorder(),
@@ -154,45 +153,6 @@ class _HomeAppBar extends ConsumerWidget {
               ),
             ]),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// "Deliver to" with the default saved address; opens the address book.
-class _LocationBar extends ConsumerWidget {
-  const _LocationBar();
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final list = ref.watch(addressesProvider).valueOrNull ?? const <Address>[];
-    final a = list.where((x) => x.isDefault).firstOrNull ?? list.firstOrNull;
-    final text = a == null ? 'Add a delivery address' : [a.line1, a.city, a.pincode].where((x) => x.isNotEmpty).join(', ');
-    return Material(
-      color: AppColors.surface,
-      borderRadius: AppRadius.mdAll,
-      child: InkWell(
-        onTap: () => context.push('/addresses'),
-        borderRadius: AppRadius.mdAll,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space4, vertical: AppSpacing.space3),
-          decoration: BoxDecoration(borderRadius: AppRadius.mdAll, border: Border.all(color: AppColors.divider)),
-          child: Row(children: [
-            const Icon(Icons.location_on_rounded, size: 20, color: AppColors.primary),
-            const SizedBox(width: AppSpacing.space2),
-            Expanded(
-              child: Text.rich(
-                TextSpan(children: [
-                  TextSpan(text: 'Deliver to  ', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
-                  TextSpan(text: text, style: theme.textTheme.bodySmall?.copyWith(color: AppColors.onSurfaceVariant)),
-                ]),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: AppColors.onSurfaceVariant),
-          ]),
         ),
       ),
     );
@@ -219,8 +179,8 @@ class _SearchBar extends StatelessWidget {
               const Icon(Icons.search_rounded, color: AppColors.primary),
               const SizedBox(width: AppSpacing.space3),
               Expanded(child: Text(hint, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.outline))),
-              IconButton(
-                tooltip: 'Scan product QR',
+              TextButton.icon(
+                label: const Text('Scan'),
                 onPressed: () => context.push('/scan'),
                 icon: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.onSurfaceVariant),
               ),
@@ -236,14 +196,14 @@ class _CategoryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) => InkWell(
         borderRadius: AppRadius.mdAll,
-        onTap: () => context.push('/category/${c.id}', extra: c.name),
+        onTap: () => c.productCount == 0 ? toast(context, 'Coming soon. We are adding these products.') : context.push('/category/${c.id}', extra: c.name),
         child: Column(children: [
           AspectRatio(
             aspectRatio: 1,
             child: Container(
               clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(color: AppColors.surface, borderRadius: AppRadius.mdAll, border: Border.all(color: AppColors.divider)),
-              child: CategoryArt(name: c.name, imageUrl: c.imageUrl),
+              child: CategoryAvailabilityArt(c),
             ),
           ),
           const SizedBox(height: AppSpacing.space2),

@@ -105,7 +105,7 @@ export function buildGroups(items: CatalogItem[]): ProductGroup[] {
   for (const i of items) {
     const material = spec(i, 'Material');
     const cls = classOf(i);
-    const key = i.family ? `f:${i.family}` : `p:${i.id}`;
+    const key = i.family ? `f:${i.brandId}:${i.family}` : `p:${i.id}`;
     let g = groups.get(key);
     if (!g) {
       g = {

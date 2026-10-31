@@ -4,7 +4,7 @@ import ProductCard from '@/components/ProductCard'
 import { serverApi } from '@/lib/server-api'
 
 type SP = Record<string, string | undefined>
-const keys = ['q', 'categoryId', 'subCategoryId', 'brandId', 'groupId', 'inStock', 'discounted', 'sort', 'page'] as const
+const keys = ['q', 'categoryId', 'subCategoryId', 'brandId', 'groupId', 'inStock', 'discounted', 'sort', 'page', 'typeId', 'class', 'familyId', 'size', 'length'] as const
 
 export async function generateMetadata({ searchParams }: { searchParams: SP }): Promise<Metadata> {
   const cats = await serverApi.categories()

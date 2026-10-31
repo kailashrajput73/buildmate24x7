@@ -50,12 +50,13 @@ class AuthController extends StateNotifier<AuthState> {
   /// Exchanges the phone proof for a BuildMate session. [audience] is set when creating an account
   /// ('Customer' or 'Partner'); without it the API signs in to whichever account the number already has.
   /// Throws [SignupRequired] when the number has no account yet.
-  Future<AuthUser> signIn(PhoneProof proof, {String? audience, String? name, String? email, String? partnerType}) async {
+  Future<AuthUser> signIn(PhoneProof proof, {String? audience, String? name, String? email, String? partnerType, String? referralCode}) async {
     final extra = {
       if (audience != null) 'audience': audience,
       if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
       if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
       if (partnerType != null) 'partnerType': partnerType,
+      if (referralCode != null && referralCode.trim().isNotEmpty) 'referralCode': referralCode.trim().toUpperCase(),
     };
     final Json r;
     try {
@@ -122,13 +123,23 @@ class KycRepo {
       if (number != null && number.isNotEmpty) 'number': number,
       'file': await MultipartFile.fromFile(filePath, filename: filePath.split('/').last),
     });
-    await api.upload<Json>('/api/partner/kyc/documents', form);
+    await api.upload<Json>('/api/account/kyc/documents', form);
   }
 
-  Future<PartnerProfile> submit() async => PartnerProfile.fromJson(await api.post<Json>('/api/partner/kyc/submit'));
+  Future<void> submit({String? gstin}) async { await api.post<Json>('/api/account/kyc/submit', {'gstin': gstin}); }
 }
 
 final kycRepoProvider = Provider((ref) => KycRepo(ref.watch(apiProvider)));
+
+final memberKycProvider = FutureProvider.autoDispose<PartnerProfile>((ref) async {
+  ref.watch(authProvider.select((s) => s.user?.id));
+  final j = await ref.read(apiProvider).get<Json>('/api/account/kyc');
+  return PartnerProfile.fromJson({...j, 'kycStatus': j['status'], 'kycRemarks': j['remarks']});
+});
+final referralProvider = FutureProvider.autoDispose<Json>((ref) async {
+  ref.watch(authProvider.select((s) => s.user?.id));
+  return ref.read(apiProvider).get<Json>('/api/account/referral');
+});
 
 // ---------------------------------------------------------------- Catalogue
 
@@ -234,13 +245,13 @@ class CartController extends StateNotifier<AsyncValue<Cart>> {
   }
 
   /// Throws [ApiException] so the caller can show the message (e.g. not enough stock).
-  Future<void> add(int productId, double qty) async =>
-      state = AsyncValue.data(Cart.fromJson(await _api.post<Json>('/api/cart/items', {'productId': productId, 'quantity': qty})));
+  Future<void> add(int productId, double qty, {String purchaseUnit = "Piece"}) async =>
+      state = AsyncValue.data(Cart.fromJson(await _api.post<Json>('/api/cart/items', {'productId': productId, 'quantity': qty, 'purchaseUnit': purchaseUnit})));
 
-  Future<void> setQty(int productId, double qty) async =>
-      state = AsyncValue.data(Cart.fromJson(await _api.put<Json>('/api/cart/items', {'productId': productId, 'quantity': qty})));
+  Future<void> setQty(int productId, double qty, {String purchaseUnit = "Piece"}) async =>
+      state = AsyncValue.data(Cart.fromJson(await _api.put<Json>('/api/cart/items', {'productId': productId, 'quantity': qty, 'purchaseUnit': purchaseUnit})));
 
-  Future<void> remove(int productId) async => state = AsyncValue.data(Cart.fromJson(await _api.delete<Json>('/api/cart/items/$productId')));
+  Future<void> remove(int productId, {String purchaseUnit = 'Piece'}) => setQty(productId, 0, purchaseUnit: purchaseUnit);
 }
 
 final cartProvider = StateNotifierProvider<CartController, AsyncValue<Cart>>((ref) {
@@ -258,13 +269,18 @@ final ordersProvider = FutureProvider.autoDispose<List<OrderSummary>>((ref) asyn
 final orderProvider = FutureProvider.autoDispose.family<OrderDetail, int>((ref, id) async =>
     OrderDetail.fromJson(await ref.read(apiProvider).get<Json>('/api/orders/$id')));
 
-final rewardsProvider = FutureProvider.autoDispose<RewardSummary>((ref) async =>
-    RewardSummary.fromJson(await ref.read(apiProvider).get<Json>('/api/partner/rewards')));
+final rewardsProvider = FutureProvider.autoDispose<RewardSummary>((ref) async {
+  ref.watch(authProvider.select((s) => s.user?.id));
+  return RewardSummary.fromJson(await ref.read(apiProvider).get<Json>('/api/account/rewards'));
+});
 
-final rewardHistoryProvider = FutureProvider.autoDispose<List<RewardTxn>>((ref) async =>
-    Paged.fromJson(await ref.read(apiProvider).get<Json>('/api/partner/rewards/history'), RewardTxn.fromJson).items);
+final rewardHistoryProvider = FutureProvider.autoDispose<List<RewardTxn>>((ref) async {
+  ref.watch(authProvider.select((s) => s.user?.id));
+  return Paged.fromJson(await ref.read(apiProvider).get<Json>('/api/account/rewards/history'), RewardTxn.fromJson).items;
+});
 
 final addressesProvider = FutureProvider.autoDispose<List<Address>>((ref) async {
+  ref.watch(authProvider.select((s) => s.user?.id));
   final list = await ref.read(apiProvider).get<List<dynamic>>('/api/account/addresses');
   return list.map((e) => Address.fromJson(e as Json)).toList();
 });

@@ -28,6 +28,9 @@ public class CartController : ControllerBase
     public Task<CartDto> Get([FromQuery] FulfilmentType? fulfilment, CancellationToken ct) =>
         _cart.GetAsync(_me.RequireId(), HttpContext.GetViewer(_me), fulfilment, ct);
 
+    [HttpPost("preview"), AllowAnonymous]
+    public Task<CartDto> Preview(List<CartUpdate> items, CancellationToken ct) => _cart.PreviewAsync(items, HttpContext.GetViewer(_me), ct);
+
     /// <summary>Adds quantity to a line (creates it if needed).</summary>
     [HttpPost("items")]
     public Task<CartDto> Add(CartUpdate u, CancellationToken ct) => _cart.SetQuantityAsync(_me.RequireId(), u, HttpContext.GetViewer(_me), add: true, ct);

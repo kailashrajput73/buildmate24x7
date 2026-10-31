@@ -48,6 +48,26 @@ public class ProductConfig : IEntityTypeConfiguration<Product>
         e.HasIndex(x => x.Barcode);
         e.Property(x => x.Name).HasMaxLength(250).IsRequired();
         e.Property(x => x.VariantFamily).HasMaxLength(200);
+        e.Property(x => x.ProductClass).HasMaxLength(120);
+        e.Property(x => x.Size).HasMaxLength(120);
+        e.Property(x => x.Length).HasMaxLength(120);
+        e.Property(x => x.SizeUnit).HasMaxLength(40);
+        e.Property(x => x.LengthUnit).HasMaxLength(40);
+        e.Property(x => x.SizeDimension).HasMaxLength(20);
+        e.Property(x => x.SizeValue).HasPrecision(20, 6);
+        e.Property(x => x.LengthValue).HasPrecision(20, 6);
+        e.Property(x => x.SizeNormalized).HasPrecision(24, 6);
+        e.Property(x => x.LengthNormalized).HasPrecision(24, 6);
+        e.Property(x => x.PackSize).HasPrecision(14, 3);
+        e.Property(x => x.PackMrp).HasPrecision(14, 2);
+        e.Property(x => x.BoxDiscountValue).HasPrecision(14, 2);
+        e.Property(x => x.BoxDiscountType).HasMaxLength(20).HasDefaultValue("None");
+        e.HasOne(x => x.ProductType).WithMany().HasForeignKey(x => x.ProductTypeId).OnDelete(DeleteBehavior.Restrict);
+        e.HasOne(x => x.CatalogFamily).WithMany().HasForeignKey(x => x.CatalogFamilyId).OnDelete(DeleteBehavior.Restrict);
+        e.HasIndex(x => new { x.CategoryId, x.ProductTypeId, x.SubCategoryId, x.BrandId });
+        e.HasIndex(x => new { x.CatalogFamilyId, x.Sequence });
+        e.HasIndex(x => x.ProductClass);
+
         e.Property(x => x.VariantLabel).HasMaxLength(100);
         e.HasIndex(x => new { x.VariantFamily, x.Sequence });
         e.Property(x => x.Unit).HasMaxLength(20);
@@ -307,8 +327,9 @@ public class CartItemConfig : IEntityTypeConfiguration<CartItem>
 {
     public void Configure(EntityTypeBuilder<CartItem> e)
     {
+        e.Property(x => x.PurchaseUnit).HasMaxLength(10).HasDefaultValue("Piece");
         e.Property(x => x.Quantity).IsQty();
-        e.HasIndex(x => new { x.UserId, x.ProductId }).IsUnique();
+        e.HasIndex(x => new { x.UserId, x.ProductId, x.PurchaseUnit }).IsUnique();
         e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Cascade);
     }
@@ -339,6 +360,11 @@ public class OrderItemConfig : IEntityTypeConfiguration<OrderItem>
 {
     public void Configure(EntityTypeBuilder<OrderItem> e)
     {
+        e.Property(x => x.PurchaseUnit).HasMaxLength(10).HasDefaultValue("Piece");
+        e.Property(x => x.PackSizeSnapshot).HasPrecision(14, 3);
+        e.Property(x => x.PackMrpSnapshot).HasPrecision(14, 2);
+        e.Property(x => x.BoxPriceSnapshot).HasPrecision(14, 2);
+        e.Property(x => x.BaseUnitSnapshot).HasMaxLength(40);
         e.Property(x => x.Quantity).IsQty();
         e.Property(x => x.ListPrice).IsMoney();
         e.Property(x => x.DiscountPercent).IsPercent();
@@ -377,6 +403,11 @@ public class QuotationItemConfig : IEntityTypeConfiguration<QuotationItem>
 {
     public void Configure(EntityTypeBuilder<QuotationItem> e)
     {
+        e.Property(x => x.PurchaseUnit).HasMaxLength(10).HasDefaultValue("Piece");
+        e.Property(x => x.PackSizeSnapshot).HasPrecision(14, 3);
+        e.Property(x => x.PackMrpSnapshot).HasPrecision(14, 2);
+        e.Property(x => x.BoxPriceSnapshot).HasPrecision(14, 2);
+        e.Property(x => x.BaseUnitSnapshot).HasMaxLength(40);
         e.Property(x => x.Quantity).IsQty();
         e.Property(x => x.ListPrice).IsMoney();
         e.Property(x => x.DiscountPercent).IsPercent();

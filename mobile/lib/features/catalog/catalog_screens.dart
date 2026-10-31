@@ -10,8 +10,8 @@ import '../../core/i18n.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
 import '../../data/providers.dart';
+import '../../data/search_history.dart';
 import '../../widgets/common.dart';
-import 'category_browse.dart';
 
 /// Categories tab: every category as a picture tile (design kit), plus brands.
 class CategoriesScreen extends ConsumerWidget {
@@ -45,22 +45,22 @@ class CategoriesScreen extends ConsumerWidget {
             mainAxisSpacing: AppSpacing.space3,
             childAspectRatio: 0.78,
             children: [
-              for (final c in list.where((c) => c.productCount > 0))
+              for (final c in list)
                 Material(
                   color: AppColors.surface,
                   borderRadius: AppRadius.lgAll,
                   clipBehavior: Clip.antiAlias,
                   child: InkWell(
-                    onTap: () => context.push('/category/${c.id}', extra: c.name),
+                    onTap: () => c.productCount == 0 ? toast(context, 'Coming soon. We are adding these products.') : context.push('/category/${c.id}', extra: c.name),
                     child: Container(
                       decoration: BoxDecoration(borderRadius: AppRadius.lgAll, border: Border.all(color: AppColors.divider)),
                       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                        Expanded(child: CategoryArt(name: c.name, imageUrl: c.imageUrl)),
+                        Expanded(child: CategoryAvailabilityArt(c)),
                         Padding(
                           padding: const EdgeInsets.all(AppSpacing.space2),
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Text(c.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
-                            Text('${c.productCount} products', style: theme.textTheme.labelSmall?.copyWith(color: AppColors.outline)),
+                            Text(c.productCount == 0 ? 'Products arriving soon' : '${c.productCount} products', style: theme.textTheme.labelSmall?.copyWith(color: AppColors.outline)),
                           ]),
                         ),
                       ]),
@@ -69,6 +69,10 @@ class CategoriesScreen extends ConsumerWidget {
                 ),
             ],
           ),
+          for (final category in list.where((c) => c.productCount > 0 && c.subCategories.isNotEmpty)) ...[
+            Padding(padding: const EdgeInsets.only(top: 16), child: Text(category.name, style: theme.textTheme.titleMedium)),
+            Wrap(spacing: 8, children: [for (final sub in category.subCategories) ActionChip(label: Text(sub.name), onPressed: () => context.push('/products?title=${Uri.encodeComponent(sub.name)}', extra: CatalogQuery(categoryId: category.id, subCategoryId: sub.id)))]),
+          ],
           if (groups.isNotEmpty) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(0, AppSpacing.space6, 0, AppSpacing.space3),
@@ -127,6 +131,14 @@ class _ProductListState extends ConsumerState<ProductListScreen> {
     super.dispose();
   }
 
+  void _submitSearch(String v) {
+    _debounce?.cancel();
+    _search.text = v;
+    setState(() => _q = _q.copyWith(q: v.trim()));
+    ref.read(searchHistoryProvider.notifier).remember(v);
+    FocusScope.of(context).unfocus();
+  }
+
   void _onSearch(String v) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 350), () => setState(() => _q = _q.copyWith(q: v.trim())));
@@ -137,19 +149,33 @@ class _ProductListState extends ConsumerState<ProductListScreen> {
     final t = ref.watch(trProvider);
     final res = ref.watch(productListProvider(_q));
     final searching = widget.title == null;
+    final recent = ref.watch(searchHistoryProvider);
+    final suggestions = <String>{
+      ...?ref.watch(brandsProvider).valueOrNull?.map((b) => b.name),
+      ...?ref.watch(categoriesProvider).valueOrNull?.map((c) => c.name),
+      ...?res.valueOrNull?.items.take(4).map((p) => p.name),
+    }.where((s) => _q.q.isNotEmpty && s.toLowerCase().contains(_q.q.toLowerCase()) && s.toLowerCase() != _q.q.toLowerCase()).take(5).toList();
     return Scaffold(
       appBar: AppBar(
         title: searching
             ? TextField(
                 controller: _search,
-                autofocus: _q.q.isEmpty && _q.categoryId == null,
+                autofocus: true,
                 textInputAction: TextInputAction.search,
-                decoration: InputDecoration(hintText: t('home.search'), border: InputBorder.none, enabledBorder: InputBorder.none, focusedBorder: InputBorder.none, filled: false),
+                decoration: InputDecoration(hintText: t('home.search'), border: InputBorder.none, enabledBorder: InputBorder.none, focusedBorder: InputBorder.none, filled: false, suffixIcon: IconButton(tooltip: 'Clear search', icon: const Icon(Icons.clear), onPressed: () { _search.clear(); _onSearch(''); })),
                 onChanged: _onSearch,
+                onSubmitted: _submitSearch,
               )
             : Text(widget.title!),
+        actions: [if (!searching) IconButton(tooltip: 'Search products', icon: const Icon(Icons.search), onPressed: () => context.push('/products', extra: _q))],
       ),
       body: Column(children: [
+        if (searching && (_q.q.isEmpty ? recent.isNotEmpty : suggestions.isNotEmpty))
+          SizedBox(height: 48, child: ListView(scrollDirection: Axis.horizontal, children: [
+            for (final text in _q.q.isEmpty ? recent : suggestions) Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: ActionChip(label: Text(text), onPressed: () => _submitSearch(text))),
+            if (_q.q.isEmpty) IconButton(tooltip: 'Clear recent searches', onPressed: () => ref.read(searchHistoryProvider.notifier).clear(), icon: const Icon(Icons.delete_outline)),
+          ])),
+        if (_q.categoryId != null) Chip(label: Text('In ${ref.watch(categoriesProvider).valueOrNull?.where((c) => c.id == _q.categoryId).firstOrNull?.name ?? 'this category'}'), onDeleted: () => setState(() => _q = _q.copyWith(categoryId: () => null, subCategoryId: () => null))),
         SizedBox(
           height: 48,
           child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), children: [
@@ -167,7 +193,7 @@ class _ProductListState extends ConsumerState<ProductListScreen> {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => ErrorView(e, onRetry: () => ref.invalidate(productListProvider(_q))),
             data: (page) => page.items.isEmpty
-                ? EmptyView(icon: Icons.search_off, title: 'No products found', body: 'Try a brand name, a shorter word, or the local name (e.g. nal, taar, pankha).')
+                ? EmptyView(icon: Icons.search_off, title: 'No products found for "${_q.q}"', action: TextButton(onPressed: () => ref.invalidate(productListProvider(_q)), child: const Text('Retry')), body: 'Try a brand name, a shorter word, or the local name (e.g. nal, taar, pankha).')
                 : RefreshIndicator(
                     onRefresh: () => ref.read(productListProvider(_q).notifier).load(),
                     child: GridView.builder(
@@ -196,8 +222,15 @@ class ProductScreen extends ConsumerStatefulWidget {
 
 class _ProductState extends ConsumerState<ProductScreen> {
   double _qty = 1;
+  String _purchaseUnit = "Piece";
   bool _busy = false;
   int _img = 0;
+
+  @override
+  void didUpdateWidget(covariant ProductScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.id != widget.id) { _qty = 1; _purchaseUnit = 'Piece'; _img = 0; }
+  }
 
   /// Puts this quantity in the cart and goes straight to checkout.
   /// "Selected product size · 20 mm" for the bottom bar.
@@ -208,63 +241,6 @@ class _ProductState extends ConsumerState<ProductScreen> {
     return size.isEmpty ? 'Selected product' : 'Selected product size · $size';
   }
 
-  /// Brand and Class rows: the same item ("CPVC pipe") from other brands / classes in this category. Tapping one
-  /// opens that family at the same size when it has it, otherwise its first in-stock size.
-  List<Widget> _familyRows(BuildContext context, WidgetRef ref, ProductCard p) {
-    final items = ref.watch(categoryItemsProvider(p.categoryId)).valueOrNull;
-    if (items == null) return const [];
-    final groups = buildGroups(items);
-    final current = groups.where((g) => g.items.any((i) => i.id == p.id)).firstOrNull;
-    if (current == null || current.itemKey.isEmpty) return const [];
-    final me = current.items.firstWhere((i) => i.id == p.id);
-    final mm = sizeMm(me);
-    final siblings = groups.where((g) => g.type == current.type && g.itemKey == current.itemKey).toList();
-
-    int target(ProductGroup g) {
-      if (mm != null) {
-        final same = g.items.where((i) => sizeMm(i) == mm).toList()..sort((a, b) => (b.inStock ? 1 : 0) - (a.inStock ? 1 : 0));
-        if (same.isNotEmpty) return same.first.id;
-      }
-      return g.openId;
-    }
-
-    bool hasSize(ProductGroup g) => mm == null || g.items.any((i) => sizeMm(i) == mm);
-
-    final rows = <Widget>[];
-    final brands = <String, ProductGroup>{};
-    for (final g in siblings) {
-      final prev = brands[g.brand];
-      // Per brand, prefer the family with the current class, then one that has the current size.
-      if (prev == null || (g.cls == current.cls && prev.cls != current.cls) || (hasSize(g) && !hasSize(prev) && prev.cls != current.cls)) {
-        brands[g.brand] = g;
-      }
-    }
-    if (brands.length > 1) {
-      final names = brands.keys.toList()..sort();
-      rows.add(_OptionRow(label: 'Brand', options: [
-        for (final b in names)
-          _Option(b,
-              selected: b == current.brand,
-              exact: hasSize(brands[b]!),
-              inStock: brands[b]!.inStock,
-              onTap: () => context.pushReplacement('/product/${target(brands[b]!)}')),
-      ]));
-    }
-    final classes = siblings.where((g) => g.brand == current.brand && g.cls != null).toList();
-    if (classes.length > 1) {
-      classes.sort((a, b) => a.cls!.compareTo(b.cls!));
-      rows.add(_OptionRow(label: 'Class', options: [
-        for (final g in classes)
-          _Option(g.cls!,
-              selected: g == current,
-              exact: hasSize(g),
-              inStock: g.inStock,
-              onTap: () => context.pushReplacement('/product/${target(g)}')),
-      ]));
-    }
-    return rows;
-  }
-
   Future<void> _buyNow() async {
     if (ref.read(authProvider).status != AuthStatus.loggedIn) {
       context.push('/login?next=${Uri.encodeComponent('/product/${widget.id}')}');
@@ -272,7 +248,7 @@ class _ProductState extends ConsumerState<ProductScreen> {
     }
     setState(() => _busy = true);
     try {
-      await ref.read(cartProvider.notifier).add(widget.id, _qty);
+      await ref.read(cartProvider.notifier).add(widget.id, _qty, purchaseUnit: _purchaseUnit);
       if (mounted) context.push('/checkout');
     } catch (e) {
       if (mounted) toast(context, e.toString(), error: true);
@@ -306,6 +282,8 @@ class _ProductState extends ConsumerState<ProductScreen> {
         error: (e, _) => ErrorView(e, onRetry: () => ref.invalidate(productProvider(widget.id))),
         data: (d) {
           final p = d.card;
+          final box = _purchaseUnit == 'Box';
+          final price = box ? p.catalog?.boxPrice ?? p.price : p.price;
           return ListView(padding: const EdgeInsets.only(bottom: 100), children: [
             AspectRatio(
               aspectRatio: 1.2,
@@ -315,7 +293,7 @@ class _ProductState extends ConsumerState<ProductScreen> {
                   borderRadius: BorderRadius.circular(28),
                   child: PageView(
                     onPageChanged: (i) => setState(() => _img = i),
-                    children: [for (final u in d.imageUrls.isEmpty ? [''] : d.imageUrls) ColoredBox(color: Colors.white, child: NetImage(u, fit: BoxFit.contain))],
+                    children: [for (final u in d.imageUrls.isEmpty ? [''] : d.imageUrls) ColoredBox(color: Colors.white, child: NetImage(u, fit: BoxFit.contain, fallbackName: p.name, thumbnail: false))],
                   ),
                 ),
               ),
@@ -338,19 +316,22 @@ class _ProductState extends ConsumerState<ProductScreen> {
                 if (d.otherNames.isNotEmpty)
                   Padding(padding: const EdgeInsets.only(top: 4), child: Text('Also: ${d.otherNames.take(4).join(', ')}', style: const TextStyle(color: BM.inkFaint, fontSize: 13))),
                 const SizedBox(height: 14),
+                if (p.catalog?.packSize != null && p.catalog?.boxPrice != null) ...[
+                  SegmentedButton<String>(segments: [const ButtonSegment(value: 'Piece', label: Text('Individual')), ButtonSegment(value: 'Box', label: Text('Box (${qty(p.catalog!.packSize!)} ${p.unit})'))], selected: {_purchaseUnit}, onSelectionChanged: (v) => setState(() { _purchaseUnit = v.single; _qty = 1; })),
+                  if (box) Text('Package MRP ${money(p.catalog!.packMrp ?? 0)} · Save ${money((p.catalog!.packMrp ?? 0) - price)}'),
+                ],
                 Text(t('product.yourPrice'), style: const TextStyle(color: BM.inkSoft, fontSize: 12)),
                 Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-                  Text(money(p.price), style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
+                  Text(money(price), style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
                   const SizedBox(width: 6),
-                  Text('/ ${p.unit}', style: const TextStyle(color: BM.inkSoft)),
+                  Text('/ ${box ? 'box' : p.unit}', style: const TextStyle(color: BM.inkSoft)),
                 ]),
                 Wrap(spacing: 8, children: [
-                  if (p.listPrice > p.price) Text('List ${money(p.listPrice)}', style: const TextStyle(color: BM.inkFaint, decoration: TextDecoration.lineThrough)),
-                  if (p.discountPercent > 0) Text('${qty(p.discountPercent)}% partner discount', style: const TextStyle(color: BM.leaf, fontWeight: FontWeight.w700)),
+                  if (!box && p.listPrice > p.price) Text('List ${money(p.listPrice)}', style: const TextStyle(color: BM.inkFaint, decoration: TextDecoration.lineThrough)),
+                  if (!box && p.discountPercent > 0) Text('${qty(p.discountPercent)}% partner discount', style: const TextStyle(color: BM.leaf, fontWeight: FontWeight.w700)),
                 ]),
                 Text('Incl. ${qty(d.gstRate)}% GST · ${p.code}', style: const TextStyle(color: BM.inkFaint, fontSize: 12)),
                 // Brand / Class / Size as tappable blocks (design kit), not dropdowns or chips.
-                ..._familyRows(context, ref, p),
                 if (d.variantAxes.isNotEmpty) ...[
                   for (final axis in d.variantAxes)
                     _OptionRow(
@@ -436,7 +417,7 @@ class _ProductState extends ConsumerState<ProductScreen> {
               shadowColor: AppColors.shadow,
               child: SafeArea(
                 minimum: const EdgeInsets.fromLTRB(AppSpacing.space4, AppSpacing.space3, AppSpacing.space4, AppSpacing.space3),
-                child: res.value!.maxOrderQty <= 0
+                child: res.value!.maxOrderQty < (_purchaseUnit == 'Box' ? res.value!.card.catalog!.packSize! : 1)
                     ? Text(t('product.outOfStock'), textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, color: BM.inkSoft))
                     : Column(mainAxisSize: MainAxisSize.min, children: [
                         Row(children: [
@@ -444,10 +425,10 @@ class _ProductState extends ConsumerState<ProductScreen> {
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                               Text(_selectedLabel(res.value!), maxLines: 1, overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant)),
-                              Text(money(res.value!.card.price * _qty), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                              Text(money((_purchaseUnit == 'Box' ? res.value!.card.catalog!.boxPrice! : res.value!.card.price) * _qty), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                             ]),
                           ),
-                          QtyStepper(value: _qty, max: res.value!.maxOrderQty, onChanged: (v) => setState(() => _qty = v)),
+                          QtyStepper(value: _qty, max: _purchaseUnit == 'Box' ? (res.value!.maxOrderQty / res.value!.card.catalog!.packSize!).floorToDouble() : res.value!.maxOrderQty, onChanged: (v) => setState(() => _qty = v)),
                         ]),
                         const SizedBox(height: 8),
                         Row(children: [
@@ -457,7 +438,7 @@ class _ProductState extends ConsumerState<ProductScreen> {
                               icon: const Icon(Icons.add_shopping_cart),
                               onPressed: _busy ? null : () async {
                                 setState(() => _busy = true);
-                                await addToCart(context, ref, widget.id, _qty, res.value!.card.name);
+                                await addToCart(context, ref, widget.id, _qty, res.value!.card.name, purchaseUnit: _purchaseUnit);
                                 if (mounted) setState(() => _busy = false);
                               },
                               label: const Text('Add to Cart'),
@@ -541,7 +522,7 @@ class _Block extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: o.selected ? null : o.onTap,
+          onTap: o.selected || !o.inStock ? null : o.onTap,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 52),
             child: Padding(

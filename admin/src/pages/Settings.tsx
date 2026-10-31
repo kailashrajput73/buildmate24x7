@@ -1,3 +1,4 @@
+import CashfreeSettings from '../components/CashfreeSettings'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Button, ErrorBox, Field, Input, Loading, NumberInput, PageHeader, Section, Textarea, Toggle } from '../components/ui'
@@ -17,6 +18,7 @@ export default function Settings() {
   const set = <K extends keyof StoreSettings>(k: K, v: StoreSettings[K]) => setS({ ...s, [k]: v })
 
   return (
+    <>
     <form onSubmit={(e) => { e.preventDefault(); save.mutate(undefined) }}>
       <PageHeader title="Store settings" subtitle="Shown on invoices, the website footer and the app's help screen." actions={<Button type="submit" busy={save.isPending}>Save settings</Button>} />
       <div className="grid gap-4 xl:grid-cols-2">
@@ -79,6 +81,8 @@ export default function Settings() {
         </Section>
       </div>
     </form>
+    <CashfreeSettings />
+    </>
   )
 }
 

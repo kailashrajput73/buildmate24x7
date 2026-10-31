@@ -47,6 +47,25 @@ public class Product : AuditableEntity
     /// Listings show one card per family; the product page shows a size picker.
     /// </summary>
     public string? VariantFamily { get; set; }
+    public long? ProductTypeId { get; set; }
+    public ProductType? ProductType { get; set; }
+    public long? CatalogFamilyId { get; set; }
+    public CatalogFamily? CatalogFamily { get; set; }
+    public string? ProductClass { get; set; }
+    public string? Size { get; set; }
+    public decimal? SizeValue { get; set; }
+    public string? SizeUnit { get; set; }
+    public string? SizeDimension { get; set; }
+    public decimal? SizeNormalized { get; set; }
+    public string? Length { get; set; }
+    public decimal? LengthValue { get; set; }
+    public string? LengthUnit { get; set; }
+    public decimal? LengthNormalized { get; set; }
+    public decimal? PackSize { get; set; }
+    public decimal? PackMrp { get; set; }
+    public string BoxDiscountType { get; set; } = "None";
+    public decimal BoxDiscountValue { get; set; }
+
     /// <summary>What the size picker shows for this product, e.g. 20 mm (¾").</summary>
     public string? VariantLabel { get; set; }
     /// <summary>Specifications shown on the product page, each "Name: Value", in display order.</summary>

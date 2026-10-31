@@ -2,10 +2,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { api, session } from './api'
-import type { AuthResult, AuthUser, Cart, CartLine, ProductCard } from './types'
+import type { AuthResult, AuthUser, Cart } from './types'
 
 const GUEST_KEY = 'bm_guest_cart'
-type GuestLine = { productId: number; quantity: number }
+type GuestLine = { productId: number; quantity: number; purchaseUnit?: "Piece" | "Box" }
 
 type Shop = {
   user: AuthUser | null
@@ -19,9 +19,9 @@ type Shop = {
   cartCount: number
   cartBusy: boolean
   /** Resolves true when the item made it into the cart. */
-  add: (productId: number, qty?: number, name?: string, quiet?: boolean) => Promise<boolean>
-  setQty: (productId: number, qty: number) => Promise<boolean>
-  remove: (productId: number) => Promise<boolean>
+  add: (productId: number, qty?: number, name?: string, quiet?: boolean, purchaseUnit?: "Piece" | "Box") => Promise<boolean>
+  setQty: (productId: number, qty: number, purchaseUnit?: "Piece" | "Box") => Promise<boolean>
+  remove: (productId: number, purchaseUnit?: "Piece" | "Box") => Promise<boolean>
   reloadCart: () => Promise<void>
 }
 
@@ -32,18 +32,7 @@ const writeGuest = (l: GuestLine[]) => { try { localStorage.setItem(GUEST_KEY, J
 
 /** Guest carts live in the browser and are priced live by the API; they merge into the account on login. */
 async function priceGuest(lines: GuestLine[]): Promise<Cart> {
-  const cards = lines.length ? await api<ProductCard[]>('/api/catalog/products/batch', { method: 'POST', body: lines.map((l) => l.productId) }) : []
-  const items: CartLine[] = lines.flatMap((l) => {
-    const p = cards.find((c) => c.id === l.productId)
-    if (!p) return []
-    return [{ productId: p.id, code: p.code, name: p.name, brandName: p.brandName, unit: p.unit, imageUrl: p.imageUrl ?? undefined, quantity: l.quantity,
-      listPrice: p.listPrice, discountPercent: p.discountPercent, unitPrice: p.price, lineTotal: Math.round(p.price * l.quantity * 100) / 100, mrp: p.mrp,
-      availableQty: p.inStock ? 9999 : 0, issue: p.inStock ? null : 'Out of stock' }]
-  })
-  const subTotal = items.reduce((s, i) => s + i.listPrice * i.quantity, 0)
-  const total = items.reduce((s, i) => s + i.lineTotal, 0)
-  return { items, itemCount: items.length, subTotal, discountTotal: subTotal - total, total, deliveryFee: 0, roundOff: Math.round(total) - total, payable: Math.round(total), freeDeliveryAbove: 0, minOrderValue: 0,
-    canCheckout: items.length > 0, issues: [], storePickupEnabled: true, homeDeliveryEnabled: true }
+  return api<Cart>('/api/cart/preview', { method: 'POST', body: lines.map(l => ({ ...l, purchaseUnit: l.purchaseUnit ?? 'Piece' })) })
 }
 
 export function ShopProvider({ children }: { children: ReactNode }) {
@@ -70,28 +59,28 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     try { await fn(); return true } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not update the cart'); return false } finally { setBusy(false) }
   }
 
-  const add = (productId: number, qty = 1, name?: string, quiet = false) => run(async () => {
-    if (session.get()) setCart(await api<Cart>('/api/cart/items', { method: 'POST', body: { productId, quantity: qty } }))
+  const add = (productId: number, qty = 1, name?: string, quiet = false, purchaseUnit: "Piece" | "Box" = "Piece") => run(async () => {
+    if (session.get()) setCart(await api<Cart>('/api/cart/items', { method: 'POST', body: { productId, quantity: qty, purchaseUnit } }))
     else {
       const g = readGuest()
-      const ex = g.find((l) => l.productId === productId)
-      if (ex) ex.quantity += qty; else g.push({ productId, quantity: qty })
+      const ex = g.find((l) => l.productId === productId && (l.purchaseUnit ?? "Piece") === purchaseUnit)
+      if (ex) ex.quantity += qty; else g.push({ productId, quantity: qty, purchaseUnit })
       writeGuest(g)
       setCart(await priceGuest(g))
     }
     if (!quiet) toast.success(name ? `Added ${name}` : 'Added to cart', { action: { label: 'View cart', onClick: () => { window.location.href = '/cart' } } })
   })
 
-  const setQty = (productId: number, qty: number) => run(async () => {
-    if (session.get()) setCart(await api<Cart>('/api/cart/items', { method: 'PUT', body: { productId, quantity: qty } }))
+  const setQty = (productId: number, qty: number, purchaseUnit: "Piece" | "Box" = "Piece") => run(async () => {
+    if (session.get()) setCart(await api<Cart>('/api/cart/items', { method: 'PUT', body: { productId, quantity: qty, purchaseUnit } }))
     else {
-      const g = readGuest().map((l) => (l.productId === productId ? { ...l, quantity: qty } : l)).filter((l) => l.quantity > 0)
+      const g = readGuest().map((l) => (l.productId === productId && (l.purchaseUnit ?? "Piece") === purchaseUnit ? { ...l, quantity: qty } : l)).filter((l) => l.quantity > 0)
       writeGuest(g)
       setCart(await priceGuest(g))
     }
   })
 
-  const remove = (productId: number) => setQty(productId, 0)
+  const remove = (productId: number, purchaseUnit: "Piece" | "Box" = "Piece") => setQty(productId, 0, purchaseUnit)
 
   const requestOtp = async (phone: string) => { await api('/api/auth/otp/request', { method: 'POST', body: { phone, audience: 'Customer' } }) }
 

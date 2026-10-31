@@ -11,6 +11,7 @@ const Quotations = lazy(() => import('./pages/Quotations'))
 const OrderDetail = lazy(() => import('./pages/OrderDetail'))
 const Invoice = lazy(() => import('./pages/Invoice'))
 const Counter = lazy(() => import('./pages/Counter'))
+const CatalogStructure = lazy(() => import('./pages/CatalogStructure'))
 const Products = lazy(() => import('./pages/Products'))
 const ProductEdit = lazy(() => import('./pages/ProductEdit'))
 const Categories = lazy(() => import('./pages/Categories'))
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="quotations" element={<Guard perm={P.ordersView}><Quotations /></Guard>} />
           <Route path="counter" element={<Guard perm={P.counter}><Counter /></Guard>} />
           <Route path="service-requests" element={<Guard perm={P.services}><ServiceRequests /></Guard>} />
+          <Route path="catalog-structure" element={<Guard perm={P.catalogView}><CatalogStructure /></Guard>} />
           <Route path="products" element={<Guard perm={P.catalogView}><Products /></Guard>} />
           <Route path="products/:id" element={<Guard perm={P.catalogView}><ProductEdit /></Guard>} />
           <Route path="categories" element={<Guard perm={P.catalogView}><Categories /></Guard>} />

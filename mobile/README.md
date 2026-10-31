@@ -9,8 +9,10 @@ reward points, addresses, notifications, QR scan, English/Hindi.
 The look follows the design kit the client supplied (`theme/` = their `AppColors`, `AppTypography` (DM Sans + Inter),
 `AppSpacing`, `AppRadius`, `AppTheme`; their login / OTP / profession screens, home dashboard and catalogue layout).
 
-> The Flutter SDK can't be downloaded in the environment this was written in, so this code has **not been compiled**.
-> Expect a short round of `flutter analyze` fixes on first build; send the errors back if anything is unclear.
+> Flutter analysis and widget/model tests have been run locally. See
+> [the mobile implementation report](../MOBILE_CHANGE_REQUEST_IMPLEMENTATION.md) and
+> [the catalog upgrade report](../CATALOG_UPGRADE_IMPLEMENTATION.md) for validation details.
+> APK and physical-device verification remain pending.
 
 ## First-time setup
 

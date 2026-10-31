@@ -33,11 +33,17 @@ public class CashfreeOptions
         if (!KeysSet) p.Add("Cashfree keys are empty: set CASHFREE_CLIENT_ID and CASHFREE_CLIENT_SECRET (Cashfree dashboard → Developers → API keys).");
         foreach (var (name, url) in new[] { ("WebReturnUrl (SITE_URL)", WebReturnUrl), ("NotifyUrl (PUBLIC_API_URL)", NotifyUrl) })
         {
-            if (string.IsNullOrWhiteSpace(url)) { p.Add($"{name} is empty."); continue; }
-            if (url.Contains("example.com", StringComparison.OrdinalIgnoreCase) || url.Contains("localhost", StringComparison.OrdinalIgnoreCase))
-                p.Add($"{name} still points to {new Uri(url, UriKind.RelativeOrAbsolute)} — set the real public address.");
-            else if (Environment == "production" && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-                p.Add($"{name} must use https:// in production.");
+            // Sandbox can return to a local browser and use server-side confirmation without a public webhook.
+            // Production always requires both public HTTPS URLs.
+            if (Environment == "sandbox" && name.StartsWith("NotifyUrl") && string.IsNullOrWhiteSpace(url)) continue;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
+            { p.Add($"{name} must be an absolute HTTP(S) URL."); continue; }
+            if (uri.Host == "example.com" || uri.Host.EndsWith(".example.com", StringComparison.OrdinalIgnoreCase))
+                p.Add($"{name} still uses a placeholder domain; set the real public address.");
+            if (Environment == "sandbox" && name.StartsWith("NotifyUrl") && uri.IsLoopback)
+                p.Add($"{name} cannot receive remote webhooks on loopback; leave it empty for local confirmation or set the real public address.");
+            if (Environment == "production" && (uri.Scheme != "https" || uri.IsLoopback))
+                p.Add($"{name} must use a public https:// address in production.");
         }
         return p;
     }
@@ -56,7 +62,8 @@ public interface IPaymentGateway
     Task<GatewayOrderResult> CreateOrderAsync(GatewayOrderRequest req, CancellationToken ct = default);
     Task<GatewayStatus> GetStatusAsync(string gatewayOrderId, CancellationToken ct = default);
     Task<string> RefundAsync(string gatewayOrderId, decimal amount, string refundId, string note, CancellationToken ct = default);
-    bool VerifyWebhook(string rawBody, string? signature, string? timestamp);
+    Task<bool> VerifyWebhookAsync(string rawBody, string? signature, string? timestamp, CancellationToken ct = default);
+    Task<string> EnvironmentAsync(string orderId, CancellationToken ct = default);
     /// <summary>Checks the keys against Cashfree without creating anything (looks up an order id that doesn't exist).</summary>
     Task<(bool Ok, string Message)> TestConnectionAsync(CancellationToken ct = default);
     string? ExtractOrderIdFromWebhook(string rawBody);
@@ -109,15 +116,15 @@ public class CashfreeGateway : IPaymentGateway
             var (code, message) = ErrorOf(raw);
             return (int)res.StatusCode switch
             {
-                404 => (true, $"Connected to Cashfree {_opt.Environment}: the keys are valid."),
-                401 or 403 => (false, $"Cashfree rejected the keys ({message ?? code ?? res.StatusCode.ToString()}). Check that they are {_opt.Environment} keys and that this server's IP is allowed in the Cashfree dashboard."),
+                404 when code?.Contains("order", StringComparison.OrdinalIgnoreCase) == true => (true, $"Connected to Cashfree {_opt.Environment}: the keys are valid."),
+                401 or 403 => (false, "Cashfree rejected the credentials. Check the environment and server IP allowlist."),
                 >= 200 and < 300 => (true, $"Connected to Cashfree {_opt.Environment}."),
-                _ => (false, $"Cashfree answered {(int)res.StatusCode}: {message ?? code ?? "unexpected response"}"),
+                _ => (false, $"Cashfree validation failed with HTTP {(int)res.StatusCode}."),
             };
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
         {
-            return (false, $"Could not reach Cashfree ({_opt.BaseUrl}): {e.Message}");
+            return (false, "Could not reach Cashfree. Retry after checking the server network.");
         }
     }
 
@@ -157,7 +164,7 @@ public class CashfreeGateway : IPaymentGateway
         if (!res.IsSuccessStatusCode)
         {
             var (code, message) = ErrorOf(raw);
-            _log.LogError("Cashfree create order failed {Status} {Code}: {Message} — {Body}", (int)res.StatusCode, code, message, raw);
+            _log.LogError("Cashfree create order failed with HTTP {Status}", (int)res.StatusCode);
             if ((int)res.StatusCode is 401 or 403)
                 throw new AppException("Online payment isn't available right now (payment gateway set-up). Please contact the store.", 502, "payment_gateway_auth");
             throw new AppException("Could not start payment. Please try again.", 502, "payment_gateway_error");
@@ -179,7 +186,7 @@ public class CashfreeGateway : IPaymentGateway
         var raw = await res.Content.ReadAsStringAsync(ct);
         if (!res.IsSuccessStatusCode)
         {
-            _log.LogError("Cashfree get order failed {Status}: {Body}", res.StatusCode, raw);
+            _log.LogError("Cashfree get order failed with HTTP {Status}", (int)res.StatusCode);
             throw new AppException("Could not verify payment yet. Please refresh in a moment.", 502, "payment_gateway_error");
         }
 
@@ -204,19 +211,21 @@ public class CashfreeGateway : IPaymentGateway
         var raw = await res.Content.ReadAsStringAsync(ct);
         if (!res.IsSuccessStatusCode)
         {
-            _log.LogError("Cashfree refund failed {Status}: {Body}", res.StatusCode, raw);
+            _log.LogError("Cashfree refund failed with HTTP {Status}", (int)res.StatusCode);
             throw new AppException("Refund could not be started with Cashfree. Please refund from the Cashfree dashboard.", 502, "refund_failed");
         }
         return raw;
     }
 
     /// <summary>Signature = Base64(HMAC_SHA256(timestamp + rawBody, clientSecret)).</summary>
-    public bool VerifyWebhook(string rawBody, string? signature, string? timestamp)
+    public Task<string> EnvironmentAsync(string orderId, CancellationToken ct = default) => Task.FromResult(_opt.Environment);
+
+    public Task<bool> VerifyWebhookAsync(string rawBody, string? signature, string? timestamp, CancellationToken ct = default)
     {
-        if (string.IsNullOrEmpty(signature) || string.IsNullOrEmpty(timestamp)) return false;
+        if (!_opt.KeysSet || string.IsNullOrEmpty(signature) || string.IsNullOrEmpty(timestamp)) return Task.FromResult(false);
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(_opt.ClientSecret));
         var expected = Convert.ToBase64String(hmac.ComputeHash(Encoding.UTF8.GetBytes(timestamp + rawBody)));
-        return CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(expected), Encoding.UTF8.GetBytes(signature));
+        return Task.FromResult(CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(expected), Encoding.UTF8.GetBytes(signature)));
     }
 
     public string? ExtractOrderIdFromWebhook(string rawBody)

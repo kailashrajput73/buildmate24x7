@@ -1,9 +1,7 @@
 /// Build-time configuration. Pass with --dart-define, e.g.
-///   flutter run --dart-define=API_URL=https://api.buildmate24x7.in --dart-define=CASHFREE_ENV=production
+///   flutter run --dart-define=API_URL=https://api.buildmate24x7.com
 class AppConfig {
-  static const apiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://10.0.2.2:5080');
-  /// "sandbox" or "production". The API decides per order; this is the fallback.
-  static const cashfreeEnv = String.fromEnvironment('CASHFREE_ENV', defaultValue: 'sandbox');
+  static const apiUrl = String.fromEnvironment('API_URL', defaultValue: 'https://api.buildmate24x7.com');
   static const appVersion = '1.0.0';
 
   /// localhost / 10.0.2.2 only work on a PC or the Android emulator, never on a real phone.

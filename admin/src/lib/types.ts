@@ -29,7 +29,15 @@ export type Category = { id: number; name: string; description?: string; imageUr
 export type SubCategory = { id: number; categoryId: number; categoryName: string; name: string; sortOrder: number; isActive: boolean; productCount: number }
 export type Brand = { id: number; name: string; logoUrl?: string; sortOrder: number; isActive: boolean; productCount: number }
 
+export type CatalogFields = {
+  typeId?: number; typeName?: string; class?: string; familyId?: number; productFamily?: string; familyImageUrl?: string
+  size?: string; length?: string; packSize?: number; packMrp?: number; boxPrice?: number
+  boxDiscountType: 'None' | 'Percentage' | 'Fixed'; boxDiscountValue: number
+}
+export type ProductType = { id: number; categoryId: number; name: string; sortOrder: number; isActive: boolean; subCategoryIds: number[] }
+export type CatalogFamily = { id: number; categoryId: number; brandId: number; key: string; name: string; imageUrl?: string }
 export type Product = {
+  catalog?: CatalogFields
   id: number; code: string; name: string; description?: string
   categoryId: number; categoryName: string; subCategoryId?: number; subCategoryName?: string; brandId: number; brandName: string
   barcode?: string; unit: string; hsnCode?: string; gstRate: number
@@ -100,6 +108,7 @@ export type OrderListItem = {
   balanceDue: number; rewardPointsEarned: number; invoiceNo?: string
 }
 export type OrderItem = {
+  purchaseUnit?: "Piece" | "Box"; packSize?: number; purchaseQuantity?: number; packMrp?: number; boxPrice?: number; baseUnit?: string
   id: number; productId: number; productCode: string; productName: string; hsnCode?: string; imageUrl?: string; quantity: number; listPrice: number
   discountPercent: number; specialDiscountPercent: number; unitPrice: number; gstRate: number; taxAmount: number; lineTotal: number
   rewardPoints: number; addedAtStore: boolean; rackLocations: string[]
@@ -144,6 +153,7 @@ export type StoreSettings = {
 export type InvoiceNumbering = { financialYear: string; prefix: string; digits: number; nextNumber: number; nextInvoiceNo: string }
 
 export type Dashboard = {
+  overview?: { products: number; categories: number; brands: number; customers: number; partners: number; orders: number; quotations: number }
   kpis: {
     salesToday: number; ordersToday: number; salesThisMonth: number; ordersThisMonth: number; salesLastMonth: number
     awaitingDispatch: number; awaitingPayment: number; pendingKyc: number; lowStockCount: number; activePartners: number

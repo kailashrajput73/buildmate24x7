@@ -92,17 +92,21 @@ public class CheckoutService : ICheckoutService
         foreach (var line in cart.Items)
         {
             var p = products[line.ProductId];
-            if (p.AvailableQty < line.Quantity)
+            var baseQuantity = Packaging.BaseQuantity(p, line.Quantity, line.PurchaseUnit);
+            if (p.AvailableQty < cart.Items.Where(x => x.ProductId == p.Id).Sum(x => Packaging.BaseQuantity(p, x.Quantity, x.PurchaseUnit)))
                 throw new AppException($"Only {Math.Max(0, p.AvailableQty):0.###} of {p.Name} left. Please update your cart.", 409, "insufficient_stock");
-            order.Items.Add(new OrderItem
+            var item = new OrderItem
             {
                 ProductId = p.Id, ProductCode = p.Code, ProductName = p.Name, HsnCode = p.HsnCode,
-                Quantity = line.Quantity, ListPrice = p.ListPrice, DiscountPercent = Pricing.DiscountFor(p, v.Kind),
+                Quantity = baseQuantity, ListPrice = p.ListPrice, DiscountPercent = Pricing.DiscountFor(p, v.Kind),
                 GstRate = p.GstRate,
-                RewardPoints = v.Kind == CustomerKind.Partner ? Pricing.Round(p.RewardPointsPerUnit * line.Quantity) : 0
-            });
+                RewardPoints = v.Kind == CustomerKind.Partner ? Pricing.Round(p.RewardPointsPerUnit * baseQuantity) : 0
+            };
+            Packaging.Snapshot(item, p, line.PurchaseUnit);
+            order.Items.Add(item);
         }
-        order.ShippingFee = _cart.DeliveryFee(settings, req.FulfilmentType, order.Items.Sum(i => Pricing.UnitPrice(i.ListPrice, i.DiscountPercent) * i.Quantity));
+        foreach (var item in order.Items) Pricing.Recalculate(item);
+        order.ShippingFee = _cart.DeliveryFee(settings, req.FulfilmentType, order.Items.Sum(i => i.LineTotal));
         Pricing.Recalculate(order);
 
         // Guard against the price changing between cart view and checkout.
@@ -182,13 +186,14 @@ public class CheckoutService : ICheckoutService
         foreach (var i in q.Items)
         {
             var p = products[i.ProductId];
-            if (p.AvailableQty < i.Quantity)
+            if (p.AvailableQty < q.Items.Where(x => x.ProductId == p.Id).Sum(x => x.Quantity))
                 throw new AppException($"Only {Math.Max(0, p.AvailableQty):0.###} of {p.Name} in stock right now. Call the store to arrange the rest.", 409, "insufficient_stock");
             order.Items.Add(new OrderItem
             {
                 ProductId = p.Id, ProductCode = p.Code, ProductName = p.Name, HsnCode = p.HsnCode,
                 Quantity = i.Quantity, ListPrice = i.ListPrice, DiscountPercent = i.DiscountPercent,
                 SpecialDiscountPercent = i.SpecialDiscountPercent, GstRate = i.GstRate, RewardPoints = i.RewardPoints,
+                PurchaseUnit = i.PurchaseUnit, PackSizeSnapshot = i.PackSizeSnapshot, PackMrpSnapshot = i.PackMrpSnapshot, BoxPriceSnapshot = i.BoxPriceSnapshot, BaseUnitSnapshot = i.BaseUnitSnapshot,
             });
         }
         Pricing.Recalculate(order);
@@ -240,7 +245,7 @@ public class CheckoutService : ICheckoutService
                         && o.FulfilmentType == draft.FulfilmentType && o.GrandTotal == draft.GrandTotal)
             .OrderByDescending(o => o.Id).Take(3).ToListAsync(ct);
         static string Key(IEnumerable<OrderItem> items) =>
-            string.Join("|", items.OrderBy(i => i.ProductId).Select(i => $"{i.ProductId}:{i.Quantity:0.###}"));
+            string.Join("|", items.OrderBy(i => i.ProductId).ThenBy(i => i.PurchaseUnit).Select(i => $"{i.ProductId}:{i.PurchaseUnit}:{i.Quantity:0.###}:{i.PackSizeSnapshot}:{i.BoxPriceSnapshot}"));
         var key = Key(draft.Items);
         return candidates.FirstOrDefault(o => Key(o.Items) == key && o.ShipLine1 == draft.ShipLine1 && o.ShipPincode == draft.ShipPincode
                                               && o.ScheduledAt == draft.ScheduledAt);
@@ -253,7 +258,7 @@ public class CheckoutService : ICheckoutService
             .OrderByDescending(p => p.Id).FirstOrDefaultAsync(ct);
         if (last is { Status: PaymentStatus.Pending, PaymentSessionId: not null, GatewayOrderId: not null }
             && last.CreatedAt >= DateTime.UtcNow - SessionReuseWindow)
-            return new CheckoutResult(order.Id, order.OrderNo, order.GrandTotal, last.GatewayOrderId, last.PaymentSessionId, _cf.Environment);
+            return new CheckoutResult(order.Id, order.OrderNo, order.GrandTotal, last.GatewayOrderId, last.PaymentSessionId, await _gateway.EnvironmentAsync(last.GatewayOrderId, ct));
         if (await SettleFromGatewayAsync(order, ct))
         {
             await _db.SaveChangesAsync(ct);
@@ -279,7 +284,7 @@ public class CheckoutService : ICheckoutService
         });
         _orders.AddEvent(order, OrderActions.PaymentStarted, $"Attempt {attempt}");
         await _db.SaveChangesAsync(ct);
-        return new CheckoutResult(order.Id, order.OrderNo, order.GrandTotal, gatewayOrderId, gw.PaymentSessionId, _cf.Environment);
+        return new CheckoutResult(order.Id, order.OrderNo, order.GrandTotal, gatewayOrderId, gw.PaymentSessionId, await _gateway.EnvironmentAsync(gatewayOrderId, ct));
     }
 
     public async Task<PaymentConfirmResult> ConfirmAsync(long userId, long orderId, CancellationToken ct = default)
@@ -306,7 +311,7 @@ public class CheckoutService : ICheckoutService
 
     public async Task HandleWebhookAsync(string rawBody, string? signature, string? timestamp, CancellationToken ct = default)
     {
-        if (!_gateway.VerifyWebhook(rawBody, signature, timestamp))
+        if (!await _gateway.VerifyWebhookAsync(rawBody, signature, timestamp, ct))
             throw new AppException("Invalid signature", 401, "bad_signature");
         var gatewayOrderId = _gateway.ExtractOrderIdFromWebhook(rawBody);
         if (gatewayOrderId == null) return;

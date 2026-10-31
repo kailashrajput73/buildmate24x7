@@ -51,9 +51,9 @@ const CartContext = createContext<CartContextValue | null>(null);
 /** BuildMate cart line → the kit's ProductVariant. */
 function variantOf(l: Cart['items'][number]): ProductVariant {
   return {
-    id: String(l.productId),
+    id: `${l.productId}:${l.purchaseUnit ?? "Piece"}`,
     productId: String(l.productId),
-    productName: l.name,
+    productName: l.purchaseUnit === "Box" ? `Box of ${l.packSize} — ${l.name}` : l.name,
     sku: l.code,
     brandId: '',
     brandName: l.brandName,
@@ -97,10 +97,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const addVariant = useCallback((variant: ProductVariant, quantity = 1) =>
     shop.add(Number(variant.productId || variant.id), Math.max(1, quantity), variant.productName), [shop]);
-  const setQuantity = useCallback((variantId: string, quantity: number) => shop.setQty(Number(variantId), Math.max(0, quantity)), [shop]);
-  const remove = useCallback((variantId: string) => shop.remove(Number(variantId)), [shop]);
+  const setQuantity = useCallback((variantId: string, quantity: number) => shop.setQty(Number(variantId.split(":")[0]), Math.max(0, quantity), variantId.endsWith(":Box") ? "Box" : "Piece"), [shop]);
+  const remove = useCallback((variantId: string) => shop.remove(Number(variantId.split(":")[0]), variantId.endsWith(":Box") ? "Box" : "Piece"), [shop]);
   const clear = useCallback(async () => {
-    for (const l of raw?.items ?? []) await shop.remove(l.productId);
+    for (const l of raw?.items ?? []) await shop.remove(l.productId, l.purchaseUnit);
   }, [shop, raw]);
   const applyCoupon = useCallback(() => null, []);
   const removeCoupon = useCallback(() => undefined, []);

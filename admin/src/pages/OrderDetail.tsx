@@ -10,7 +10,7 @@ import { dateTime, human, money, orderLabel, orderTone, payTone, qty } from '../
 import { useAction } from '../lib/hooks'
 import type { FulfilmentType, OrderDetail as O, PaymentMethod, ProductLookup } from '../lib/types'
 
-type EditLine = { productId: number; code: string; name: string; quantity: number; special: number; listPrice: number; discount: number; gst: number; available?: number; isNew: boolean }
+type EditLine = { purchaseUnit?: "Piece" | "Box"; packSize?: number; productId: number; code: string; name: string; quantity: number; special: number; listPrice: number; discount: number; gst: number; available?: number; isNew: boolean }
 
 export default function OrderDetail() {
   const { id } = useParams()
@@ -72,7 +72,7 @@ export default function OrderDetail() {
                           <div className="text-2xs text-ink-faint">{i.productCode} · GST {i.gstRate}%{i.addedAtStore && ' · added at store'}</div>
                         </td>
                         <td className="text-xs">{i.rackLocations.join(', ') || '—'}</td>
-                        <td className="num text-right font-semibold">{qty(i.quantity)}</td>
+                        <td className="num text-right font-semibold">{i.purchaseUnit === "Box" ? `${qty(i.purchaseQuantity!)} box(es) × ${qty(i.packSize!)} ${i.baseUnit ?? "units"}` : qty(i.quantity)}</td>
                         <td className="num text-right text-ink-soft">{money(i.listPrice)}</td>
                         <td className="num text-right text-ink-soft">{i.discountPercent}%{i.specialDiscountPercent > 0 && <span className="text-leaf-700"> +{i.specialDiscountPercent}%</span>}</td>
                         <td className="num text-right">{money(i.unitPrice)}</td>
@@ -184,15 +184,15 @@ function ItemEditor({ order, onDone }: { order: O; onDone: () => void }) {
   const { can } = useAuth()
   const isPartner = order.customerKind === 'Partner'
   const [lines, setLines] = useState<EditLine[]>(() => order.items.map((i) => ({
-    productId: i.productId, code: i.productCode, name: i.productName, quantity: i.quantity, special: i.specialDiscountPercent,
-    listPrice: i.listPrice, discount: i.discountPercent, gst: i.gstRate, isNew: false,
+    purchaseUnit: i.purchaseUnit ?? "Piece", packSize: i.packSize, productId: i.productId, code: i.productCode, name: i.purchaseUnit === "Box" ? `${i.productName} (box of ${i.packSize})` : i.productName, quantity: i.purchaseUnit === "Box" ? i.purchaseQuantity! : i.quantity, special: i.specialDiscountPercent,
+    listPrice: i.purchaseUnit === "Box" ? i.boxPrice! : i.listPrice, discount: i.purchaseUnit === "Box" ? 0 : i.discountPercent, gst: i.gstRate, isNew: false,
   })))
   const [shipping, setShipping] = useState(order.shippingFee)
   const [note, setNote] = useState('')
 
   const add = (p: ProductLookup) => setLines((ls) => {
-    const ex = ls.find((l) => l.productId === p.id)
-    if (ex) return ls.map((l) => (l.productId === p.id ? { ...l, quantity: l.quantity + 1 } : l))
+    const ex = ls.find((l) => l.productId === p.id && l.purchaseUnit !== "Box")
+    if (ex) return ls.map((l) => (l.productId === p.id && l.purchaseUnit !== "Box" ? { ...l, quantity: l.quantity + 1 } : l))
     return [...ls, { productId: p.id, code: p.code, name: p.name, quantity: 1, special: 0, listPrice: p.listPrice,
       discount: isPartner ? p.partnerDiscountPercent : p.retailDiscountPercent, gst: p.gstRate, available: p.availableQty, isNew: true }]
   })
@@ -200,7 +200,7 @@ function ItemEditor({ order, onDone }: { order: O; onDone: () => void }) {
   const total = useMemo(() => lines.reduce((s, l) => s + Math.round(l.listPrice * (1 - Math.min(100, l.discount + l.special) / 100) * 100) / 100 * l.quantity, 0) + shipping, [lines, shipping])
 
   const save = useAction(
-    () => api.put<O>(`/api/admin/orders/${order.id}/items`, { lines: lines.map((l) => ({ productId: l.productId, quantity: l.quantity, specialDiscountPercent: l.special })), shippingFee: shipping, note: note || undefined }),
+    () => api.put<O>(`/api/admin/orders/${order.id}/items`, { lines: lines.map((l) => ({ productId: l.productId, purchaseUnit: l.purchaseUnit ?? "Piece", quantity: l.quantity * (l.purchaseUnit === "Box" ? l.packSize! : 1), specialDiscountPercent: l.special })), shippingFee: shipping, note: note || undefined }),
     { success: 'Order updated', invalidate: ['order', 'orders'], onSuccess: onDone },
   )
 
@@ -214,12 +214,12 @@ function ItemEditor({ order, onDone }: { order: O; onDone: () => void }) {
             {lines.map((l) => {
               const rate = Math.round(l.listPrice * (1 - Math.min(100, l.discount + l.special) / 100) * 100) / 100
               return (
-                <tr key={l.productId}>
+                <tr key={`${l.productId}:${l.purchaseUnit}`}>
                   <td><div className="font-medium">{l.name}</div><div className="text-2xs text-ink-faint">{l.code} · {money(rate)} each{l.isNew && ' · new'}</div></td>
-                  <td><NumberInput className="text-right" value={l.quantity} onChange={(v) => setLines((ls) => ls.map((x) => (x.productId === l.productId ? { ...x, quantity: v } : x)))} aria-label={`Quantity for ${l.name}`} /></td>
-                  {can(P.specialDiscount) && <td><NumberInput className="text-right" value={l.special} onChange={(v) => setLines((ls) => ls.map((x) => (x.productId === l.productId ? { ...x, special: v } : x)))} aria-label={`Extra discount for ${l.name}`} /></td>}
+                  <td><NumberInput className="text-right" value={l.quantity} onChange={(v) => setLines((ls) => ls.map((x) => (x.productId === l.productId && x.purchaseUnit === l.purchaseUnit ? { ...x, quantity: v } : x)))} aria-label={`Quantity for ${l.name}`} /></td>
+                  {can(P.specialDiscount) && <td><NumberInput className="text-right" value={l.special} onChange={(v) => setLines((ls) => ls.map((x) => (x.productId === l.productId && x.purchaseUnit === l.purchaseUnit ? { ...x, special: v } : x)))} aria-label={`Extra discount for ${l.name}`} /></td>}
                   <td className="num text-right font-semibold">{money(rate * l.quantity)}</td>
-                  <td className="text-right"><Button size="sm" variant="ghost" onClick={() => setLines((ls) => ls.filter((x) => x.productId !== l.productId))} aria-label={`Remove ${l.name}`}><Trash2 className="h-4 w-4" /></Button></td>
+                  <td className="text-right"><Button size="sm" variant="ghost" onClick={() => setLines((ls) => ls.filter((x) => x.productId !== l.productId || x.purchaseUnit !== l.purchaseUnit))} aria-label={`Remove ${l.name}`}><Trash2 className="h-4 w-4" /></Button></td>
                 </tr>
               )
             })}

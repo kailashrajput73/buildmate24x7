@@ -90,12 +90,55 @@ public class ExcelService : IExcelService
 
     // ------------------------------------------------------------------ Templates
 
-    public static readonly string[] ProductColumns =
+    // One canonical schema drives export and the writable template. Stock columns remain export-only.
+    public static readonly string[] ProductColumns = ProductExportColumns()
+        .Where(c => c.Header is not ("Stock" or "Reserved" or "Rack")).Select(c => c.Header).ToArray();
+
+    public static ExcelColumn<ProductAdminDto>[] ProductExportColumns() => new ExcelColumn<ProductAdminDto>[]
     {
-        "Code", "Name", "Category", "SubCategory", "Brand", "Unit", "HSN", "GST %", "MRP", "List Price",
-        "Partner Discount %", "Retail Discount %", "Reward Points / Unit", "Reorder Level", "Sequence",
-        "Barcode", "Aliases (comma separated)", "Name (Hindi)", "Name (Gujarati)", "Active", "Show On Web", "Show On App", "Description",
-        "Image URL", "Variant Family", "Variant Label", "Specs", "Purchase Discount %"
+            new ExcelColumn<ProductAdminDto>("Code", p => p.Code),
+            new ExcelColumn<ProductAdminDto>("Name", p => p.Name),
+            new ExcelColumn<ProductAdminDto>("Category", p => p.CategoryName),
+            new ExcelColumn<ProductAdminDto>("Sub-Category", p => p.SubCategoryName),
+            new ExcelColumn<ProductAdminDto>("Brand", p => p.BrandName),
+            new ExcelColumn<ProductAdminDto>("Unit", p => p.Unit),
+            new ExcelColumn<ProductAdminDto>("HSN", p => p.HsnCode),
+            new ExcelColumn<ProductAdminDto>("GST %", p => p.GstRate),
+            new ExcelColumn<ProductAdminDto>("MRP", p => p.Mrp, "#,##0.00"),
+            new ExcelColumn<ProductAdminDto>("List Price", p => p.ListPrice, "#,##0.00"),
+            new ExcelColumn<ProductAdminDto>("Partner Discount %", p => p.PartnerDiscountPercent),
+            new ExcelColumn<ProductAdminDto>("Retail Discount %", p => p.RetailDiscountPercent),
+            new ExcelColumn<ProductAdminDto>("Reward Points / Unit", p => p.RewardPointsPerUnit),
+            new ExcelColumn<ProductAdminDto>("Reorder Level", p => p.ReorderLevel),
+            new ExcelColumn<ProductAdminDto>("Sequence", p => p.Sequence),
+            new ExcelColumn<ProductAdminDto>("Barcode", p => p.Barcode),
+            new ExcelColumn<ProductAdminDto>("Aliases (comma separated)", p => string.Join(", ", p.Aliases)),
+            new ExcelColumn<ProductAdminDto>("Name (Hindi)", p => p.Translations.GetValueOrDefault("hi")),
+            new ExcelColumn<ProductAdminDto>("Name (Gujarati)", p => p.Translations.GetValueOrDefault("gu")),
+            new ExcelColumn<ProductAdminDto>("Active", p => p.IsActive),
+            new ExcelColumn<ProductAdminDto>("Show On Web", p => p.ShowOnWeb),
+            new ExcelColumn<ProductAdminDto>("Show On App", p => p.ShowOnApp),
+            new ExcelColumn<ProductAdminDto>("Description", p => p.Description),
+            new ExcelColumn<ProductAdminDto>("Image URL", p => string.Join(", ", p.ImageUrls)),
+            new ExcelColumn<ProductAdminDto>("Variant Family", p => p.VariantFamily),
+            new ExcelColumn<ProductAdminDto>("Variant Label", p => p.VariantLabel),
+            new ExcelColumn<ProductAdminDto>("Specs", p => string.Join("; ", p.Specs)),
+            new ExcelColumn<ProductAdminDto>("Stock", p => p.StockQty),
+            new ExcelColumn<ProductAdminDto>("Reserved", p => p.ReservedQty),
+            new ExcelColumn<ProductAdminDto>("Rack", p => string.Join(", ", p.RackLocations)),
+            new ExcelColumn<ProductAdminDto>("Purchase Discount %", p => null),
+            new ExcelColumn<ProductAdminDto>("Product ID", p => p.Id),
+            new ExcelColumn<ProductAdminDto>("Family ID", p => p.Catalog?.FamilyId),
+            new ExcelColumn<ProductAdminDto>("Type", p => p.Catalog?.TypeName),
+            new ExcelColumn<ProductAdminDto>("Class", p => p.Catalog?.Class),
+            new ExcelColumn<ProductAdminDto>("product_family", p => p.Catalog?.ProductFamily ?? p.VariantFamily),
+            new ExcelColumn<ProductAdminDto>("Size", p => p.Catalog?.Size),
+            new ExcelColumn<ProductAdminDto>("Length", p => p.Catalog?.Length),
+            new ExcelColumn<ProductAdminDto>("Pack Size", p => p.Catalog?.PackSize),
+            new ExcelColumn<ProductAdminDto>("MRP Pkg", p => p.Catalog?.PackMrp),
+            new ExcelColumn<ProductAdminDto>("Box Discount Type", p => p.Catalog?.BoxDiscountType),
+            new ExcelColumn<ProductAdminDto>("Box Discount Value", p => p.Catalog?.BoxDiscountValue),
+            new ExcelColumn<ProductAdminDto>("Family Image URL", p => p.Catalog?.FamilyImageUrl)
     };
 
     public byte[] Template(string kind)
@@ -127,7 +170,7 @@ public class ExcelService : IExcelService
         {
             ws.Cell(1, i + 1).Value = headers[i];
             ws.Cell(1, i + 1).Style.Font.Bold = true;
-            ws.Cell(2, i + 1).Value = ToCellValue(sample[i]);
+            ws.Cell(2, i + 1).Value = ToCellValue(i < sample.Length ? sample[i] : null);
         }
         ws.Columns().AdjustToContents();
         using var ms = new MemoryStream();
@@ -247,9 +290,13 @@ public class ExcelService : IExcelService
         foreach (var h in new[] { "Name", "Category", "Brand", "List Price" })
             if (!sheet.Has(h)) throw new AppException($"Missing column \"{h}\". Download the product template.");
 
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        if (_db.Database.IsNpgsql()) await _db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(24071001)", ct);
         var errors = new List<ImportError>();
         var cats = await _db.Categories.ToDictionaryAsync(c => c.Name.ToLower(), ct);
         var subs = await _db.SubCategories.ToListAsync(ct);
+        var types = await _db.ProductTypes.AsNoTracking().ToListAsync(ct);
+        var familyImages = new Dictionary<string, string?>();
         var brands = await _db.Brands.ToDictionaryAsync(b => b.Name.ToLower(), ct);
         var codes = new List<string>();
         for (var r = 2; r <= sheet.LastRow; r++) if (sheet.Str(r, "Code") is { } c) codes.Add(c.ToUpperInvariant());
@@ -305,21 +352,23 @@ public class ExcelService : IExcelService
                 sub = subs.FirstOrDefault(s => (s.Category == cat || (cat.Id != 0 && s.CategoryId == cat.Id)) && s.Name.Equals(subName, StringComparison.OrdinalIgnoreCase));
                 if (sub == null)
                 {
-                    if (!createMissingMasters) { errors.Add(new(r, $"Unknown sub category \"{subName}\" in {catName}.")); continue; }
-                    sub = new SubCategory { Category = cat, Name = subName, CreatedById = _me.Id };
-                    _db.SubCategories.Add(sub);
-                    subs.Add(sub);
+                    errors.Add(new(r, $"Unknown predefined Sub-Category \"{subName}\" in {catName}. Create it in master data first.")); continue;
                 }
             }
 
             // A code that isn't in the system yet creates the product under that code (e.g. the brand's own code).
             var isNew = code == null || !existing.ContainsKey(code);
             var p = isNew ? new Product { Code = code!, CreatedById = _me.Id } : existing[code!];
+            if (sheet.Str(r, "Product ID") is { } productId && (!long.TryParse(productId, out var parsedId) || isNew || p.Id != parsedId))
+            { errors.Add(new(r, "Product ID and Code do not identify the same existing product. Do not change identifiers on exported rows.")); continue; }
             p.Name = name!;
             p.Category = cat;
             p.SubCategory = sub;
             if (sub == null) p.SubCategoryId = null;
             p.Brand = brand;
+            // New category/brand masters are saved inside this transaction so stable FKs are available.
+            if (cat.Id == 0 || brand.Id == 0) await _db.SaveChangesAsync(ct);
+            p.CategoryId = cat.Id; p.BrandId = brand.Id; p.SubCategoryId = sub?.Id;
             p.Unit = sheet.Str(r, "Unit") ?? "pcs";
             p.HsnCode = sheet.Str(r, "HSN");
             p.GstRate = gst;
@@ -334,8 +383,8 @@ public class ExcelService : IExcelService
             p.Description = sheet.Str(r, "Description") ?? p.Description;
             p.IsActive = active;
             if (sheet.Has("Image URL"))
-                p.ImageUrls = (sheet.Str(r, "Image URL") ?? "").Split(new[] { ',', ' ', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .Where(u => u.StartsWith("http://") || u.StartsWith("https://") || u.StartsWith("/")).Distinct().ToList();
+                p.ImageUrls = System.Text.RegularExpressions.Regex.Split(sheet.Str(r, "Image URL") ?? "", @"(?:\s+|,\s*(?=https?://|/files/))")
+                    .Where(u => !string.IsNullOrWhiteSpace(u)).Distinct().ToList();
             if (sheet.Has("Variant Family")) p.VariantFamily = sheet.Str(r, "Variant Family");
             if (sheet.Has("Variant Label")) p.VariantLabel = sheet.Str(r, "Variant Label");
             if (sheet.Has("Specs"))
@@ -350,6 +399,46 @@ public class ExcelService : IExcelService
             p.ShowOnWeb = sheet.Bool(r, "Show On Web") ?? true;
             p.ShowOnApp = sheet.Bool(r, "Show On App") ?? true;
             p.UpdatedById = _me.Id;
+            try
+            {
+                long? typeId = p.ProductTypeId;
+                if (sheet.Has("Type"))
+                {
+                    var typeName = sheet.Str(r, "Type");
+                    typeId = typeName == null ? null : types.SingleOrDefault(t => t.CategoryId == cat.Id && t.IsActive && t.Key == CatalogStructure.Key(typeName))?.Id;
+                    if (typeName != null && typeId == null) throw new AppException($"Unknown predefined Type '{typeName}' for {cat.Name}. Configure master data first.");
+                }
+                if (sub != null && !sub.IsActive) throw new AppException("Sub-Category is inactive.");
+                var explicitFamily = sheet.Str(r, "product_family");
+                var legacyFamily = sheet.Str(r, "Variant Family");
+                if (explicitFamily != null && legacyFamily != null && CatalogStructure.Key(explicitFamily) != CatalogStructure.Key(legacyFamily))
+                    throw new AppException("product_family and Variant Family disagree. Use the same value or leave the legacy column blank.");
+                long? familyId = null;
+                if (sheet.Str(r, "Family ID") is { } fid)
+                {
+                    if (!long.TryParse(fid, out var parsedFamilyId) || parsedFamilyId <= 0) throw new AppException("Family ID must be a valid existing identifier.");
+                    familyId = parsedFamilyId;
+                }
+                var family = explicitFamily ?? legacyFamily ?? p.VariantFamily;
+                var pack = sheet.Has("Pack Size") ? ParsePackSize(sheet.Str(r, "Pack Size"), p.Unit) : p.PackSize;
+                var data = new CatalogInput(typeId,
+                    sheet.Has("Class") ? sheet.Str(r, "Class") : p.ProductClass,
+                    family, sheet.Has("Size") ? sheet.Str(r, "Size") : p.Size,
+                    sheet.Has("Length") ? sheet.Str(r, "Length") : p.Length, pack,
+                    sheet.Has("MRP Pkg") ? sheet.Dec(r, "MRP Pkg", errors) : p.PackMrp,
+                    sheet.Has("Box Discount Type") ? sheet.Str(r, "Box Discount Type") ?? "None" : p.BoxDiscountType,
+                    sheet.Has("Box Discount Value") ? sheet.Dec(r, "Box Discount Value", errors) ?? 0 : p.BoxDiscountValue, familyId);
+                await CatalogStructure.ApplyAsync(_db, p, data, ct);
+                p.ImageUrls = p.ImageUrls.Select(u => CatalogStructure.ImageUrl(u)!).ToList();
+                if (sheet.Has("Family Image URL") && p.CatalogFamily != null)
+                {
+                    var image = CatalogStructure.ImageUrl(sheet.Str(r, "Family Image URL"));
+                    var imageKey = $"{p.CategoryId}|{p.BrandId}|{p.CatalogFamily.Key}";
+                    if (familyImages.TryGetValue(imageKey, out var other) && other != image) throw new AppException("Rows for the same family have conflicting Family Image URLs.");
+                    familyImages[imageKey] = image; p.CatalogFamily.ImageUrl = image;
+                }
+            }
+            catch (AppException error) { errors.Add(new(r, error.Message)); }
 
             var aliases = (sheet.Str(r, "Aliases (comma separated)") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
             var tr = new Dictionary<string, string>();
@@ -357,9 +446,13 @@ public class ExcelService : IExcelService
             if (sheet.Str(r, "Name (Gujarati)") is { } gu) tr["gu"] = gu;
             pending.Add((r, p, isNew, aliases, tr));
         }
-        if (errors.Count > 0) throw new ImportValidationException(errors);
+        if (errors.Count > 0)
+        {
+            await tx.RollbackAsync(ct);
+            _db.ChangeTracker.Clear();
+            throw new ImportValidationException(errors);
+        }
 
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
         foreach (var (_, p, isNew, aliases, tr) in pending)
         {
             if (isNew)
@@ -382,6 +475,18 @@ public class ExcelService : IExcelService
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return new ImportSummary(pending.Count(x => x.IsNew), pending.Count(x => !x.IsNew), 0, new());
+    }
+
+    public static decimal? ParsePackSize(string? text, string baseUnit)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var m = Regex.Match(text.Trim(), @"^(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$");
+        if (!m.Success || !decimal.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.AllowDecimalPoint, System.Globalization.CultureInfo.InvariantCulture, out var value) || value <= 0)
+            throw new AppException("Pack Size must be a positive quantity, optionally followed by its base unit (e.g. 20 pieces).");
+        static string Unit(string u) => u.Trim().ToLowerInvariant() switch { "piece" or "pieces" or "pc" or "pcs" or "nos" => "pcs", "mtr" or "metre" or "meter" => "m", var other => other };
+        if (m.Groups[2].Length > 0 && Unit(m.Groups[2].Value) != Unit(baseUnit)) throw new AppException("Pack Size unit must match the product's base Unit.");
+        if (Unit(baseUnit) == "pcs" && value != decimal.Truncate(value)) throw new AppException("Pack Size in pieces must be a whole number.");
+        return value;
     }
 
     // ------------------------------------------------------------------ Purchases

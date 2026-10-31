@@ -13,7 +13,6 @@ import { CategoryImage } from '../../../shared/CategoryImage';
 import { CartIconButton } from '../../../shared/CartIconButton';
 import { StorefrontHeader } from '../../../shared/StorefrontHeader';
 import { SnackBar } from '../../../shared/SnackBar';
-import { buildGroups, sizeMm, type CatalogItem, type ProductGroup } from '../../../services/catalog/buildmateCatalog';
 import {
   Screen, TopBar, TopBarInner, BackButton, TopBarContext, SearchPill, MobileCartSlot, Body, Media, Details, DetailsInner,
   Eyebrow, BrandChip, Title, CartInfo, CartLabel, CartPrice, CartUnit, CartSize, AddToCartButton,
@@ -40,6 +39,7 @@ export function ProductView({ initial }: { initial: ProductDetail }) {
   const [p, setP] = useState<ProductDetail>(initial);
   const [image, setImage] = useState(0);
   const [qty, setQty] = useState(1);
+  const [purchaseUnit, setPurchaseUnit] = useState<"Piece" | "Box">("Piece");
   const [busy, setBusy] = useState(false);
   const [snack, setSnack] = useState<{ id: number; message: string } | null>(null);
   const hideSnack = useCallback(() => setSnack(null), []);
@@ -48,19 +48,9 @@ export function ProductView({ initial }: { initial: ProductDetail }) {
   useEffect(() => {
     setP(initial);
     setImage(0);
-    setQty(1);
+    setQty(1); setPurchaseUnit("Piece");
     if (shop.user) api<ProductDetail>(`/api/catalog/products/${initial.id}`).then(setP).catch(() => undefined);
   }, [initial, shop.user]);
-
-  // Same item from other brands / classes (e.g. UPVC pipe: Astral, Finolex…; Sch 40, Sch 80), from the category list.
-  const [family, setFamily] = useState<{ groups: ProductGroup[] } | null>(null);
-  useEffect(() => {
-    let live = true;
-    api<CatalogItem[]>(`/api/catalog/categories/${initial.categoryId}/items`)
-      .then((items) => { if (live) setFamily({ groups: buildGroups(items) }); })
-      .catch(() => undefined);
-    return () => { live = false; };
-  }, [initial.categoryId]);
 
   const open = (productId: number) => {
     if (productId !== p.id) navigate(`/p/${productId}`, { replace: true });
@@ -74,35 +64,20 @@ export function ProductView({ initial }: { initial: ProductDetail }) {
 
   const add = async (thenCheckout: boolean) => {
     setBusy(true);
-    const ok = await shop.add(p.id, qty, p.name, true);
+    const ok = await shop.add(p.id, qty, p.name, true, purchaseUnit);
     setBusy(false);
     if (!ok) return;
     if (thenCheckout) navigate(AppRoutes.cart);
     else setSnack((prev) => ({ id: (prev?.id ?? 0) + 1, message: `${p.name} added to cart` }));
   };
 
-  const current = family?.groups.find((g) => g.items.some((i) => i.id === p.id));
-  const siblings = current ? family!.groups.filter((g) => g.type === current.type && g.subCategory === current.subCategory) : [];
-  const currentItem = current?.items.find((i) => i.id === p.id);
-  const currentSize = currentItem ? sizeMm(currentItem) : null;
-  /** In another family, the product with the same size (else its first in-stock one). */
-  const sameSizeIn = (g: ProductGroup) =>
-    (currentSize != null ? g.items.find((i) => sizeMm(i) === currentSize && i.inStock) ?? g.items.find((i) => sizeMm(i) === currentSize) : undefined)?.id ?? g.openId;
-  const brandChoices = [...new Set(siblings.map((g) => g.items[0].brandName))].sort();
-  const classChoices = current ? [...new Set(siblings.filter((g) => g.items[0].brandName === current.items[0].brandName && g.className).map((g) => g.className!))] : [];
-  const pickBrand = (brand: string) => {
-    const pool = siblings.filter((g) => g.items[0].brandName === brand);
-    const g = pool.find((x) => x.className === current?.className) ?? pool[0];
-    if (g) open(sameSizeIn(g));
-  };
-  const pickClass = (c: string) => {
-    const g = siblings.find((x) => x.items[0].brandName === current?.items[0].brandName && x.className === c);
-    if (g) open(sameSizeIn(g));
-  };
-
-  const max = Math.max(1, Math.floor(p.maxOrderQty || 999));
+  const box = purchaseUnit === 'Box';
+  const price = box ? p.catalog?.boxPrice ?? p.price : p.price;
+  const mrp = box ? p.catalog?.packMrp ?? p.mrp : p.mrp;
+  const available = box ? Math.floor(p.maxOrderQty / (p.catalog?.packSize ?? 1)) : p.maxOrderQty;
+  const max = Math.max(1, Math.floor(available));
   const images = p.imageUrls.length ? p.imageUrls : p.imageUrl ? [p.imageUrl] : [];
-  const save = p.mrp > p.price + 0.005 ? p.mrp - p.price : 0;
+  const save = Math.max(0, mrp - price);
 
   return (
     <Screen>
@@ -152,36 +127,6 @@ export function ProductView({ initial }: { initial: ProductDetail }) {
                 <i className={`pi ${saved ? 'pi-heart-fill' : 'pi-heart'}`} aria-hidden="true" />
               </HeartButton>
             </TitleRow>
-            {brandChoices.length > 1 && (
-              <>
-                <OptionLabel>Brand</OptionLabel>
-                <OptionBlocks role="group" aria-label="Brand">
-                  {brandChoices.map((b) => {
-                    const on = b === current?.items[0].brandName;
-                    return (
-                      <OptionBlock key={b} type="button" $selected={on} aria-pressed={on} onClick={() => !on && pickBrand(b)}>
-                        <strong>{b}</strong>
-                      </OptionBlock>
-                    );
-                  })}
-                </OptionBlocks>
-              </>
-            )}
-            {classChoices.length > 1 && (
-              <>
-                <OptionLabel>Class</OptionLabel>
-                <OptionBlocks role="group" aria-label="Class">
-                  {classChoices.map((c) => {
-                    const on = c === current?.className;
-                    return (
-                      <OptionBlock key={c} type="button" $selected={on} aria-pressed={on} onClick={() => !on && pickClass(c)}>
-                        <strong>{c}</strong>
-                      </OptionBlock>
-                    );
-                  })}
-                </OptionBlocks>
-              </>
-            )}
             {axes.map((axis) => (
               <div key={axis.name}>
                 <OptionLabel>{axis.name}</OptionLabel>
@@ -203,16 +148,17 @@ export function ProductView({ initial }: { initial: ProductDetail }) {
                 </OptionBlocks>
               </div>
             ))}
+            {p.catalog?.packSize && p.catalog.boxPrice != null && <><OptionLabel>Purchase unit</OptionLabel><OptionBlocks role="group" aria-label="Purchase unit">{(['Piece', 'Box'] as const).map(unit => <OptionBlock key={unit} $selected={purchaseUnit === unit} aria-pressed={purchaseUnit === unit} onClick={() => { setPurchaseUnit(unit); setQty(1); }}>{unit === 'Box' ? `Full box (${p.catalog?.packSize} ${p.unit})` : `Individual ${p.unit}`}</OptionBlock>)}</OptionBlocks></>}
             <BuyCard>
               <CartInfo>
                 <CartLabel>{axes.length ? 'Selected product size' : 'Price'}</CartLabel>
                 <PriceRow>
                   <CartPrice>
-                    {money(p.price)}
-                    <CartUnit> / {p.unit}</CartUnit>
+                    {money(price)}
+                    <CartUnit> / {box ? 'box' : p.unit}</CartUnit>
                   </CartPrice>
-                  {save > 0 && <Mrp>{money(p.mrp)}</Mrp>}
-                  {save > 0 && <Save>Save {money(save)}{p.discountPercent > 0 ? ` (${Math.round(p.discountPercent)}%)` : ''}</Save>}
+                  {save > 0 && <Mrp>{money(mrp)}</Mrp>}
+                  {save > 0 && <Save>Save {money(save)}</Save>}
                 </PriceRow>
                 <CartSize>{p.code}{p.variantLabel ? ` · ${p.variantLabel}` : ''} · incl. GST</CartSize>
                 <Stock $out={!p.inStock}>{p.inStock ? 'In stock' : 'Out of stock'}</Stock>
@@ -232,11 +178,11 @@ export function ProductView({ initial }: { initial: ProductDetail }) {
                 </Stepper>
               </QtyRow>
               <Actions>
-                <AddToCartButton type="button" disabled={!p.inStock || busy} onClick={() => add(false)}>
+                <AddToCartButton type="button" disabled={available < 1 || busy} onClick={() => add(false)}>
                   <i className="pi pi-cart-plus" aria-hidden="true" />
                   Add to Cart
                 </AddToCartButton>
-                <BuyNowButton type="button" disabled={!p.inStock || busy} onClick={() => add(true)}>
+                <BuyNowButton type="button" disabled={available < 1 || busy} onClick={() => add(true)}>
                   Buy Now
                 </BuyNowButton>
               </Actions>

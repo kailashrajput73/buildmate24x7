@@ -11,6 +11,7 @@ import '../../core/glass.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
 import '../../data/providers.dart';
+import '../../data/delivery_location.dart';
 import '../../widgets/common.dart';
 
 class CheckoutScreen extends ConsumerStatefulWidget {
@@ -29,6 +30,7 @@ class _CheckoutState extends ConsumerState<CheckoutScreen> {
   @override
   void initState() {
     super.initState();
+    _addressId = ref.read(deliveryLocationProvider).address?.id;
     Future.microtask(() => ref.read(cartProvider.notifier).reload(fulfilment: _fulfilment));
   }
 
@@ -48,6 +50,9 @@ class _CheckoutState extends ConsumerState<CheckoutScreen> {
   }
 
   Future<void> _pay() async {
+    final selected = ref.read(addressesProvider).valueOrNull?.where((a) => a.id == _addressId).firstOrNull;
+    final store = ref.read(storeInfoProvider).valueOrNull;
+    if (_fulfilment == 'HomeDelivery' && (selected == null || (store != null && !store.deliversTo(selected.pincode)))) { toast(context, 'Choose a complete address in our delivery area, or select store pickup.', error: true); return; }
     setState(() => _busy = true);
     try {
       final r = CheckoutResult.fromJson(await ref.read(apiProvider).post<Json>('/api/orders/checkout', {
@@ -95,7 +100,7 @@ class _CheckoutState extends ConsumerState<CheckoutScreen> {
     final cart = ref.watch(cartProvider);
     final addresses = ref.watch(addressesProvider);
     final list = addresses.valueOrNull ?? [];
-    if (_addressId == null && list.isNotEmpty) _addressId = (list.where((a) => a.isDefault).firstOrNull ?? list.first).id;
+    if (_addressId == null && list.isNotEmpty && !ref.read(deliveryLocationProvider).gps) _addressId = (list.where((a) => a.isDefault).firstOrNull ?? list.first).id;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -114,9 +119,10 @@ class _CheckoutState extends ConsumerState<CheckoutScreen> {
           if (_fulfilment == 'HomeDelivery') ...[
             const SizedBox(height: 8),
             Text('Deliver to', style: Theme.of(context).textTheme.titleSmall),
+            if (ref.watch(deliveryLocationProvider).gps) const Text('Your current location is selected. Add or choose a complete delivery address before paying.'),
             for (final a in list)
               RadioListTile<int>(
-                value: a.id, groupValue: _addressId, onChanged: (v) => setState(() => _addressId = v),
+                value: a.id, groupValue: _addressId, onChanged: (v) { setState(() => _addressId = v); ref.read(deliveryLocationProvider.notifier).state = DeliveryLocation(address: a); },
                 title: Text(a.name, style: const TextStyle(fontWeight: FontWeight.w700)), subtitle: Text(a.oneLine), contentPadding: EdgeInsets.zero,
               ),
             TextButton.icon(
@@ -248,12 +254,12 @@ class _AddressFormState extends ConsumerState<_AddressForm> {
   late final c = {
     'name': TextEditingController(text: widget.existing?.name ?? ref.read(authProvider).user?.name),
     'phone': TextEditingController(text: widget.existing?.phone ?? ref.read(authProvider).user?.phone),
-    'line1': TextEditingController(text: widget.existing?.line1),
-    'line2': TextEditingController(text: widget.existing?.line2),
+    'line1': TextEditingController(text: widget.existing?.line1 ?? ref.read(deliveryLocationProvider).place?['address'] as String?),
+    'line2': TextEditingController(text: widget.existing?.line2 ?? ref.read(deliveryLocationProvider).place?['area'] as String?),
     'landmark': TextEditingController(text: widget.existing?.landmark),
-    'city': TextEditingController(text: widget.existing?.city),
-    'state': TextEditingController(text: widget.existing?.state ?? 'Gujarat'),
-    'pincode': TextEditingController(text: widget.existing?.pincode),
+    'city': TextEditingController(text: widget.existing?.city ?? ref.read(deliveryLocationProvider).place?['city'] as String?),
+    'state': TextEditingController(text: widget.existing?.state ?? ref.read(deliveryLocationProvider).place?['state'] as String? ?? 'Gujarat'),
+    'pincode': TextEditingController(text: widget.existing?.pincode ?? ref.read(deliveryLocationProvider).place?['pincode'] as String?),
   };
   bool _busy = false;
 
@@ -273,6 +279,7 @@ class _AddressFormState extends ConsumerState<_AddressForm> {
       final api = ref.read(apiProvider);
       final j = widget.existing == null ? await api.post<Json>('/api/account/addresses', body) : await api.put<Json>('/api/account/addresses/${widget.existing!.id}', body);
       ref.invalidate(addressesProvider);
+      ref.read(deliveryLocationProvider.notifier).state = DeliveryLocation(address: Address.fromJson(j));
       if (mounted) Navigator.of(context).pop(Address.fromJson(j));
     } catch (e) {
       if (mounted) toast(context, e.toString(), error: true);

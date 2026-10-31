@@ -71,6 +71,17 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
 builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = 429;
+    o.OnRejected = async (context, ct) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+            context.HttpContext.Response.Headers.RetryAfter = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        await context.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            status = 429,
+            title = "Too many requests. Please wait before trying again.",
+            type = "rate_limited"
+        }, cancellationToken: ct);
+    };
     // OTP endpoints: 10 requests / minute per IP on top of per-phone limits in AuthService.
     o.AddPolicy("otp", ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",

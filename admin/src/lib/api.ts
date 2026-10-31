@@ -8,11 +8,13 @@ export class ApiError extends Error {
   status: number
   code?: string
   rowErrors?: ImportError[]
-  constructor(status: number, message: string, code?: string, rowErrors?: ImportError[]) {
+  retryAfterSeconds?: number
+  constructor(status: number, message: string, code?: string, rowErrors?: ImportError[], retryAfterSeconds?: number) {
     super(message)
     this.status = status
     this.code = code
     this.rowErrors = rowErrors
+    this.retryAfterSeconds = retryAfterSeconds
   }
 }
 
@@ -70,7 +72,10 @@ async function request<T>(method: string, path: string, opts: { body?: unknown; 
   const res = await fetch(`${BASE}${path}${qs(opts.params)}`, { method, headers, body })
   if (res.status === 401 && retry && token && (await refresh())) return request<T>(method, path, opts, false)
   if (!res.ok) {
-    let msg = res.status === 403 ? "You don't have permission to do this." : `Request failed (${res.status})`
+    const retryHeader = res.headers.get('Retry-After')
+    const retryValue = retryHeader == null ? NaN : /^\d+$/.test(retryHeader) ? Number(retryHeader) : (Date.parse(retryHeader) - Date.now()) / 1000
+    const retryAfterSeconds = Number.isFinite(retryValue) ? Math.max(1, Math.ceil(retryValue)) : undefined
+    let msg = res.status === 429 ? 'Too many requests. Please wait before trying again.' : res.status === 403 ? "You don't have permission to do this." : `Request failed (${res.status})`
     let code: string | undefined
     let rows: ImportError[] | undefined
     try {
@@ -80,7 +85,7 @@ async function request<T>(method: string, path: string, opts: { body?: unknown; 
       rows = p.errors && Array.isArray(p.errors) ? p.errors : undefined
       if (!rows && p.errors && typeof p.errors === 'object') msg = Object.values(p.errors as Record<string, string[]>).flat().join(' ')
     } catch { /* not JSON */ }
-    throw new ApiError(res.status, msg, code, rows)
+    throw new ApiError(res.status, msg, code, rows, retryAfterSeconds)
   }
   if (opts.raw) return (await res.blob()) as T
   if (res.status === 204) return undefined as T

@@ -43,8 +43,18 @@ public static class Pricing
     /// <summary>Recomputes one order line from its inputs.</summary>
     public static void Recalculate(OrderItem i)
     {
-        i.UnitPrice = UnitPrice(i.ListPrice, i.DiscountPercent, i.SpecialDiscountPercent);
-        i.LineTotal = Round(i.UnitPrice * i.Quantity);
+        if (i.PurchaseUnit == "Box")
+        {
+            var count = Packaging.PurchaseQuantity(i, i.Quantity);
+            var boxPrice = UnitPrice(i.BoxPriceSnapshot!.Value, 0, i.SpecialDiscountPercent);
+            i.UnitPrice = Round(boxPrice / i.PackSizeSnapshot!.Value);
+            i.LineTotal = Round(boxPrice * count);
+        }
+        else
+        {
+            i.UnitPrice = UnitPrice(i.ListPrice, i.DiscountPercent, i.SpecialDiscountPercent);
+            i.LineTotal = Round(i.UnitPrice * i.Quantity);
+        }
         i.TaxAmount = InclusiveTax(i.LineTotal, i.GstRate);
     }
 
@@ -52,7 +62,7 @@ public static class Pricing
     public static void Recalculate(Order o, decimal rewardPointsMultiplier = 1m)
     {
         foreach (var i in o.Items) Recalculate(i);
-        o.SubTotal = Round(o.Items.Sum(i => i.ListPrice * i.Quantity));
+        o.SubTotal = Round(o.Items.Sum(i => i.PurchaseUnit == "Box" ? i.PackMrpSnapshot!.Value * Packaging.PurchaseQuantity(i, i.Quantity) : i.ListPrice * i.Quantity));
         var net = o.Items.Sum(i => i.LineTotal);
         o.DiscountTotal = Round(o.SubTotal - net);
         o.TaxTotal = o.Items.Sum(i => i.TaxAmount) + InclusiveTax(o.ShippingFee, DeliveryGstRate);

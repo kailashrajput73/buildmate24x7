@@ -20,8 +20,12 @@ public record KpiDto(decimal SalesToday, int OrdersToday, decimal SalesThisMonth
 
 public record TrendPointDto(string Label, DateOnly Date, decimal App, decimal Web, decimal Store, int Orders);
 public record NamedValueDto(long Id, string Name, decimal Quantity, decimal Amount, int Orders);
+public record DashboardOverviewDto(int Products, int Categories, int Brands, int Customers, int Partners, int Orders, int Quotations);
 public record DashboardDto(KpiDto Kpis, List<TrendPointDto> Trend, List<NamedValueDto> TopProducts, List<NamedValueDto> TopPartners,
-    List<NamedValueDto> ByCategory, List<NamedValueDto> ByChannel);
+    List<NamedValueDto> ByCategory, List<NamedValueDto> ByChannel)
+{
+    public DashboardOverviewDto? Overview { get; init; }
+}
 
 public enum PeriodGrouping { Day, Week, Month, Quarter, Year }
 
@@ -120,22 +124,27 @@ public class ReportService : IReportService
 
         var items = _db.OrderItems.AsNoTracking().Where(i => Sold.Contains(i.Order.Status) && i.Order.PaidAt >= range.FromUtc && i.Order.PaidAt < range.ToUtcExclusive);
         var topProducts = await items.GroupBy(i => new { i.ProductId, i.ProductName })
-            .Select(g => new NamedValueDto(g.Key.ProductId, g.Key.ProductName, g.Sum(i => i.Quantity), g.Sum(i => i.LineTotal), g.Select(i => i.OrderId).Distinct().Count()))
-            .OrderByDescending(x => x.Amount).Take(8).ToListAsync(ct);
+            .OrderByDescending(g => g.Sum(x => x.LineTotal)).Take(8)
+            .Select(g => new NamedValueDto(g.Key.ProductId, g.Key.ProductName, g.Sum(i => i.Quantity), g.Sum(i => i.LineTotal), g.Select(i => i.OrderId).Distinct().Count())).ToListAsync(ct);
         var byCategory = await items.GroupBy(i => new { i.Product.CategoryId, i.Product.Category.Name })
-            .Select(g => new NamedValueDto(g.Key.CategoryId, g.Key.Name, g.Sum(i => i.Quantity), g.Sum(i => i.LineTotal), g.Select(i => i.OrderId).Distinct().Count()))
-            .OrderByDescending(x => x.Amount).Take(8).ToListAsync(ct);
+            .OrderByDescending(g => g.Sum(x => x.LineTotal)).Take(8)
+            .Select(g => new NamedValueDto(g.Key.CategoryId, g.Key.Name, g.Sum(i => i.Quantity), g.Sum(i => i.LineTotal), g.Select(i => i.OrderId).Distinct().Count())).ToListAsync(ct);
 
         var orders = SoldOrders(range.FromUtc, range.ToUtcExclusive);
         var topPartners = await orders.Where(o => o.CustomerKind == CustomerKind.Partner && o.UserId != null)
             .GroupBy(o => new { o.UserId, o.CustomerName })
-            .Select(g => new NamedValueDto(g.Key.UserId!.Value, g.Key.CustomerName, 0, g.Sum(o => o.GrandTotal), g.Count()))
-            .OrderByDescending(x => x.Amount).Take(8).ToListAsync(ct);
+            .OrderByDescending(g => g.Sum(x => x.GrandTotal)).Take(8)
+            .Select(g => new NamedValueDto(g.Key.UserId!.Value, g.Key.CustomerName, 0, g.Sum(o => o.GrandTotal), g.Count())).ToListAsync(ct);
         var byChannel = (await orders.GroupBy(o => o.Channel)
             .Select(g => new { g.Key, Amount = g.Sum(o => o.GrandTotal), Count = g.Count() }).ToListAsync(ct))
             .Select(x => new NamedValueDto((long)x.Key, x.Key.ToString(), 0, x.Amount, x.Count)).ToList();
 
-        return new DashboardDto(kpis, trend, topProducts, topPartners, byCategory, byChannel);
+        var overview = new DashboardOverviewDto(
+            await _db.Products.CountAsync(ct), await _db.Categories.CountAsync(ct), await _db.Brands.CountAsync(ct),
+            await _db.Users.CountAsync(u => u.UserType == UserType.Customer, ct),
+            await _db.Users.CountAsync(u => u.UserType == UserType.Partner, ct),
+            await _db.Orders.CountAsync(ct), await _db.Quotations.CountAsync(ct));
+        return new DashboardDto(kpis, trend, topProducts, topPartners, byCategory, byChannel) { Overview = overview };
     }
 
     private record DailyRow(DateOnly Day, SalesChannel Channel, CustomerKind Kind, int Orders, decimal Gross, decimal Discount, decimal Tax, decimal Net);
@@ -215,11 +224,11 @@ public class ReportService : IReportService
     {
         var items = _db.OrderItems.AsNoTracking().Where(i => Sold.Contains(i.Order.Status) && i.Order.PaidAt >= r.FromUtc && i.Order.PaidAt < r.ToUtcExclusive);
         var cats = await items.GroupBy(i => new { i.Product.CategoryId, i.Product.Category.Name })
-            .Select(g => new NamedValueDto(g.Key.CategoryId, g.Key.Name, g.Sum(i => i.Quantity), g.Sum(i => i.LineTotal), g.Select(i => i.OrderId).Distinct().Count()))
-            .OrderByDescending(x => x.Amount).ToListAsync(ct);
+            .OrderByDescending(g => g.Sum(x => x.LineTotal))
+            .Select(g => new NamedValueDto(g.Key.CategoryId, g.Key.Name, g.Sum(i => i.Quantity), g.Sum(i => i.LineTotal), g.Select(i => i.OrderId).Distinct().Count())).ToListAsync(ct);
         var brands = await items.GroupBy(i => new { i.Product.BrandId, i.Product.Brand.Name })
-            .Select(g => new NamedValueDto(g.Key.BrandId, g.Key.Name, g.Sum(i => i.Quantity), g.Sum(i => i.LineTotal), g.Select(i => i.OrderId).Distinct().Count()))
-            .OrderByDescending(x => x.Amount).ToListAsync(ct);
+            .OrderByDescending(g => g.Sum(x => x.LineTotal))
+            .Select(g => new NamedValueDto(g.Key.BrandId, g.Key.Name, g.Sum(i => i.Quantity), g.Sum(i => i.LineTotal), g.Select(i => i.OrderId).Distinct().Count())).ToListAsync(ct);
         return (cats, brands);
     }
 

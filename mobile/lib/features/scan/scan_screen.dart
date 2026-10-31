@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:geolocator/geolocator.dart';
+import '../../core/scan_code.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -8,7 +12,6 @@ import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
-import '../../data/providers.dart';
 import '../../widgets/common.dart';
 
 /// Scan tab. The camera only runs while the full-screen scanner is open (it's a tab in an IndexedStack).
@@ -62,15 +65,43 @@ class ScannerPage extends ConsumerStatefulWidget {
   ConsumerState<ScannerPage> createState() => _ScannerPageState();
 }
 
-class _ScannerPageState extends ConsumerState<ScannerPage> {
+class _ScannerPageState extends ConsumerState<ScannerPage> with WidgetsBindingObserver {
   final _controller = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
     formats: const [BarcodeFormat.qrCode, BarcodeFormat.ean13, BarcodeFormat.ean8, BarcodeFormat.code128, BarcodeFormat.upcA],
   );
   bool _handling = false;
+  bool _torch = false;
+
+  Future<void> _gallery() async {
+    try {
+      final file = await ImagePicker().pickImage(source: ImageSource.gallery);
+      if (file == null || !mounted) return;
+      final capture = await _controller.analyzeImage(file.path);
+      if (!mounted) return;
+      if (capture == null || capture.barcodes.isEmpty) { toast(context, 'No readable product QR found. Try a clearer photo.', error: true); return; }
+      await _onDetect(capture);
+    } catch (_) { if (mounted) toast(context, 'Could not read this image. Try another photo.', error: true); }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
+    if (!_controller.value.hasCameraPermission) return;
+    try {
+      if (state == AppLifecycleState.resumed && !_handling) { await _controller.start(); }
+      else if (state != AppLifecycleState.resumed) { await _controller.stop(); }
+    } catch (_) { /* Camera view offers retry if the OS cannot resume it. */ }
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
   }
@@ -79,10 +110,17 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
     final code = capture.barcodes.firstOrNull?.rawValue;
     if (code == null || _handling) return;
     _handling = true;
-    await _controller.stop();
-    if (mounted) await showScannedProduct(context, ref, code);
-    _handling = false;
-    if (mounted) await _controller.start();
+    try {
+      await _controller.stop();
+      if (mounted) await showScannedProduct(context, ref, code);
+    } catch (_) {
+      if (mounted) toast(context, 'Could not complete this scan. Please retry.', error: true);
+    } finally {
+      _handling = false;
+      if (mounted) {
+        try { await _controller.start(); } catch (_) { /* The camera error view provides retry/settings. */ }
+      }
+    }
   }
 
   @override
@@ -93,7 +131,8 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
           foregroundColor: Colors.white,
           title: const Text('Scan products'),
           actions: [
-            IconButton(tooltip: 'Torch', onPressed: () => _controller.toggleTorch(), icon: const Icon(Icons.flashlight_on_outlined)),
+            IconButton(tooltip: _torch ? 'Turn torch off' : 'Turn torch on', onPressed: () async { await _controller.toggleTorch(); if (mounted) setState(() => _torch = !_torch); }, icon: Icon(_torch ? Icons.flashlight_on : Icons.flashlight_off_outlined)),
+            IconButton(tooltip: 'Scan from gallery', onPressed: _gallery, icon: const Icon(Icons.photo_library_outlined)),
             IconButton(tooltip: 'Go to cart', onPressed: () { Navigator.of(context).pop(); context.push('/cart'); }, icon: const Icon(Icons.shopping_cart_outlined)),
           ],
         ),
@@ -104,8 +143,11 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
             errorBuilder: (context, error, child) => Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Text('Camera unavailable (${error.errorCode.name}). Allow camera access in Settings, or type the code instead.',
-                    textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  const Text('Camera access is needed to scan product codes. Allow it in app settings, or choose a gallery photo or type the code.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white)),
+                  TextButton(onPressed: () => Geolocator.openAppSettings(), child: const Text('Open app settings')),
+                  TextButton(onPressed: () => _controller.start(), child: const Text('Retry camera')),
+                ]),
               ),
             ),
           ),
@@ -125,14 +167,18 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
 
 /// Looks up a scanned / typed code and shows a sheet to add it to the cart.
 Future<void> showScannedProduct(BuildContext context, WidgetRef ref, String code) async {
+  final parsed = parseProductCode(code);
+  if (parsed == null) { toast(context, 'This is not a product code. Scan a BuildMate product QR.', error: true); return; }
+  code = parsed;
   ProductDetail d;
   try {
     d = ProductDetail.fromJson(await ref.read(apiProvider).get<Json>('/api/catalog/scan/${Uri.encodeComponent(code)}'));
   } on ApiException catch (e) {
-    if (context.mounted) toast(context, e.status == 404 ? 'No product found for "$code"' : e.message, error: true);
+    if (context.mounted) toast(context, e.status == 404 ? 'Product not found or unavailable in the app: $code' : e.status == 0 ? 'Network problem. Check your connection and retry.' : e.message, error: true);
     return;
   }
   if (!context.mounted) return;
+  HapticFeedback.selectionClick();
   await showModalBottomSheet(
     context: context,
     isScrollControlled: true,

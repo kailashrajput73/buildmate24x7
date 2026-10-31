@@ -176,37 +176,7 @@ public class ProductsController : AdminControllerBase
             all.AddRange(res.Items);
             if (all.Count >= res.Total || res.Items.Count == 0) break;
         }
-        return Xlsx(_excel.Export("Products", all,
-            new ExcelColumn<ProductAdminDto>("Code", p => p.Code),
-            new ExcelColumn<ProductAdminDto>("Name", p => p.Name),
-            new ExcelColumn<ProductAdminDto>("Category", p => p.CategoryName),
-            new ExcelColumn<ProductAdminDto>("SubCategory", p => p.SubCategoryName),
-            new ExcelColumn<ProductAdminDto>("Brand", p => p.BrandName),
-            new ExcelColumn<ProductAdminDto>("Unit", p => p.Unit),
-            new ExcelColumn<ProductAdminDto>("HSN", p => p.HsnCode),
-            new ExcelColumn<ProductAdminDto>("GST %", p => p.GstRate),
-            new ExcelColumn<ProductAdminDto>("MRP", p => p.Mrp, "#,##0.00"),
-            new ExcelColumn<ProductAdminDto>("List Price", p => p.ListPrice, "#,##0.00"),
-            new ExcelColumn<ProductAdminDto>("Partner Discount %", p => p.PartnerDiscountPercent),
-            new ExcelColumn<ProductAdminDto>("Retail Discount %", p => p.RetailDiscountPercent),
-            new ExcelColumn<ProductAdminDto>("Reward Points / Unit", p => p.RewardPointsPerUnit),
-            new ExcelColumn<ProductAdminDto>("Reorder Level", p => p.ReorderLevel),
-            new ExcelColumn<ProductAdminDto>("Sequence", p => p.Sequence),
-            new ExcelColumn<ProductAdminDto>("Barcode", p => p.Barcode),
-            new ExcelColumn<ProductAdminDto>("Aliases (comma separated)", p => string.Join(", ", p.Aliases)),
-            new ExcelColumn<ProductAdminDto>("Name (Hindi)", p => p.Translations.GetValueOrDefault("hi")),
-            new ExcelColumn<ProductAdminDto>("Name (Gujarati)", p => p.Translations.GetValueOrDefault("gu")),
-            new ExcelColumn<ProductAdminDto>("Active", p => p.IsActive),
-            new ExcelColumn<ProductAdminDto>("Show On Web", p => p.ShowOnWeb),
-            new ExcelColumn<ProductAdminDto>("Show On App", p => p.ShowOnApp),
-            new ExcelColumn<ProductAdminDto>("Description", p => p.Description),
-            new ExcelColumn<ProductAdminDto>("Image URL", p => string.Join(", ", p.ImageUrls)),
-            new ExcelColumn<ProductAdminDto>("Variant Family", p => p.VariantFamily),
-            new ExcelColumn<ProductAdminDto>("Variant Label", p => p.VariantLabel),
-            new ExcelColumn<ProductAdminDto>("Specs", p => string.Join("; ", p.Specs)),
-            new ExcelColumn<ProductAdminDto>("Stock", p => p.StockQty),
-            new ExcelColumn<ProductAdminDto>("Reserved", p => p.ReservedQty),
-            new ExcelColumn<ProductAdminDto>("Rack", p => string.Join(", ", p.RackLocations))), "products");
+        return Xlsx(_excel.Export("Products", all, ExcelService.ProductExportColumns()), "products");
     }
 
     [HttpGet("template"), Authorize(Policy = Permissions.CatalogView)]

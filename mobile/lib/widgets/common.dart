@@ -15,22 +15,26 @@ import '../data/providers.dart';
 
 /// Network image that also handles SVG (used by placeholder artwork).
 class NetImage extends StatelessWidget {
-  const NetImage(this.url, {super.key, this.fit = BoxFit.cover});
+  const NetImage(this.url, {super.key, this.fit = BoxFit.cover, this.fallbackName = 'Building Materials', this.thumbnail = true});
   final String? url;
   final BoxFit fit;
+  final String fallbackName;
+  final bool thumbnail;
 
   @override
   Widget build(BuildContext context) {
-    final u = AppConfig.imageUrl(url);
-    if (u.isEmpty) return const ColoredBox(color: BM.paper);
+    var u = AppConfig.imageUrl(url);
+    if (thumbnail && Uri.tryParse(u)?.host == 'res.cloudinary.com' && u.contains('/image/upload/')) u = u.replaceFirst('/image/upload/', '/image/upload/w_400,q_auto,f_auto/');
+    Widget fallback() => CategoryArt(name: fallbackName, fit: fit);
+    if (u.isEmpty) return fallback();
     if (u.toLowerCase().endsWith('.svg')) {
-      return SvgPicture.network(u, fit: fit, placeholderBuilder: (_) => const ColoredBox(color: BM.paper));
+      return SvgPicture.network(u, fit: fit, placeholderBuilder: (_) => fallback(), errorBuilder: (_, __, ___) => fallback());
     }
     return CachedNetworkImage(
       imageUrl: u,
       fit: fit,
-      placeholder: (_, __) => const ColoredBox(color: BM.paper),
-      errorWidget: (_, __, ___) => const ColoredBox(color: BM.paper, child: Icon(Icons.image_not_supported_outlined, color: BM.inkFaint)),
+      placeholder: (_, __) => fallback(),
+      errorWidget: (_, __, ___) => fallback(),
     );
   }
 }
@@ -177,14 +181,14 @@ class ProductTile extends ConsumerWidget {
 }
 
 /// Adds to cart with error handling; shows a snackbar with a shortcut to the cart.
-Future<bool> addToCart(BuildContext context, WidgetRef ref, int productId, double q, String name) async {
+Future<bool> addToCart(BuildContext context, WidgetRef ref, int productId, double q, String name, {String purchaseUnit = "Piece"}) async {
   if (ref.read(authProvider).status != AuthStatus.loggedIn) {
     toast(context, 'Log in to add products to your cart');
     context.push('/login?next=${Uri.encodeComponent('/product/$productId')}');
     return false;
   }
   try {
-    await ref.read(cartProvider.notifier).add(productId, q);
+    await ref.read(cartProvider.notifier).add(productId, q, purchaseUnit: purchaseUnit);
     if (context.mounted) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
@@ -224,6 +228,19 @@ class StatusChip extends StatelessWidget {
 }
 
 /// Category picture: the admin's upload when there is one, otherwise the design kit's artwork for that kind of goods.
+class CategoryAvailabilityArt extends StatelessWidget {
+  const CategoryAvailabilityArt(this.category, {super.key});
+  final ProductCategory category;
+  @override
+  Widget build(BuildContext context) => Stack(fit: StackFit.expand, children: [
+    Opacity(opacity: category.productCount == 0 ? .45 : 1, child: CategoryArt(name: category.name, imageUrl: category.imageUrl)),
+    if (category.productCount == 0) Positioned(left: 0, right: 0, bottom: 0, child: ColoredBox(
+      color: AppColors.primaryContainer,
+      child: const Padding(padding: EdgeInsets.symmetric(vertical: 3), child: Text('Coming soon', textAlign: TextAlign.center, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700))),
+    )),
+  ]);
+}
+
 class CategoryArt extends StatelessWidget {
   const CategoryArt({super.key, required this.name, this.imageUrl, this.fit = BoxFit.cover});
   final String name;
@@ -255,7 +272,7 @@ class CategoryArt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final u = imageUrl;
-    if (u != null && u.isNotEmpty && !u.startsWith('/files/mock/')) return NetImage(u, fit: fit);
+    if (u != null && u.isNotEmpty && !u.startsWith('/files/mock/')) return NetImage(u, fit: fit, fallbackName: name);
     return Image.asset(assetFor(name), fit: fit, errorBuilder: (_, __, ___) => const ColoredBox(color: BM.paper));
   }
 }

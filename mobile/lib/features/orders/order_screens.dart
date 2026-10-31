@@ -101,7 +101,7 @@ class OrderScreen extends ConsumerWidget {
                     const SizedBox(width: 10),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(i.productName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      Text('${qty(i.quantity)} × ${money(i.unitPrice)}${i.specialDiscountPercent > 0 ? ' (extra ${qty(i.specialDiscountPercent)}% off)' : ''}', style: const TextStyle(color: BM.inkSoft, fontSize: 13)),
+                      Text('${i.purchaseUnit == 'Box' ? '${qty(i.purchaseQuantity ?? 0)} box(es) of ${qty(i.packSize ?? 0)} · ${money(i.lineTotal)}' : '${qty(i.quantity)} × ${money(i.unitPrice)}'}${i.specialDiscountPercent > 0 ? ' (extra ${qty(i.specialDiscountPercent)}% off)' : ''}', style: const TextStyle(color: BM.inkSoft, fontSize: 13)),
                     ])),
                     Text(money(i.lineTotal), style: const TextStyle(fontWeight: FontWeight.w700)),
                   ]),

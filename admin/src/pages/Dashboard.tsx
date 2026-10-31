@@ -9,15 +9,27 @@ import type { Dashboard as D, NamedValue } from '../lib/types'
 const CH = { app: '#1A63C7', web: '#2E9B3E', store: '#F2B300' }
 
 export default function Dashboard() {
-  const { data, isLoading, error } = useQuery({ queryKey: ['dashboard'], queryFn: () => api.get<D>('/api/admin/dashboard') })
+  const { data, isLoading, error, refetch } = useQuery({ queryKey: ['dashboard'], queryFn: () => api.get<D>('/api/admin/dashboard'), refetchInterval: 60000 })
   if (isLoading) return <Loading />
-  if (error || !data) return <ErrorBox error={error} />
+  if (error || !data) return <><ErrorBox error={error} /><button className="btn mt-3" onClick={() => refetch()}>Retry dashboard</button></>
   const k = data.kpis
   const monthChange = k.salesLastMonth > 0 ? ((k.salesThisMonth - k.salesLastMonth) / k.salesLastMonth) * 100 : null
 
   return (
     <>
       <PageHeader title="Dashboard" subtitle="Sales are counted when payment is received. Times are IST." />
+      {data.overview && <Section title="All records" className="mb-4">
+        <p className="mb-3 text-sm text-ink-soft">Totals include all dates and statuses. Open a card to view its records.</p>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <ActionTile to="/products" n={data.overview.products} label="total products" />
+          <ActionTile to="/categories" n={data.overview.categories} label="categories" />
+          <ActionTile to="/brands" n={data.overview.brands} label="brands" />
+          <ActionTile to="/customers" n={data.overview.customers} label="customers" />
+          <ActionTile to="/partners" n={data.overview.partners} label="referral partners" />
+          <ActionTile to="/orders" n={data.overview.orders} label="total orders" />
+          <ActionTile to="/quotations" n={data.overview.quotations} label="quotations" />
+        </div>
+      </Section>}
 
       {/* Things that need someone to act come first. */}
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

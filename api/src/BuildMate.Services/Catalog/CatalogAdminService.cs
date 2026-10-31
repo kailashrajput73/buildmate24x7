@@ -179,14 +179,21 @@ public class CatalogAdminService : ICatalogAdminService
     // ------------------------------------------------------------------ Products
 
     private IQueryable<Product> ProductQuery() => _db.Products.AsNoTracking()
-        .Include(p => p.Category).Include(p => p.SubCategory).Include(p => p.Brand)
+        .Include(p => p.Category).Include(p => p.SubCategory).Include(p => p.Brand).Include(p => p.ProductType).Include(p => p.CatalogFamily)
         .Include(p => p.Aliases).Include(p => p.Translations).Include(p => p.GroupItems)
         .Include(p => p.Locations).ThenInclude(l => l.RackLocation)
         .AsSplitQuery();
 
     public async Task<PagedResult<ProductAdminDto>> ListProductsAsync(ProductAdminQuery q, CancellationToken ct = default)
     {
-        var query = ProductQuery();
+        var query = CatalogStructure.Filter(ProductQuery(), q.TypeId, q.Class, q.FamilyId, q.Size, q.Length);
+        if (q.Ids != null)
+        {
+            var parts = q.Ids.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length == 0 || parts.Length > 5000 || parts.Any(s => !long.TryParse(s, out var id) || id <= 0)) throw new AppException("Select between 1 and 5000 valid product identifiers.");
+            var ids = parts.Select(long.Parse).Distinct().ToList();
+            query = query.Where(p => ids.Contains(p.Id));
+        }
         if (!string.IsNullOrWhiteSpace(q.Search))
         {
             var s = $"%{q.Search.Trim()}%";
@@ -228,6 +235,9 @@ public class CatalogAdminService : ICatalogAdminService
     public async Task<ProductAdminDto> SaveProductAsync(long? id, ProductUpsert dto, CancellationToken ct = default)
     {
         Validate(dto);
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        // Serialize catalogue family upserts across concurrent imports/admin edits.
+        if (_db.Database.IsNpgsql()) await _db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(24071001)", ct);
         if (!await _db.Categories.AnyAsync(c => c.Id == dto.CategoryId, ct)) throw new NotFoundException("Category");
         if (!await _db.Brands.AnyAsync(b => b.Id == dto.BrandId, ct)) throw new NotFoundException("Brand");
         if (dto.SubCategoryId != null && !await _db.SubCategories.AnyAsync(s => s.Id == dto.SubCategoryId && s.CategoryId == dto.CategoryId, ct))
@@ -268,6 +278,13 @@ public class CatalogAdminService : ICatalogAdminService
         p.VariantFamily = string.IsNullOrWhiteSpace(dto.VariantFamily) ? null : dto.VariantFamily.Trim();
         p.VariantLabel = string.IsNullOrWhiteSpace(dto.VariantLabel) ? null : dto.VariantLabel.Trim();
         p.Specs = dto.Specs?.Select(x => x.Trim()).Where(x => x.Contains(':')).ToList() ?? new();
+        if (dto.Catalog != null) await CatalogStructure.ApplyAsync(_db, p, dto.Catalog, ct);
+        else if (p.CatalogFamilyId != null && await _db.CatalogFamilies.AnyAsync(f => f.Id == p.CatalogFamilyId && (f.BrandId != p.BrandId || f.CategoryId != p.CategoryId), ct))
+            throw new AppException("Choose a family belonging to the new brand/category.");
+        if (p.ProductTypeId != null && !await _db.ProductTypes.AnyAsync(t => t.Id == p.ProductTypeId && t.CategoryId == p.CategoryId && (p.SubCategoryId == null || t.SubCategories.Any(s => s.SubCategoryId == p.SubCategoryId)), ct))
+            throw new AppException("The existing Type does not support this category/sub-category. Update the structured catalog fields.");
+        Packaging.Validate(p);
+        p.ImageUrls = p.ImageUrls.Select(u => CatalogStructure.ImageUrl(u)!).ToList();
         p.IsActive = dto.IsActive;
         p.ShowOnWeb = dto.ShowOnWeb;
         p.ShowOnApp = dto.ShowOnApp;
@@ -280,6 +297,7 @@ public class CatalogAdminService : ICatalogAdminService
         await _db.SaveChangesAsync(ct);
         _outbox.Add(ErpEvents.ProductUpserted, new { p.Id, p.Code, p.Name, p.HsnCode, p.GstRate, p.Mrp, p.ListPrice, p.Unit, p.Barcode, p.IsActive });
         await _db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
         return await GetProductAsync(p.Id, ct);
     }
 
@@ -311,11 +329,11 @@ public class CatalogAdminService : ICatalogAdminService
     }
 
     private IQueryable<Product> LookupQuery() => _db.Products.AsNoTracking()
-        .Include(p => p.Brand).Include(p => p.Locations).ThenInclude(l => l.RackLocation);
+        .Include(p => p.Brand).Include(p => p.CatalogFamily).Include(p => p.Locations).ThenInclude(l => l.RackLocation);
 
     private static ProductLookupDto ToLookup(Product p) => new(
         p.Id, p.Code, p.Name, p.Brand.Name, p.Unit, p.ListPrice, p.PartnerDiscountPercent, p.RetailDiscountPercent,
-        p.GstRate, p.AvailableQty, p.StockQty, p.ImageUrls.FirstOrDefault(),
+        p.GstRate, p.AvailableQty, p.StockQty, CatalogStructure.Image(p),
         p.Locations.Select(l => l.RackLocation.Label).OrderBy(x => x).ToList());
 
     // ------------------------------------------------------------------ Groups
@@ -423,8 +441,8 @@ public class CatalogAdminService : ICatalogAdminService
         p.GroupItems.Select(g => g.ProductGroupId).ToList(),
         p.Locations.Select(l => l.RackLocation.Label).OrderBy(x => x).ToList(),
         p.CreatedAt, p.UpdatedAt,
-        p.VariantFamily, p.VariantLabel, p.Specs,
-        Movement(p).Category, Movement(p).DaysSinceMovement, p.LastDispatchedAt == null, p.LastDispatchedAt);
+        p.CatalogFamily?.Name ?? p.VariantFamily, p.VariantLabel, p.Specs,
+        Movement(p).Category, Movement(p).DaysSinceMovement, p.LastDispatchedAt == null, p.LastDispatchedAt, CatalogStructure.Fields(p));
 
     private static MovementInfo Movement(Product p) => ProductMovement.Classify(p, Clock.TodayIst);
 }

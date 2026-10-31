@@ -205,6 +205,7 @@ class KycScreen extends ConsumerStatefulWidget {
 class _KycState extends ConsumerState<KycScreen> {
   String? _uploading;
   bool _submitting = false;
+  String? _gstin;
 
   Future<void> _pick(String type, String label) async {
     final source = await showModalBottomSheet<ImageSource>(
@@ -234,7 +235,7 @@ class _KycState extends ConsumerState<KycScreen> {
     setState(() => _uploading = type);
     try {
       await ref.read(kycRepoProvider).uploadDocument(type, number, file.path);
-      ref.invalidate(profileProvider);
+      ref.invalidate(memberKycProvider);
       if (mounted) toast(context, '$label uploaded');
     } catch (e) {
       if (mounted) toast(context, e.toString(), error: true);
@@ -246,8 +247,8 @@ class _KycState extends ConsumerState<KycScreen> {
   Future<void> _submit() async {
     setState(() => _submitting = true);
     try {
-      await ref.read(kycRepoProvider).submit();
-      ref.invalidate(profileProvider);
+      await ref.read(kycRepoProvider).submit(gstin: _gstin ?? ref.read(memberKycProvider).valueOrNull?.gstin);
+      ref.invalidate(memberKycProvider);
       await ref.read(authProvider.notifier).refreshMe();
     } catch (e) {
       if (mounted) toast(context, e.toString(), error: true);
@@ -259,12 +260,12 @@ class _KycState extends ConsumerState<KycScreen> {
   @override
   Widget build(BuildContext context) {
     final t = ref.watch(trProvider);
-    final profile = ref.watch(profileProvider);
+    final profile = ref.watch(memberKycProvider);
     return Scaffold(
       appBar: AppBar(title: Text(t('kyc.documents')), actions: [TextButton(onPressed: () => context.go('/home'), child: const Text('Browse products'))]),
       body: profile.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => ErrorView(e, onRetry: () => ref.invalidate(profileProvider)),
+        error: (e, _) => ErrorView(e, onRetry: () => ref.invalidate(memberKycProvider)),
         data: (p) {
           final has = {for (final d in p.documents) d.documentType: d};
           final canSubmit = has.containsKey('Aadhaar') || has.containsKey('Pan');
@@ -272,6 +273,7 @@ class _KycState extends ConsumerState<KycScreen> {
             _Steps(step: p.kycStatus == 'NotSubmitted' || p.kycStatus == 'Rejected' ? 1 : 2),
             const SizedBox(height: 16),
             _StatusBanner(p),
+            if (!p.approved) TextFormField(initialValue: p.gstin, maxLength: 15, textCapitalization: TextCapitalization.characters, decoration: const InputDecoration(labelText: 'GSTIN (optional)'), onChanged: (v) => _gstin = v.trim().toUpperCase()),
             const SizedBox(height: 16),
             for (final (type, label, hint, primary) in _docTypes)
               Card(
@@ -292,9 +294,9 @@ class _KycState extends ConsumerState<KycScreen> {
               FilledButton(onPressed: !canSubmit || _submitting ? null : _submit, child: Text(_submitting ? '…' : t('kyc.submit'))),
             if (p.approved) FilledButton(onPressed: () => context.go('/home'), child: const Text('Start ordering')),
             const SizedBox(height: 8),
-            TextButton(onPressed: () => context.push('/profile'), child: const Text('Edit my details')),
+            if (ref.watch(authProvider).user?.userType == 'Partner') TextButton(onPressed: () => context.push('/profile'), child: const Text('Edit my details')),
             const SizedBox(height: 8),
-            const Text('Your documents are stored privately and only seen by the store team approving partners.',
+            const Text('Your documents are stored privately and only seen by the store team reviewing your account.',
                 textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: BM.inkFaint)),
           ]);
         },
@@ -311,7 +313,7 @@ class _StatusBanner extends ConsumerWidget {
     final t = ref.watch(trProvider);
     final (bg, fg, icon, title, body) = switch (p.kycStatus) {
       'Pending' => (BM.tapeLight, const Color(0xFF8A6400), Icons.hourglass_top, t('kyc.pending'), t('kyc.pendingBody')),
-      'Approved' => (BM.leafLight, BM.leaf, Icons.verified, t('kyc.approved'), 'Partner prices and reward points are active.'),
+      'Approved' => (BM.leafLight, BM.leaf, Icons.verified, t('kyc.approved'), 'Your identity documents have been approved.'),
       'Rejected' => (const Color(0xFFFDEEEC), BM.brick, Icons.error_outline, t('kyc.rejected'), p.kycRemarks ?? 'Please update your documents and submit again.'),
       _ => (BM.pipeLight, BM.pipe, Icons.upload_file, 'Upload Aadhaar or PAN', 'Then tap “Submit for approval”.'),
     };

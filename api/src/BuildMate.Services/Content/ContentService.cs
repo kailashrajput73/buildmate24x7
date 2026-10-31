@@ -26,7 +26,7 @@ public record HomeFeedDto(List<BannerDto> Banners, List<CategoryTreeDto> Categor
 public record StorePublicInfo(string StoreName, string SupportPhone, string? WhatsAppNumber, string? SupportEmail, string Address,
     string OpeningHours, decimal MinOrderValue, decimal DeliveryFee, decimal FreeDeliveryAbove,
     bool HomeDeliveryEnabled, bool StorePickupEnabled, List<string> SupportedLanguages,
-    string? AndroidAppUrl, string? IosAppUrl, string? MinAppVersion);
+    string? AndroidAppUrl, string? IosAppUrl, string? MinAppVersion, List<string> DeliveryPincodes);
 
 public interface IContentService
 {
@@ -178,6 +178,6 @@ public class ContentService : IContentService
         return new StorePublicInfo(s.StoreName, s.SupportPhone, s.WhatsAppNumber, s.SupportEmail,
             string.Join(", ", new[] { s.AddressLine, s.City, s.State, s.Pincode }.Where(x => !string.IsNullOrWhiteSpace(x))),
             s.OpeningHours, s.MinOrderValue, s.DeliveryFee, s.FreeDeliveryAbove, s.HomeDeliveryEnabled, s.StorePickupEnabled,
-            s.SupportedLanguages, s.AndroidAppUrl, s.IosAppUrl, s.MinAppVersion);
+            s.SupportedLanguages, s.AndroidAppUrl, s.IosAppUrl, s.MinAppVersion, s.DeliveryPincodes);
     }
 }

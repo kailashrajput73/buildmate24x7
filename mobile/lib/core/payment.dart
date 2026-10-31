@@ -17,6 +17,10 @@ class CashfreePayment {
   static Future<({PayOutcome outcome, String? message})> pay(CheckoutResult r) async {
     if (r.environment == 'mock') return (outcome: PayOutcome.returned, message: null);
 
+    if (r.environment != 'sandbox' && r.environment != 'production') {
+      return (outcome: PayOutcome.failed, message: 'Invalid payment environment returned by the server.');
+    }
+
     final done = Completer<({PayOutcome outcome, String? message})>();
     final service = CFPaymentGatewayService();
     service.setCallback(

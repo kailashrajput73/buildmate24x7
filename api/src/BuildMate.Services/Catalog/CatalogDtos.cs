@@ -22,7 +22,7 @@ public record ProductUpsert(
     decimal RewardPointsPerUnit, decimal ReorderLevel, int Sequence,
     List<string>? ImageUrls, bool IsActive, bool ShowOnWeb, bool ShowOnApp,
     List<string>? Aliases, Dictionary<string, string>? Translations, List<long>? GroupIds,
-    string? VariantFamily = null, string? VariantLabel = null, List<string>? Specs = null);
+    string? VariantFamily = null, string? VariantLabel = null, List<string>? Specs = null, CatalogInput? Catalog = null);
 
 public record ProductAdminDto(
     long Id, string Code, string Name, string? Description,
@@ -36,12 +36,12 @@ public record ProductAdminDto(
     DateTime CreatedAt, DateTime UpdatedAt,
     string? VariantFamily, string? VariantLabel, List<string> Specs,
     // Movement classification (see Inventory.ProductMovement), as of today in India time.
-    MovementCategory Movement, int DaysSinceMovement, bool NeverDispatched, DateTime? LastDispatchedAt);
+    MovementCategory Movement, int DaysSinceMovement, bool NeverDispatched, DateTime? LastDispatchedAt, CatalogFields? Catalog = null);
 
 public record ProductAdminQuery(
     string? Search, long? CategoryId, long? SubCategoryId, long? BrandId, long? GroupId,
     bool? IsActive, bool? LowStockOnly, string? Sort, int Page = 1, int PageSize = 25,
-    MovementCategory? Movement = null, bool? NeverDispatched = null);
+    MovementCategory? Movement = null, bool? NeverDispatched = null, long? TypeId = null, string? Class = null, long? FamilyId = null, string? Size = null, string? Length = null, string? Ids = null);
 
 public record ProductLookupDto(long Id, string Code, string Name, string BrandName, string Unit, decimal ListPrice,
     decimal PartnerDiscountPercent, decimal RetailDiscountPercent, decimal GstRate, decimal AvailableQty, decimal StockQty,
@@ -56,13 +56,13 @@ public record CatalogQuery(
     string? Q, long? CategoryId, long? SubCategoryId, long? BrandId, long? GroupId,
     bool? InStock, bool? Discounted, string? Sort, int Page = 1, int PageSize = 24,
     // Collapse: one card per size family instead of one per size.
-    bool? Collapse = null);
+    bool? Collapse = null, long? TypeId = null, string? Class = null, long? FamilyId = null, string? Size = null, string? Length = null);
 
 public record ProductCardDto(
     long Id, string Code, string Name, string BrandName, long CategoryId, string Unit, string? ImageUrl,
     decimal Mrp, decimal ListPrice, decimal DiscountPercent, decimal Price, bool InStock, decimal? RewardPoints,
     string? Family = null, string? VariantLabel = null, int VariantCount = 1, decimal? FromPrice = null,
-    string? VariantSummary = null);
+    string? VariantSummary = null, CatalogFields? Catalog = null);
 
 public record ProductDetailDto(
     long Id, string Code, string Name, string? Description, long BrandId, string BrandName,
@@ -71,7 +71,7 @@ public record ProductDetailDto(
     decimal Mrp, decimal ListPrice, decimal DiscountPercent, decimal Price, bool InStock, decimal MaxOrderQty,
     decimal? RewardPoints, List<string> OtherNames, List<ProductCardDto> Related,
     string? Family, string? VariantLabel, List<VariantOptionDto> Variants, List<SpecDto> Specs,
-    List<VariantAxisDto> VariantAxes);
+    List<VariantAxisDto> VariantAxes, CatalogFields? Catalog = null);
 
 /// <summary>One size in a product's family, for the size picker.</summary>
 public record VariantOptionDto(long Id, string Code, string Label, decimal Mrp, decimal Price, bool InStock);
@@ -89,7 +89,7 @@ public record SpecDto(string Name, string Value)
 /// </summary>
 public record CatalogItemDto(long Id, string Code, string Name, string BrandName, long BrandId, long? SubCategoryId, string? SubCategoryName,
     string Unit, string? ImageUrl, decimal Mrp, decimal ListPrice, decimal DiscountPercent, decimal Price, bool InStock, decimal? RewardPoints,
-    string? Family, string? VariantLabel, Dictionary<string, string> Specs, int Sequence);
+    string? Family, string? VariantLabel, Dictionary<string, string> Specs, int Sequence, CatalogFields? Catalog = null);
 
 public record CategoryTreeDto(long Id, string Name, string? ImageUrl, int ProductCount, List<SubCategoryRefDto> SubCategories);
 public record SubCategoryRefDto(long Id, string Name);

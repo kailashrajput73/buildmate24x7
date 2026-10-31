@@ -21,7 +21,9 @@ Future<void> main() async {
   try {
     await Firebase.initializeApp();
     pushReady = true;
-  } catch (_) {}
+  } catch (e) {
+    assert(() { debugPrint('Firebase initialization failed: ${e.runtimeType}. Check the Firebase configuration.'); return true; }());
+  }
 
   runApp(ProviderScope(
     overrides: [
