@@ -316,10 +316,6 @@ class _ProductState extends ConsumerState<ProductScreen> {
                 if (d.otherNames.isNotEmpty)
                   Padding(padding: const EdgeInsets.only(top: 4), child: Text('Also: ${d.otherNames.take(4).join(', ')}', style: const TextStyle(color: BM.inkFaint, fontSize: 13))),
                 const SizedBox(height: 14),
-                if (p.catalog?.packSize != null && p.catalog?.boxPrice != null) ...[
-                  SegmentedButton<String>(segments: [const ButtonSegment(value: 'Piece', label: Text('Individual')), ButtonSegment(value: 'Box', label: Text('Box (${qty(p.catalog!.packSize!)} ${p.unit})'))], selected: {_purchaseUnit}, onSelectionChanged: (v) => setState(() { _purchaseUnit = v.single; _qty = 1; })),
-                  if (box) Text('Package MRP ${money(p.catalog!.packMrp ?? 0)} · Save ${money((p.catalog!.packMrp ?? 0) - price)}'),
-                ],
                 Text(t('product.yourPrice'), style: const TextStyle(color: BM.inkSoft, fontSize: 12)),
                 Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
                   Text(money(price), style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
@@ -351,6 +347,14 @@ class _ProductState extends ConsumerState<ProductScreen> {
                             onTap: () => context.pushReplacement('/product/${v.id}')),
                     ],
                   ),
+                // Piece or full box, as blocks like the options above (same as the website).
+                if (p.catalog?.packSize != null && p.catalog?.boxPrice != null) ...[
+                  _OptionRow(label: 'Purchase unit', options: [
+                    _Option('Individual ${p.unit}', selected: !box, inStock: true, onTap: () => setState(() { _purchaseUnit = 'Piece'; _qty = 1; })),
+                    _Option('Full box (${qty(p.catalog!.packSize!)} ${p.unit})', selected: box, inStock: true, onTap: () => setState(() { _purchaseUnit = 'Box'; _qty = 1; })),
+                  ]),
+                  if (box) Text('Package MRP ${money(p.catalog!.packMrp ?? 0)} · Save ${money((p.catalog!.packMrp ?? 0) - price)}', style: const TextStyle(color: BM.leaf, fontWeight: FontWeight.w700)),
+                ],
                 if ((p.rewardPoints ?? 0) > 0) ...[
                   const SizedBox(height: 12),
                   Container(

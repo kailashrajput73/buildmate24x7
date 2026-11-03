@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
     public DbSet<ProductType> ProductTypes => Set<ProductType>();
     public DbSet<ProductTypeSubCategory> ProductTypeSubCategories => Set<ProductTypeSubCategory>();
     public DbSet<CatalogFamily> CatalogFamilies => Set<CatalogFamily>();
+    public DbSet<CatalogFamilyCard> CatalogFamilyCards => Set<CatalogFamilyCard>();
     // Catalogue
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<SubCategory> SubCategories => Set<SubCategory>();

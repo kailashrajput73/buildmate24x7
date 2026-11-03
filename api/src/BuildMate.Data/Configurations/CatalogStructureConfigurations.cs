@@ -10,6 +10,7 @@ public class ProductTypeConfig : IEntityTypeConfiguration<ProductType>
     {
         e.Property(x => x.Name).HasMaxLength(120);
         e.Property(x => x.Key).HasMaxLength(120);
+        e.Property(x => x.ClassLabel).HasMaxLength(40);
         e.HasIndex(x => new { x.CategoryId, x.Key }).IsUnique();
         e.HasOne(x => x.Category).WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
     }
@@ -33,5 +34,16 @@ public class CatalogFamilyConfig : IEntityTypeConfiguration<CatalogFamily>
         e.HasIndex(x => new { x.CategoryId, x.BrandId, x.Key }).IsUnique();
         e.HasOne(x => x.Category).WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
         e.HasOne(x => x.Brand).WithMany().HasForeignKey(x => x.BrandId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+public class CatalogFamilyCardConfig : IEntityTypeConfiguration<CatalogFamilyCard>
+{
+    public void Configure(EntityTypeBuilder<CatalogFamilyCard> e)
+    {
+        e.Property(x => x.Key).HasMaxLength(200);
+        e.Property(x => x.ImageUrl).HasMaxLength(2048);
+        e.HasIndex(x => new { x.CategoryId, x.ProductTypeId, x.Key }).IsUnique();
+        e.HasOne(x => x.Category).WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
+        e.HasOne(x => x.ProductType).WithMany().HasForeignKey(x => x.ProductTypeId).OnDelete(DeleteBehavior.Cascade);
     }
 }

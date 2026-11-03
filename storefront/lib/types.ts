@@ -9,6 +9,8 @@ export type ProductCard = {
   family?: string | null; variantLabel?: string | null; variantCount?: number; fromPrice?: number | null
   /** Card text for a family, e.g. "9 sizes" or "6 sizes · 5 colours · 2 lengths". */
   variantSummary?: string | null
+  /** One card for every brand of the family (e.g. "CPVC PIPE"): show `name` without a brand. */
+  allBrands?: boolean
 }
 export type VariantOption = { id: number; code: string; label: string; mrp: number; price: number; inStock: boolean }
 export type Spec = { name: string; value: string }

@@ -208,13 +208,18 @@ export function KeyVal({ k, v }: { k: string; v: ReactNode }) {
 
 export function Drawer({ open, onClose, title, children, footer, width = 'max-w-xl' }: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode; width?: string }) {
   const ref = useRef<HTMLDivElement>(null)
+  // Latest onClose without re-running the effect: callers pass a new arrow function on every render, and re-running
+  // the effect on each keystroke moved focus to the drawer, so text fields lost focus after every character.
+  const close = useRef(onClose)
+  close.current = onClose
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close.current()
     window.addEventListener('keydown', onKey)
-    ref.current?.focus()
+    // Focus the drawer once when it opens, unless a field inside already took focus (autoFocus).
+    if (!ref.current?.contains(document.activeElement)) ref.current?.focus()
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open])
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -233,12 +238,14 @@ export function Drawer({ open, onClose, title, children, footer, width = 'max-w-
 }
 
 export function Modal({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode }) {
+  const close = useRef(onClose)
+  close.current = onClose
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close.current()
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open])
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

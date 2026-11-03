@@ -51,17 +51,19 @@ class ProductCard {
   final String? variantSummary;
   final int variantCount;
   final double? fromPrice;
+  /// One card for every brand of the family (e.g. "CPVC PIPE"): [name] is shown without a brand.
+  final bool allBrands;
   bool get isFamily => variantCount > 1;
   ProductCard({required this.id, required this.categoryId, required this.code, required this.name, required this.brandName, required this.unit,
       this.imageUrl, required this.mrp, required this.listPrice, required this.discountPercent, required this.price, required this.inStock, this.rewardPoints,
-      this.catalog, this.family, this.variantLabel, this.variantCount = 1, this.fromPrice, this.variantSummary});
+      this.catalog, this.family, this.variantLabel, this.variantCount = 1, this.fromPrice, this.variantSummary, this.allBrands = false});
   factory ProductCard.fromJson(Json j) => ProductCard(
         catalog: j['catalog'] == null ? null : CatalogFields.fromJson(j['catalog'] as Json),
         id: _i(j['id']), categoryId: _i(j['categoryId']), code: j['code'] as String, name: j['name'] as String, brandName: j['brandName'] as String,
         unit: j['unit'] as String, imageUrl: _s(j['imageUrl']), mrp: _d(j['mrp']), listPrice: _d(j['listPrice']), discountPercent: _d(j['discountPercent']),
         price: _d(j['price']), inStock: j['inStock'] as bool? ?? false, rewardPoints: j['rewardPoints'] == null ? null : _d(j['rewardPoints']),
         family: _s(j['family']), variantLabel: _s(j['variantLabel']), variantCount: j['variantCount'] == null ? 1 : _i(j['variantCount']),
-        fromPrice: j['fromPrice'] == null ? null : _d(j['fromPrice']), variantSummary: _s(j['variantSummary']));
+        fromPrice: j['fromPrice'] == null ? null : _d(j['fromPrice']), variantSummary: _s(j['variantSummary']), allBrands: j['allBrands'] as bool? ?? false);
 }
 
 /// One picker row (Size, Colour, Length…). Each choice opens [VariantChoice.productId].

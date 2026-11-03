@@ -158,7 +158,7 @@ export function ProductView({ initial }: { initial: ProductDetail }) {
                     <CartUnit> / {box ? 'box' : p.unit}</CartUnit>
                   </CartPrice>
                   {save > 0 && <Mrp>{money(mrp)}</Mrp>}
-                  {save > 0 && <Save>Save {money(save)}</Save>}
+                  {save > 0 && <Save>Save {money(save)}{!box && p.discountPercent > 0 ? ` (${Math.round(p.discountPercent)}%)` : ''}</Save>}
                 </PriceRow>
                 <CartSize>{p.code}{p.variantLabel ? ` · ${p.variantLabel}` : ''} · incl. GST</CartSize>
                 <Stock $out={!p.inStock}>{p.inStock ? 'In stock' : 'Out of stock'}</Stock>

@@ -179,8 +179,8 @@ class _SearchBar extends StatelessWidget {
               const Icon(Icons.search_rounded, color: AppColors.primary),
               const SizedBox(width: AppSpacing.space3),
               Expanded(child: Text(hint, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.outline))),
-              TextButton.icon(
-                label: const Text('Scan'),
+              IconButton(
+                tooltip: 'Scan product QR',
                 onPressed: () => context.push('/scan'),
                 icon: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.onSurfaceVariant),
               ),

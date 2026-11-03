@@ -145,3 +145,24 @@ Backend integration tests require `BUILDMATE_TEST_DB` pointing only at a local/t
 - Verification: `api/tests/BuildMate.Tests/CatalogPackageTests.cs`, `CatalogMigrationTests.cs`, updated brand-boundary expectation in `MobileCatalogTests.cs`, `tools/test-catalog-upgrade.cjs`.
 
 No Git push, VPS deployment, production migration, database reset, production credential change or APK build was performed.
+
+## 2026-11-02 — UI flow: Pipe & Fitting and Electrical › Cable
+
+From the client's "UI Flow for category Pipe & Fitting / Electrical cable" document. No screen layout changed.
+
+| Request | What it does now |
+| --- | --- |
+| One product-family card without brand | For Pipe & Fitting (every Type) and Electrical › Cable, the category listing shows **one card per Type + family for all brands**: "CPVC PIPE · From ₹… · N variants" instead of "Astral · PIPE", "King · PIPE"… Other categories and types keep one card per brand. |
+| Card photo set in the dashboard | Dashboard › Types & families › **Card photos (all brands)**: choose the family ("CPVC PIPE — 4 brands"), upload the photo, save. Not part of the Excel import. Without a photo the card uses the first product's image as before. Brand family images stay for product pages. |
+| Product page: default brand, class, size; sizes only for brand + class | The card opens the first product of the family, so a brand, class and size are pre-selected. Brand shows every brand of the family; Class shows only that brand's classes; Size shows only the sizes made in that brand + class (then Length). Picking a size can no longer jump to another brand. Switching brand keeps the class, then the size, when that brand has them. Same API for website and app. |
+| Type order | Sidebar: All, UPVC, CPVC, PVC (when Sort order is equal; Sort order can now be set in the dashboard). |
+| Each type has its own classes | The Class list comes from the selected Type's products (CPVC: SDR 11/13.5, UPVC: SCH 40/80, PVC: 4/6/10 kg). |
+| "Color" instead of "Class" for cables | Electrical › Cable shows the Class value under the label **Color** on the product page and in the listing filter. |
+
+Rules are automatic and can be overridden per Type in the dashboard (Types form): **Product cards** = Automatic / One card for all brands / One card per brand, and **Class label** (empty = automatic). Automatic = all brands when the category name contains "pipe", or the Type is "Cable" in a category whose name contains "electric"; label "Color" for that cable type.
+
+API: `ProductCardDto.allBrands`; `TypeDto` gains `allBrands`, `classLabel`, `groupAcrossBrandsSetting`, `classLabelSetting`; `TypeInput` accepts `groupAcrossBrands` and `classLabel`; new `GET/PUT /api/admin/catalog-structure/family-cards`. The product detail's `variantAxes` are narrowed as above for these families, and the Class axis is named by the Type's label.
+
+**Database (existing databases only, run by hand after a backup, staging first):** `api/db/2026-11-02_family_cards_all_brands.sql` — adds two nullable columns to `product_types` and the new `catalog_family_cards` table. Nothing is rewritten. Rollback: `2026-11-02_family_cards_all_brands_rollback.sql` (refuses once a card photo or Type setting is saved). The API must not be started on the new code before this script has run on an existing database.
+
+Files: `Domain/Entities/CatalogStructure.cs`, `Data/AppDbContext.cs`, `Data/Configurations/CatalogStructureConfigurations.cs`, `Services/Catalog/CatalogStructure.cs`, `CatalogService.cs`, `FamilyAxes.cs`, `CatalogDtos.cs`, `Api/Controllers/Admin/CatalogStructureController.cs`, `Api/Controllers/App/CatalogFacetsController.cs`; dashboard `pages/CatalogStructure.tsx`, `lib/types.ts`, `lib/masters.ts`; storefront `lib/types.ts`, `CategoryBrowse.tsx`, `buildmateCatalog.ts`; Flutter `data/models.dart`, `widgets/common.dart`, `features/catalog/category_browse.dart`; mock API catalogue structure; tests `AllBrandFamilyTests.cs`, `tools/test-catalog-upgrade.cjs`.

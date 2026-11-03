@@ -62,7 +62,9 @@ public record ProductCardDto(
     long Id, string Code, string Name, string BrandName, long CategoryId, string Unit, string? ImageUrl,
     decimal Mrp, decimal ListPrice, decimal DiscountPercent, decimal Price, bool InStock, decimal? RewardPoints,
     string? Family = null, string? VariantLabel = null, int VariantCount = 1, decimal? FromPrice = null,
-    string? VariantSummary = null, CatalogFields? Catalog = null);
+    string? VariantSummary = null, CatalogFields? Catalog = null,
+    // One card for every brand of a family ("CPVC PIPE"): the shop shows Name without a brand.
+    bool AllBrands = false);
 
 public record ProductDetailDto(
     long Id, string Code, string Name, string? Description, long BrandId, string BrandName,

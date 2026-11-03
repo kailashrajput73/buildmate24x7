@@ -17,10 +17,10 @@ public class CatalogFacetsController : ControllerBase
     public CatalogFacetsController(AppDbContext db, ICatalogService catalog, ICurrentUser me) { _db = db; _catalog = catalog; _me = me; }
 
     [HttpGet("types")]
-    public async Task<List<TypeDto>> Types([FromQuery] long? categoryId, CancellationToken ct) => await _db.ProductTypes.AsNoTracking()
-        .Where(t => t.IsActive && t.Category.IsActive && (categoryId == null || t.CategoryId == categoryId))
-        .OrderBy(t => t.SortOrder).ThenBy(t => t.Name)
-        .Select(t => new TypeDto(t.Id, t.CategoryId, t.Name, t.SortOrder, true, t.SubCategories.Where(s => s.SubCategory.IsActive).Select(s => s.SubCategoryId).ToList())).ToListAsync(ct);
+    public async Task<List<TypeDto>> Types([FromQuery] long? categoryId, CancellationToken ct) => (await CatalogStructure.InStoreOrder(_db.ProductTypes.AsNoTracking()
+        .Where(t => t.IsActive && t.Category.IsActive && (categoryId == null || t.CategoryId == categoryId)))
+        .Select(t => new { Type = t, Category = t.Category.Name, Subs = t.SubCategories.Where(s => s.SubCategory.IsActive).Select(s => s.SubCategoryId).ToList() }).ToListAsync(ct))
+        .Select(t => CatalogStructure.ToDto(t.Type, t.Category, t.Subs, true)).ToList();
 
     [HttpGet("facets")]
     public async Task<CatalogFacets> Facets([FromQuery] long categoryId, [FromQuery] long? typeId, [FromQuery] long? subCategoryId, [FromQuery] long? brandId, CancellationToken ct)

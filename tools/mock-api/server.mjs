@@ -145,6 +145,7 @@ for (const file of ['pipes-fittings.json', 'electrical.json']) {
 }
 for (const p of products) { p.variantFamily ??= null; p.variantLabel ??= null; p.specs ??= [] }
 
+
 const groups = [
   { id: 1, name: 'Bathroom Fitting Kit', description: 'Everything for a standard bathroom', imageUrl: null, sortOrder: 1, isActive: true, productIds: products.filter((p) => p.categoryId === categories.find((c) => c.name === 'Sanitary').id || p.subCategoryId === subId('Valves')).map((p) => p.id) },
   { id: 2, name: 'House Wiring Essentials', description: 'Wires, switches, MCBs', imageUrl: null, sortOrder: 2, isActive: true, productIds: products.filter((p) => [subId('House Wires'), subId('Switches & Sockets'), subId('MCB & DB')].includes(p.subCategoryId)).map((p) => p.id) },
@@ -392,6 +393,43 @@ const subName = (id) => subcategories.find((s) => s.id === id)?.name
 const brName = (id) => brands.find((b) => b.id === id)?.name
 const avail = (p) => r2(p.stockQty - p.reservedQty)
 const price = (p, d) => r2(p.listPrice * (1 - d / 100))
+// Catalogue structure as the API has it (Type, Class, Size, Length, family) — derived from the demo sheets' specs.
+// Same rules as CatalogStructure.cs: Pipe & Fitting types and Electrical › Cable show one card per family for all brands.
+const productTypes = []
+const familyCards = [] // { categoryId, productTypeId, key, imageUrl }
+const specOf = (p, ...names) => { for (const n of names) { const v = p.specs.find((x) => x.toLowerCase().startsWith(n.toLowerCase() + ':')); if (v) return v.slice(v.indexOf(':') + 1).trim() } return null }
+const typeFor = (categoryId, name, subCategoryId) => {
+  let t = productTypes.find((x) => x.categoryId === categoryId && x.key === name.toUpperCase())
+  if (!t) { t = { id: productTypes.length + 1, categoryId, name, key: name.toUpperCase(), sortOrder: 0, isActive: true, subCategoryIds: [], groupAcrossBrands: null, classLabel: null }; productTypes.push(t) }
+  if (subCategoryId && !t.subCategoryIds.includes(subCategoryId)) t.subCategoryIds.push(subCategoryId)
+  return t
+}
+const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+for (const p of products) {
+  const cat = catName(p.categoryId), sub = subName(p.subCategoryId) ?? '', brand = brName(p.brandId)
+  const material = specOf(p, 'Material')
+  if (/pipe/i.test(cat) && material && p.variantFamily) {
+    const t = typeFor(p.categoryId, material.toUpperCase(), p.subCategoryId)
+    p.productTypeId = t.id; p.productClass = specOf(p, 'Class', 'SDR', 'Schedule'); p.size = specOf(p, 'Size')
+    let f = p.variantFamily.replace(new RegExp(`^${esc(brand)}\\s+`, 'i'), '').replace(new RegExp(`^${esc(material)}\\s+`, 'i'), '')
+    if (p.productClass) f = f.replace(new RegExp(`\\s+${esc(p.productClass)}$`, 'i'), '')
+    p.familyName = f.trim().toUpperCase()
+  } else if (/electric/i.test(cat) && /cables?$/i.test(sub) && p.variantFamily) {
+    const t = typeFor(p.categoryId, 'Cable', p.subCategoryId)
+    p.productTypeId = t.id; p.productClass = specOf(p, 'Colour', 'Color'); p.size = specOf(p, 'Size'); p.length = specOf(p, 'Length')
+    p.familyName = p.variantFamily.replace(new RegExp(`^${esc(brand)}\\s+`, 'i'), '').trim()
+  }
+  p.productTypeId ??= null; p.productClass ??= null; p.size ??= null; p.length ??= null; p.familyName ??= null
+  p.familyKey = p.familyName?.toUpperCase() ?? null
+}
+const typeOf = (p) => productTypes.find((t) => t.id === p.productTypeId)
+const allBrandsType = (t) => !!t && (t.groupAcrossBrands ?? (/pipe/i.test(catName(t.categoryId)) || (/electric/i.test(catName(t.categoryId)) && t.key === 'CABLE')))
+const classLabelOf = (t) => (t ? t.classLabel ?? (/electric/i.test(catName(t.categoryId)) && t.key === 'CABLE' ? 'Color' : 'Class') : 'Class')
+const sharedFamily = (p) => !!p.familyKey && allBrandsType(typeOf(p))
+const cardTitle = (typeName, family) => (!typeName || family.split(/[\s\-/]+/).some((w) => w.toLowerCase() === typeName.toLowerCase()) ? family : `${typeName} ${family}`)
+const MATERIAL_RANK = { UPVC: 0, CPVC: 1, PVC: 2 }
+const typeDto = (t) => ({ id: t.id, categoryId: t.categoryId, name: t.name, sortOrder: t.sortOrder, isActive: t.isActive, subCategoryIds: t.subCategoryIds, allBrands: allBrandsType(t), classLabel: classLabelOf(t), groupAcrossBrandsSetting: t.groupAcrossBrands, classLabelSetting: t.classLabel })
+const typesInOrder = (list) => [...list].sort((a, b) => a.sortOrder - b.sortOrder || (MATERIAL_RANK[a.key] ?? 100) - (MATERIAL_RANK[b.key] ?? 100) || a.name.localeCompare(b.name))
 const racksFor = (p) => p.locations.filter((l) => l.quantity > 0).map((l) => rackLocations.find((r) => r.id === l.rackLocationId).label).sort()
 const adminProduct = (p) => ({
   ...p, categoryName: catName(p.categoryId), subCategoryName: subName(p.subCategoryId), brandName: brName(p.brandId), partnerPrice: price(p, p.partnerDiscountPercent),
@@ -401,7 +439,8 @@ const lookup = (p) => ({ id: p.id, code: p.code, name: p.name, brandName: brName
 const localName = (p, lang) => (lang && lang !== 'en' && p.translations[lang]) || p.name
 const card = (p, v) => {
   const d = v.kind === 'Partner' ? p.partnerDiscountPercent : p.retailDiscountPercent
-  return { id: p.id, code: p.code, name: localName(p, v.lang), brandName: brName(p.brandId), categoryId: p.categoryId, unit: p.unit, imageUrl: p.imageUrls[0] ?? null, mrp: p.mrp, listPrice: p.listPrice, discountPercent: d, price: price(p, d), inStock: avail(p) > 0, rewardPoints: v.kind === 'Partner' ? p.rewardPointsPerUnit : null, family: p.variantFamily, variantLabel: p.variantLabel ? displayLabel(p.variantLabel) : null, variantCount: 1, fromPrice: null, variantSummary: null }
+  return { id: p.id, code: p.code, name: localName(p, v.lang), brandName: brName(p.brandId), categoryId: p.categoryId, unit: p.unit, imageUrl: p.imageUrls[0] ?? null, mrp: p.mrp, listPrice: p.listPrice, discountPercent: d, price: price(p, d), inStock: avail(p) > 0, rewardPoints: v.kind === 'Partner' ? p.rewardPointsPerUnit : null, family: p.variantFamily, variantLabel: p.variantLabel ? displayLabel(p.variantLabel) : null, variantCount: 1, fromPrice: null, variantSummary: null,
+    catalog: { typeId: p.productTypeId, typeName: typeOf(p)?.name ?? null, class: p.productClass, productFamily: p.familyName ?? p.variantFamily, size: p.size, length: p.length } }
 }
 const orderList = (o) => ({ id: o.id, orderNo: o.orderNo, createdAt: o.createdAt, channel: o.channel, customerKind: o.customerKind, status: o.status, paymentStatus: o.paymentStatus, fulfilmentType: o.fulfilmentType, scheduledAt: o.scheduledAt, customerName: o.customerName, customerPhone: o.customerPhone, itemCount: o.items.length, grandTotal: o.grandTotal, balanceDue: r2(o.grandTotal - o.amountPaid), rewardPointsEarned: o.rewardPointsEarned, invoiceNo: o.dispatch?.invoiceNo ?? null })
 const editable = (o) => !o.dispatch && ['Paid', 'Processing', 'ReadyForPickup'].includes(o.status)
@@ -506,17 +545,23 @@ function search(q, v) {
   if (q.categoryId) rows = rows.filter((p) => p.categoryId == q.categoryId)
   if (q.subCategoryId) rows = rows.filter((p) => p.subCategoryId == q.subCategoryId)
   if (q.brandId) rows = rows.filter((p) => p.brandId == q.brandId)
+  if (q.typeId) rows = rows.filter((p) => p.productTypeId == q.typeId)
+  if (q.class) rows = rows.filter((p) => p.productClass === q.class)
+  if (q.size) rows = rows.filter((p) => p.size === q.size)
+  if (q.length) rows = rows.filter((p) => p.length === q.length)
   if (q.groupId) rows = rows.filter((p) => p.groupIds.includes(Number(q.groupId)))
   if (q.inStock === 'true') rows = rows.filter((p) => avail(p) > 0)
   if (q.discounted === 'true' || q.discounted === true) rows = rows.filter((p) => (v.kind === 'Partner' ? p.partnerDiscountPercent : p.retailDiscountPercent) >= 10)
   const pr = (p) => price(p, v.kind === 'Partner' ? p.partnerDiscountPercent : p.retailDiscountPercent)
   rows = [...rows].sort(q.sort === 'price_asc' ? (a, b) => pr(a) - pr(b) : q.sort === 'price_desc' ? (a, b) => pr(b) - pr(a) : q.sort === 'newest' ? (a, b) => b.id - a.id : q.sort === 'name' ? (a, b) => a.name.localeCompare(b.name) : (a, b) => a.sequence - b.sequence)
+  const pool = rows
   if (q.collapse === 'true') rows = firstOfEachFamily(rows)
   const res = page(rows.map((p) => card(p, v)), { page: q.page, pageSize: q.pageSize ?? 24 })
-  if (q.collapse === 'true') res.items = withFamilyInfo(res.items, v)
+  if (q.collapse === 'true') res.items = withFamilyInfo(res.items, v, pool)
   return res
 }
-const firstOfEachFamily = (rows) => { const seen = new Set(); return rows.filter((p) => !p.variantFamily || (!seen.has(p.variantFamily) && seen.add(p.variantFamily))) }
+const familyKeyOf = (p) => (sharedFamily(p) ? `t:${p.productTypeId}:${p.familyKey}` : p.variantFamily)
+const firstOfEachFamily = (rows) => { const seen = new Set(); return rows.filter((p) => { const k = familyKeyOf(p); return !k || (!seen.has(k) && seen.add(k)) }) }
 const familyMembers = (fam, v) => visible(v).filter((p) => p.variantFamily === fam).sort((a, b) => a.sequence - b.sequence || a.id - b.id)
 // Option families: a label like "Size: 1.5 sq.mm; Colour: Red; Length: 90 m" (same rules as Catalog/Variants.cs).
 const parseOpts = (label) => (label && label.includes(':') ? label.split(';').map((p) => p.split(':')).filter((kv) => kv.length >= 2).map(([k, ...v]) => [k.trim(), v.join(':').trim()]).filter(([k, v]) => k && v) : [])
@@ -550,7 +595,34 @@ const variantAxes = (currentId, members) => {
   }
   return axes.length >= 2 ? axes : []
 }
-const withFamilyInfo = (cards, v) => cards.map((c) => {
+// FamilyAxes.Build(narrow: true): Brand, then Class of that brand, then only Sizes of brand + class, then Lengths.
+const sizeNum = (x) => { const m = /(\d+(?:\.\d+)?)/.exec(x ?? ''); return m ? parseFloat(m[1]) : Infinity }
+function narrowAxes(cur, members, classLabel) {
+  const opts = (p) => Object.fromEntries([['Brand', brName(p.brandId)], ['Class', p.productClass], ['Size', p.size], ['Length', p.length]].filter(([, x]) => x))
+  const rows = members.map((p) => ({ p, o: opts(p) })), mine = opts(cur)
+  const names = ['Brand', 'Class', 'Size', 'Length'].filter((n) => rows.some((r) => r.o[n]))
+  const w = (n) => 2 ** (names.length - names.indexOf(n))
+  return names.map((axis) => {
+    const before = names.slice(0, names.indexOf(axis)).filter((n) => mine[n] != null)
+    const pool = rows.filter((r) => before.every((n) => r.o[n] === mine[n]))
+    const values = [...new Set(pool.map((r) => r.o[axis]).filter(Boolean))].sort((a, b) => (axis === 'Size' || axis === 'Length' ? sizeNum(a) - sizeNum(b) : 0) || a.localeCompare(b))
+    const others = names.filter((n) => n !== axis && mine[n] != null)
+    return { name: axis === 'Class' ? classLabel : axis, choices: values.map((value) => {
+      const best = pool.filter((r) => r.o[axis] === value).map((r) => ({ r, score: others.filter((n) => r.o[n] === mine[n]).reduce((s, n) => s + w(n), 0) }))
+        .sort((a, b) => b.score - a.score || (avail(b.r.p) > 0) - (avail(a.r.p) > 0) || a.r.p.sequence - b.r.p.sequence)[0].r
+      return { value, productId: best.p.id, selected: mine[axis] === value, exact: others.every((n) => best.o[n] === mine[n]), inStock: avail(best.p) > 0 }
+    }) }
+  }).filter((a) => a.choices.length)
+}
+const withFamilyInfo = (cards, v, pool = visible(v)) => cards.map((c) => {
+  const self = products.find((p) => p.id === c.id)
+  if (sharedFamily(self)) {
+    const m = pool.filter((p) => p.categoryId === self.categoryId && p.productTypeId === self.productTypeId && p.familyKey === self.familyKey)
+    if (m.length < 2) return c
+    const d = (p) => (v.kind === 'Partner' ? p.partnerDiscountPercent : p.retailDiscountPercent)
+    const photo = familyCards.find((f) => f.productTypeId === self.productTypeId && f.key === self.familyKey)?.imageUrl
+    return { ...c, name: cardTitle(typeOf(self).name, self.familyName), imageUrl: photo ?? c.imageUrl, variantCount: m.length, fromPrice: Math.min(...m.map((p) => price(p, d(p)))), inStock: m.some((p) => avail(p) > 0), variantSummary: `${m.length} variants`, allBrands: true }
+  }
   if (!c.family) return c
   const m = familyMembers(c.family, v)
   if (m.length < 2) return c
@@ -559,14 +631,16 @@ const withFamilyInfo = (cards, v) => cards.map((c) => {
 })
 const detail = (p, v) => {
   const c = card(p, v)
-  const members = p.variantFamily ? familyMembers(p.variantFamily, v) : []
+  const shared = sharedFamily(p)
+  const members = shared ? visible(v).filter((x) => x.categoryId === p.categoryId && x.productTypeId === p.productTypeId && x.familyKey === p.familyKey).sort((a, b) => a.sequence - b.sequence || a.id - b.id)
+    : p.variantFamily ? familyMembers(p.variantFamily, v) : []
   const d = (x) => (v.kind === 'Partner' ? x.partnerDiscountPercent : x.retailDiscountPercent)
-  const related = firstOfEachFamily(visible(v).filter((x) => x.id !== p.id && x.subCategoryId === p.subCategoryId && (!p.variantFamily || x.variantFamily !== p.variantFamily)).sort((a, b) => a.sequence - b.sequence)).slice(0, 8)
+  const related = firstOfEachFamily(visible(v).filter((x) => x.id !== p.id && x.subCategoryId === p.subCategoryId && (shared ? familyKeyOf(x) !== familyKeyOf(p) : !p.variantFamily || x.variantFamily !== p.variantFamily)).sort((a, b) => a.sequence - b.sequence)).slice(0, 8)
   return {
     ...c, description: p.description, brandId: p.brandId, categoryName: catName(p.categoryId), subCategoryId: p.subCategoryId, subCategoryName: subName(p.subCategoryId), hsnCode: p.hsnCode, gstRate: p.gstRate, imageUrls: p.imageUrls, maxOrderQty: Math.max(0, avail(p)), otherNames: [...Object.values(p.translations), ...p.aliases],
     related: withFamilyInfo(related.map((x) => card(x, v)), v),
     variants: members.length > 1 ? members.map((x) => ({ id: x.id, code: x.code, label: x.variantLabel ? displayLabel(x.variantLabel) : x.name, mrp: x.mrp, price: price(x, d(x)), inStock: avail(x) > 0 })) : [],
-    variantAxes: members.length > 1 ? variantAxes(p.id, members) : [],
+    variantAxes: shared ? narrowAxes(p, members, classLabelOf(typeOf(p))) : members.length > 1 ? variantAxes(p.id, members) : [],
     specs: p.specs.map((x) => { const i = x.indexOf(':'); return { name: x.slice(0, i).trim(), value: x.slice(i + 1).trim() } }).filter((x) => x.name && x.value),
   }
 }
@@ -596,6 +670,51 @@ on('GET', '/api/catalog/categories/:id/items', ({ req, uid, p, q }) => {
         unit: x.unit, imageUrl: c.imageUrl, mrp: x.mrp, listPrice: x.listPrice, discountPercent: c.discountPercent, price: c.price, inStock: c.inStock, rewardPoints: c.rewardPoints ?? null,
         family: x.variantFamily ?? null, variantLabel: x.variantLabel ? displayLabel(x.variantLabel) : null, specs, sequence: x.sequence }
     })
+})
+on('GET', '/api/catalog/types', ({ q }) => typesInOrder(productTypes.filter((t) => t.isActive && (!q.categoryId || t.categoryId == q.categoryId))).map(typeDto))
+on('GET', '/api/catalog/facets', ({ req, uid, q }) => {
+  const v = viewer(req, uid)
+  const count = (rows, key, label) => { const m = new Map(); for (const p of rows) { const k = key(p); if (k == null) continue; const e = m.get(k) ?? { ...label(p), count: 0 }; e.count++; m.set(k, e) } return [...m.values()] }
+  let rows = visible(v).filter((p) => p.categoryId == q.categoryId)
+  const types = count(rows, (p) => p.productTypeId, (p) => ({ id: p.productTypeId, name: typeOf(p).name }))
+  if (q.typeId) rows = rows.filter((p) => p.productTypeId == q.typeId)
+  const subs = count(rows, (p) => p.subCategoryId, (p) => ({ id: p.subCategoryId, name: subName(p.subCategoryId) }))
+  if (q.subCategoryId) rows = rows.filter((p) => p.subCategoryId == q.subCategoryId)
+  const brandsF = count(rows, (p) => p.brandId, (p) => ({ id: p.brandId, name: brName(p.brandId) }))
+  if (q.brandId) rows = rows.filter((p) => p.brandId == q.brandId)
+  const vals = (key) => count(rows, (p) => p[key], (p) => ({ value: p[key] })).sort((a, b) => sizeNum(a.value) - sizeNum(b.value) || a.value.localeCompare(b.value))
+  return { types, subCategories: subs, brands: brandsF, classes: vals('productClass').sort((a, b) => a.value.localeCompare(b.value)), sizes: vals('size'), lengths: vals('length') }
+})
+on('GET', '/api/admin/catalog-structure/types', ({ q }) => typesInOrder(productTypes.filter((t) => !q.categoryId || t.categoryId == q.categoryId)).map(typeDto))
+on('PUT', '/api/admin/catalog-structure/types/:id', ({ p, body }) => {
+  const t = productTypes.find((x) => x.id == p.id); if (!t) fail(404, 'Type not found.')
+  Object.assign(t, { name: body.name, key: body.name.trim().toUpperCase(), sortOrder: body.sortOrder ?? 0, isActive: body.isActive, subCategoryIds: body.subCategoryIds ?? t.subCategoryIds, groupAcrossBrands: body.groupAcrossBrands ?? null, classLabel: body.classLabel?.trim() || null })
+  return typeDto(t)
+})
+on('GET', '/api/admin/catalog-structure/families', ({ q }) => {
+  const seen = new Map()
+  for (const p of products) if (p.familyName && (!q.categoryId || p.categoryId == q.categoryId) && (!q.brandId || p.brandId == q.brandId)) {
+    const k = `${p.categoryId}:${p.brandId}:${p.familyKey}`; if (!seen.has(k)) seen.set(k, { id: seen.size + 1, categoryId: p.categoryId, brandId: p.brandId, key: p.familyKey, name: p.familyName, imageUrl: null })
+  }
+  return [...seen.values()]
+})
+const familyCardList = (categoryId) => {
+  const m = new Map()
+  for (const p of products) if (p.categoryId == categoryId && sharedFamily(p)) {
+    const k = `${p.productTypeId}:${p.familyKey}`, t = typeOf(p)
+    const e = m.get(k) ?? { categoryId: p.categoryId, typeId: t.id, typeName: t.name, key: p.familyKey, name: p.familyName, title: cardTitle(t.name, p.familyName), brands: new Set(), imageUrl: familyCards.find((f) => f.productTypeId === t.id && f.key === p.familyKey)?.imageUrl ?? null }
+    e.brands.add(p.brandId); m.set(k, e)
+  }
+  return [...m.values()].map(({ brands: b, ...e }) => ({ ...e, brandCount: b.size })).sort((a, b) => a.typeName.localeCompare(b.typeName) || a.name.localeCompare(b.name))
+}
+on('GET', '/api/admin/catalog-structure/family-cards', ({ q }) => familyCardList(q.categoryId))
+on('PUT', '/api/admin/catalog-structure/family-cards', ({ body }) => {
+  const row = familyCardList(body.categoryId).find((c) => c.typeId == body.typeId && c.key === String(body.familyKey).trim().toUpperCase())
+  if (!row) fail(400, 'No product of this Type uses this family yet.')
+  let f = familyCards.find((x) => x.productTypeId == body.typeId && x.key === row.key)
+  if (!f) { f = { categoryId: Number(body.categoryId), productTypeId: Number(body.typeId), key: row.key }; familyCards.push(f) }
+  f.imageUrl = body.imageUrl || null
+  return { ...row, imageUrl: f.imageUrl }
 })
 on('GET', '/api/catalog/brands', () => brands.filter((b) => b.isActive).map((b) => ({ id: b.id, name: b.name, logoUrl: b.logoUrl })))
 on('GET', '/api/catalog/groups', () => groups.filter((g) => g.isActive).map((g) => ({ id: g.id, name: g.name, imageUrl: g.imageUrl })))
@@ -832,6 +951,32 @@ on('GET', '/api/admin/customers/:id/rewards', ({ p, q }) => page(rewardTxns.filt
 
 // Admin: payments set-up check (the mock has no Cashfree keys; checkout skips straight to "paid").
 on('GET', '/api/admin/integrations/payments', () => ({ provider: 'Cashfree', environment: 'sandbox', keysSet: false, clientIdEnding: null, returnUrl: 'http://localhost:3000/checkout/return?order={orderId}', webhookUrl: 'http://localhost:5080/api/payments/cashfree/webhook', problems: ['Demo server: Cashfree is simulated (no keys). Real payments use the BuildMate API with CASHFREE_CLIENT_ID / CASHFREE_CLIENT_SECRET.'] }))
+// Cashfree Test / Live settings (same contract as CashfreeSettingsController). DEMO ONLY: credentials are kept in this
+// process's memory, never returned, and not checked with Cashfree (the real API validates them with the selected environment).
+const cashfree = { revision: 0, activated: false, mode: 'sandbox', sandbox: null, production: null, audit: [] }
+const cfStatus = () => ({ revision: cashfree.revision, activated: cashfree.activated, mode: cashfree.mode, effectiveMode: cashfree.activated ? cashfree.mode : 'sandbox',
+  sandboxConfigured: !!cashfree.sandbox, productionConfigured: !!cashfree.production, legacyConfigured: false })
+const cfValid = (c) => /^[A-Za-z0-9_-]{8,256}$/.test(c?.clientId ?? '') && /^[A-Za-z0-9_+=/.-]{16,512}$/.test(c?.clientSecret ?? '')
+on('GET', '/api/admin/settings/cashfree', () => cfStatus())
+on('GET', '/api/admin/settings/cashfree/audit', () => cashfree.audit.slice(-50).reverse())
+on('PUT', '/api/admin/settings/cashfree', ({ me, body }) => {
+  if (!['sandbox', 'production'].includes(body.mode)) fail(400, 'Select Test or Live mode.')
+  for (const c of [body.sandbox, body.production]) if (c && !cfValid(c)) fail(400, 'Enter a valid Client ID (8–256 characters) and Client Secret (16–512 characters), without spaces.', 'cashfree_credentials_invalid')
+  if (body.revision !== cashfree.revision) fail(409, 'Settings changed in another session. Reload before saving.', 'settings_conflict')
+  const before = cfStatus().effectiveMode, wasActive = cashfree.activated
+  if (body.sandbox) cashfree.sandbox = { ...body.sandbox }
+  if (body.production) cashfree.production = { ...body.production }
+  const activated = cashfree.activated || !!body.activate
+  if (activated) {
+    if (!(body.mode === 'production' ? cashfree.production : cashfree.sandbox)) fail(400, 'Configure credentials before activating this mode.')
+    if (body.mode === 'production' && before !== 'production' && !body.confirmLive) fail(400, 'Confirm switching to Live Mode. Real payments will be collected.', 'live_confirmation_required')
+  }
+  cashfree.activated = activated; cashfree.mode = body.mode; cashfree.revision++
+  const after = cfStatus().effectiveMode, actorId = me().id, at = iso(now())
+  const actions = [...(body.sandbox ? ['sandbox_credentials_replaced'] : []), ...(body.production ? ['production_credentials_replaced'] : []), ...(!wasActive && activated ? ['dashboard_activated'] : []), 'settings_saved', ...(before !== after ? ['mode_changed'] : [])]
+  for (const action of actions) cashfree.audit.push({ at, actorId, action, fromMode: before, toMode: after, revision: cashfree.revision })
+  return cfStatus()
+})
 on('POST', '/api/admin/integrations/payments/test', () => ({ ok: false, message: 'Demo server: there are no Cashfree keys to test.' }))
 on('GET', '/api/partner/profile', ({ me }) => partnerDetail(partnerOf(me().id)))
 on('PUT', '/api/partner/profile', ({ me, body }) => { const pr = partnerOf(me().id); const { name, email, preferredLanguage, ...rest } = body; Object.assign(me(), { name, email, preferredLanguage: preferredLanguage ?? 'en' }); Object.assign(pr, rest); return partnerDetail(pr) })

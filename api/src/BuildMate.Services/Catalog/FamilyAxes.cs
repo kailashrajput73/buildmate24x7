@@ -4,7 +4,13 @@ namespace BuildMate.Services.Catalog;
 
 public static class FamilyAxes
 {
-    public static List<VariantAxisDto> Build(Product current, List<Product> products)
+    /// <param name="narrow">
+    /// Family shared by several brands: each option row only offers what exists with the options above it —
+    /// every Brand, then the Classes of the selected brand, then only the Sizes of that brand + class (then Lengths…).
+    /// So picking a size never jumps to another brand.
+    /// </param>
+    /// <param name="classLabel">Shown name of the Class row ("Color" for Electrical › Cable).</param>
+    public static List<VariantAxisDto> Build(Product current, List<Product> products, bool narrow = false, string classLabel = "Class")
     {
         Dictionary<string, string> Options(Product p)
         {
@@ -23,15 +29,22 @@ public static class FamilyAxes
         var mine = Options(current);
         var rows = products.Select(p => (Product: p, Values: Options(p))).ToList();
         var names = new[] { "Brand", "Class", "Size", "Length" }.Concat(rows.SelectMany(r => r.Values.Keys)).Distinct().Where(n => rows.Any(r => r.Values.ContainsKey(n))).ToList();
-        return names.Select(axis => new VariantAxisDto(axis, rows.Where(r => r.Values.ContainsKey(axis)).Select(r => r.Values[axis]).Distinct()
-            .OrderBy(value => SortValue(axis, value)).ThenBy(v => v)
+        // Rows that agree with the current product on every option above this one (narrow mode only).
+        List<(Product Product, Dictionary<string, string> Values)> Pool(string axis) => !narrow ? rows : rows.Where(r =>
+            names.TakeWhile(n => n != axis).Where(mine.ContainsKey).All(n => r.Values.GetValueOrDefault(n) == mine[n])).ToList();
+        return names.Select(axis => (axis, pool: Pool(axis))).Select(a => new VariantAxisDto(a.axis == "Class" ? classLabel : a.axis,
+            a.pool.Where(r => r.Values.ContainsKey(a.axis)).Select(r => r.Values[a.axis]).Distinct()
+            .OrderBy(value => SortValue(a.axis, value)).ThenBy(v => v)
             .Select(value => {
-                var best = rows.Where(r => r.Values.GetValueOrDefault(axis) == value)
-                    .OrderByDescending(r => names.Where(n => n != axis && mine.ContainsKey(n)).Count(n => mine[n] == r.Values.GetValueOrDefault(n)))
+                var axis = a.axis;
+                var best = a.pool.Where(r => r.Values.GetValueOrDefault(axis) == value)
+                    .OrderByDescending(r => names.Where(n => n != axis && mine.ContainsKey(n) && mine[n] == r.Values.GetValueOrDefault(n))
+                        // Narrow: keep the higher rows first (a brand switch keeps the class before the size).
+                        .Sum(n => narrow ? Math.Pow(2, names.Count - names.IndexOf(n)) : 1))
                     .ThenByDescending(r => r.Product.AvailableQty > 0).ThenBy(r => r.Product.Sequence).ThenBy(r => r.Product.Id).First();
                 return new VariantChoiceDto(value, best.Product.Id, mine.GetValueOrDefault(axis) == value,
                     names.Where(n => n != axis && mine.ContainsKey(n)).All(n => mine[n] == best.Values.GetValueOrDefault(n)), best.Product.AvailableQty > 0);
-            }).ToList())).ToList();
+            }).ToList())).Where(a => a.Choices.Count > 0).ToList();
     }
 
     private static decimal SortValue(string axis, string value)

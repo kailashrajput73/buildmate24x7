@@ -77,17 +77,15 @@ dotnet run --project src/BuildMate.Api           # Development profile → http:
 `appsettings.Development.json` has a dev JWT key, admin password `Admin@12345`, demo data on, and OTP test numbers
 `9999999999` / `8888888888` (code `123456`). Then run admin and storefront as above (both proxy `/api` to :5080).
 
-### Database migrations
+### Database schema upgrades
 
-The API creates the schema with `EnsureCreated` until migrations exist. Before the first production deploy:
-
-```bash
-dotnet tool install -g dotnet-ef
-cd api
-dotnet ef migrations add Initial -p src/BuildMate.Data -s src/BuildMate.Api
-```
-
-From then on it applies migrations on startup (`Database:AutoMigrate`). Commit the `Migrations/` folder.
+This repository currently has **no EF migrations**. Fresh databases are created from the complete EF model using
+`EnsureCreated`; that operation does not alter an existing database. Existing Docker databases have an operator
+baselined `20261030015822_Initial` row in `__EFMigrationsHistory`, but adding a generated `Initial` migration would
+not upgrade that schema (and its model does not match the baseline). Do not generate or apply a replacement Initial
+migration. Upgrade existing databases with the checked-in, additive, repeatable SQL patches in `api/db/`, in
+date order. They preserve existing users, password hashes, orders, and payment records. Back up first and apply on
+staging before production.
 
 ## Configuration reference (API)
 

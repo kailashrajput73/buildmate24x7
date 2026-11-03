@@ -43,6 +43,24 @@ async function main() {
   assert.deepEqual(app.items.map(p => p.id), cards.items.map(p => p.id))
   const facets = await call(`/api/catalog/facets?categoryId=${category.id}&typeId=${type.id}`)
   assert.equal(facets.sizes.length, 2)
+  // One card for all brands (Pipe & Fitting / Electrical › Cable rule, here switched on by the Type setting).
+  const typeBody = { categoryId: category.id, name: type.name, sortOrder: type.sortOrder ?? 0, isActive: true, subCategoryIds: [sub.id] }
+  await call(`/api/admin/catalog-structure/types/${type.id}`, { ...typeBody, groupAcrossBrands: true, classLabel: 'Color' }, 'PUT')
+  try {
+    const shared = await call(`/api/catalog/products?categoryId=${category.id}&typeId=${type.id}&collapse=true`)
+    assert.equal(shared.total, 1)
+    assert.equal(shared.items[0].allBrands, true)
+    assert.equal(shared.items[0].variantCount, 3)
+    const detail = await call(`/api/catalog/products/${shared.items[0].id}`)
+    assert.deepEqual(detail.variantAxes.map(a => a.name).slice(0, 3), ['Brand', 'Color', 'Size'])
+    const supreme = detail.variantAxes[0].choices.find(c => c.value === 'LOCAL QA Supreme')
+    const supremeDetail = await call(`/api/catalog/products/${supreme.productId}`)
+    assert.deepEqual(supremeDetail.variantAxes.find(a => a.name === 'Size').choices.map(c => c.value), ['20 mm']) // only Supreme's own size
+    const photos = await call(`/api/admin/catalog-structure/family-cards?categoryId=${category.id}`)
+    assert.equal(photos.length, 1); assert.equal(photos[0].brandCount, 2)
+  } finally {
+    await call(`/api/admin/catalog-structure/types/${type.id}`, { ...typeBody, groupAcrossBrands: null, classLabel: null }, 'PUT')
+  }
   const cart = await call('/api/cart/preview', [{ productId: products[0].id, quantity: 1, purchaseUnit: 'Box' }, { productId: products[0].id, quantity: 2, purchaseUnit: 'Piece' }])
   assert.equal(cart.total, 990)
   assert.equal(cart.items[0].baseQuantity, 20)

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/api.dart';
+import '../../core/theme.dart';
 import '../../data/models.dart';
 import '../../data/providers.dart';
 import '../../data/delivery_location.dart';
@@ -264,33 +265,42 @@ class _DeliveryLocationBarState extends ConsumerState<DeliveryLocationBar>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.location_on),
-          title: const Text('Deliver to'),
-          subtitle: Text(
-            _message ??
-                (location.label.isEmpty
-                    ? 'Choose location or delivery address'
-                    : location.label),
-            maxLines: 2,
+        // "Deliver to" bar in the design kit's style (bordered pill, pin icon, text, arrow).
+        Material(
+          color: AppColors.surface,
+          borderRadius: AppRadius.mdAll,
+          child: InkWell(
+            onTap: _open,
+            borderRadius: AppRadius.mdAll,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space4, vertical: AppSpacing.space3),
+              decoration: BoxDecoration(borderRadius: AppRadius.mdAll, border: Border.all(color: AppColors.divider)),
+              child: Row(children: [
+                const Icon(Icons.location_on_rounded, size: 20, color: AppColors.primary),
+                const SizedBox(width: AppSpacing.space2),
+                Text('Deliver to', style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(width: AppSpacing.space2),
+                Expanded(
+                  child: Text(
+                    _message ?? (location.label.isEmpty ? 'Choose location or delivery address' : location.label),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.onSurfaceVariant),
+                  ),
+                ),
+                _busy
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: AppColors.onSurfaceVariant),
+              ]),
+            ),
           ),
-          trailing:
-              _busy
-                  ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(),
-                  )
-                  : const Icon(Icons.expand_more),
-          onTap: _open,
         ),
         if (store != null && pin != null)
           Text(
             store.deliversTo(pin)
                 ? 'Delivery available to $pin'
                 : 'Delivery is not available to $pin. Store pickup is available.',
-            style: const TextStyle(fontSize: 12),
+            style: const TextStyle(fontSize: 12, color: AppColors.onSurfaceVariant),
           ),
         if (location.gps)
           const Text(

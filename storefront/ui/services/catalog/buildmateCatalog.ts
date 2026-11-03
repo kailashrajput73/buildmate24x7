@@ -87,8 +87,8 @@ export function sectionName(subCategoryName: string | null | undefined, material
   return name || subCategoryName.trim();
 }
 
-/** Store order for pipe & fitting materials: UPVC, PVC, CPVC, then everything else (A–Z), "Other" last. */
-const MATERIAL_ORDER = ['UPVC', 'PVC', 'CPVC'];
+/** Store order for pipe & fitting materials: UPVC, CPVC, PVC, then everything else (A–Z), "Other" last. */
+const MATERIAL_ORDER = ['UPVC', 'CPVC', 'PVC'];
 export function typeRank(type: string): number {
   const i = MATERIAL_ORDER.indexOf(type.trim().toUpperCase());
   return i >= 0 ? i : type.trim().toLowerCase() === 'other' ? 1000 : 100;

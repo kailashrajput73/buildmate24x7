@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from './api'
-import type { Brand, Category, ProductType, CatalogFamily, Paged, ProductGroup, SubCategory } from './types'
+import type { Brand, Category, ProductType, CatalogFamily, Paged, ProductGroup, SubCategory, FamilyCard } from './types'
 
 // Dropdown sources, cached for a few minutes.
 const opts = { staleTime: 5 * 60_000 }
@@ -24,4 +24,5 @@ export const useManagers = () =>
   useQuery({ queryKey: ['managers'], queryFn: () => api.get<{ id: number; name: string }[]>('/api/admin/team/managers'), ...opts })
 
 export const useProductTypes = (categoryId?: number) => useQuery({ queryKey: ['catalog-types', categoryId], queryFn: () => api.get<ProductType[]>('/api/admin/catalog-structure/types', { categoryId }), ...opts })
+export const useFamilyCards = (categoryId?: number) => useQuery({ queryKey: ['catalog-family-cards', categoryId], queryFn: () => api.get<FamilyCard[]>('/api/admin/catalog-structure/family-cards', { categoryId }), enabled: !!categoryId, ...opts })
 export const useFamilies = (categoryId?: number, brandId?: number) => useQuery({ queryKey: ['catalog-families', categoryId, brandId], queryFn: () => api.get<CatalogFamily[]>('/api/admin/catalog-structure/families', { categoryId, brandId }), ...opts })

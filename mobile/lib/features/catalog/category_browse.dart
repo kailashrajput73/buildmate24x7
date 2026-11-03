@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api.dart';
+import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
 import '../../data/providers.dart';
@@ -87,7 +88,9 @@ final categoryItemsProvider = FutureProvider.autoDispose.family<List<CatalogItem
   return list.map((e) => CatalogItem.fromJson(e as Json)).toList();
 });
 
-/// Category screen in the design kit's Pipes & Fittings layout: types in a left rail, one card per product family.
+/// Category screen in the design kit's Pipes & Fittings layout: filter pills on top, types (and their
+/// sub-categories) in a left rail, one card per product family. Data: the paginated family listing
+/// (GET /api/catalog/products?collapse=true), Types and facets from the server.
 class CategoryBrowseScreen extends ConsumerStatefulWidget {
   const CategoryBrowseScreen({super.key, required this.categoryId, required this.title});
   final int categoryId;
@@ -121,41 +124,111 @@ class _CategoryBrowseState extends ConsumerState<CategoryBrowseScreen> {
     ]).then((r) => (Paged.fromJson(r[0] as Json, ProductCard.fromJson), (r[1] as List).cast<Json>(), r[2] as Json));
   }
   void _set(Map<String, dynamic> patch, {bool reset = false}) => setState(() { _filters = {...(reset ? <String, dynamic>{} : _filters), ...patch}..removeWhere((k, v) => v == null || v == ''); _page = 1; _load(); });
-  Widget _select(String key, String label, List<Json> options, {bool ids = false}) => DropdownButton<String>(
-    value: _filters[key]?.toString(), hint: Text(label),
-    items: [DropdownMenuItem(value: '', child: Text('All $label')), for (final option in options) DropdownMenuItem(value: '${option[ids ? 'id' : 'value']}', child: Text('${option[ids ? 'name' : 'value']}'))],
-    onChanged: (v) => _set({key: ids && v != null && v.isNotEmpty ? int.parse(v) : v, if (key == 'brandId') ...{'class': null, 'size': null, 'length': null}}),
-  );
+
+  /// A dropdown pill (design kit filter button) over a facet list.
+  Widget _facetPill(String key, String label, List<Json> options, {bool ids = false}) {
+    final current = _filters[key];
+    final matchName = options.where((o) => o['id'] == current).firstOrNull?['name'];
+    final currentLabel = current == null ? null : (ids ? matchName : current);
+    return Padding(
+      padding: const EdgeInsets.only(right: AppSpacing.space2),
+      child: _Pill<String>(
+        label: currentLabel == null ? label : '$currentLabel',
+        options: {'': 'All ${label.toLowerCase()}', for (final o in options) '${o[ids ? 'id' : 'value']}': '${o[ids ? 'name' : 'value']}'},
+        onSelected: (v) => _set({key: ids && v.isNotEmpty ? int.parse(v) : v, if (key == 'brandId') ...{'class': null, 'size': null, 'length': null}}),
+      ),
+    );
+  }
+
+  static const _sorts = {'': 'Recommended', 'price_asc': 'Price (lowest first)', 'price_desc': 'Price (highest first)', 'newest': 'What’s New'};
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final category = ref.watch(categoriesProvider).valueOrNull?.where((c) => c.id == widget.categoryId).firstOrNull;
-    return Scaffold(backgroundColor: AppColors.background, appBar: AppBar(title: Text(widget.title), actions: [IconButton(onPressed: () => context.push('/cart'), icon: const Icon(Icons.shopping_cart_outlined))]),
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.surface,
+        title: Text(widget.title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+        actions: [
+          IconButton(tooltip: 'Search', icon: const Icon(Icons.search_rounded), onPressed: () => context.push('/products', extra: CatalogQuery(categoryId: widget.categoryId))),
+          IconButton(tooltip: 'Cart', icon: const Icon(Icons.shopping_cart_outlined), onPressed: () => context.push('/cart')),
+        ],
+      ),
       body: FutureBuilder<(Paged<ProductCard>, List<Json>, Json)>(future: _result, builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
         if (snapshot.hasError) return ErrorView(snapshot.error!, onRetry: () => setState(_load));
         final (page, types, facets) = snapshot.data!;
         final type = types.where((t) => t['id'] == _filters['typeId']).firstOrNull;
-        final subs = (category?.subCategories ?? []).where((s) => type == null || (type['subCategoryIds'] as List).contains(s.id));
+        final subs = (category?.subCategories ?? []).where((s) => type == null || (type['subCategoryIds'] as List).contains(s.id)).toList();
+        // "Color" for Electrical › Cable (from the Type), otherwise "Class".
+        final classLabel = '${type?['classLabel'] ?? 'Class'}';
         List<Json> facet(String key) => (facets[key] as List? ?? []).cast<Json>();
-        return Row(children: [
-          SizedBox(width: 105, child: Material(color: AppColors.surface, child: ListView(children: [
-            _TypeRow(label: 'All', count: category?.productCount ?? 0, selected: !_filters.containsKey('typeId'), art: widget.title, onTap: () => _set({}, reset: true)),
-            for (final t in types) _TypeRow(label: '${t['name']}', count: (facet('types').where((f) => f['id'] == t['id']).firstOrNull?['count'] as num?)?.toInt() ?? 0, selected: t['id'] == _filters['typeId'], art: '${t['name']}', onTap: () => _set({'typeId': t['id']}, reset: true)),
-            const Padding(padding: EdgeInsets.all(8), child: Text('Sub-Category')),
-            ListTile(key: const ValueKey('all-subcategories'), dense: true, selected: !_filters.containsKey('subCategoryId'), title: const Text('All'), onTap: () => _set({'typeId': _filters['typeId']}, reset: true)),
-            for (final sub in subs) ListTile(dense: true, selected: _filters['subCategoryId'] == sub.id, title: Text(sub.name), onTap: () => _set({'typeId': _filters['typeId'], 'subCategoryId': sub.id}, reset: true)),
-          ]))),
-          Expanded(child: Column(children: [
-            SingleChildScrollView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 8), child: Row(children: [
-              _select('brandId', 'Brand', facet('brands'), ids: true), const SizedBox(width: 12),
-              _select('class', 'Class', facet('classes')), const SizedBox(width: 12),
-              _select('size', 'Size', facet('sizes')), const SizedBox(width: 12),
-              _select('length', 'Length', facet('lengths')),
-              TextButton(onPressed: () => _set({}, reset: true), child: const Text('Clear')),
+        final sort = '${_filters['sort'] ?? ''}';
+        return Column(children: [
+          // Filter row: sort, brand, class, size, length — dropdown pills.
+          Container(
+            color: AppColors.surface,
+            padding: const EdgeInsets.fromLTRB(AppSpacing.space3, 0, AppSpacing.space3, AppSpacing.space2),
+            child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
+              Padding(
+                padding: const EdgeInsets.only(right: AppSpacing.space2),
+                child: _Pill<String>(label: sort.isEmpty ? 'Sort by' : _sorts[sort] ?? 'Sort by', options: _sorts, onSelected: (v) => _set({'sort': v})),
+              ),
+              if (facet('brands').length > 1 || _filters.containsKey('brandId')) _facetPill('brandId', 'Brand', facet('brands'), ids: true),
+              if (facet('classes').isNotEmpty) _facetPill('class', classLabel, facet('classes')),
+              if (facet('sizes').isNotEmpty) _facetPill('size', 'Size', facet('sizes')),
+              if (facet('lengths').isNotEmpty) _facetPill('length', 'Length', facet('lengths')),
+              if (_filters.keys.any((k) => k != 'typeId' && k != 'subCategoryId'))
+                TextButton(onPressed: () => _set({'typeId': _filters['typeId'], 'subCategoryId': _filters['subCategoryId']}, reset: true), child: const Text('Clear')),
             ])),
-            Expanded(child: page.items.isEmpty ? EmptyView(icon: Icons.inventory_2_outlined, title: category?.productCount == 0 ? 'Coming Soon' : 'No matching products', body: 'Try another filter.') : GridView.builder(padding: const EdgeInsets.all(12), gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 230, mainAxisExtent: 350, crossAxisSpacing: 10, mainAxisSpacing: 10), itemCount: page.items.length, itemBuilder: (_, i) => ProductTile(page.items[i]))),
-            Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, children: [TextButton(onPressed: _page <= 1 ? null : () => setState(() { _page--; _load(); }), child: const Text('Previous')), Text('$_page · ${page.total} families'), TextButton(onPressed: !page.hasMore ? null : () => setState(() { _page++; _load(); }), child: const Text('Next'))]),
-          ])),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Container(
+                width: 96,
+                color: AppColors.surface,
+                child: ListView(children: [
+                  _TypeRow(label: 'All', count: category?.productCount ?? 0, selected: !_filters.containsKey('typeId'), art: widget.title, onTap: () => _set({}, reset: true)),
+                  for (final t in types)
+                    _TypeRow(label: '${t['name']}', count: (facet('types').where((f) => f['id'] == t['id']).firstOrNull?['count'] as num?)?.toInt() ?? 0,
+                        selected: t['id'] == _filters['typeId'], art: '${widget.title} ${t['name']}', onTap: () => _set({'typeId': t['id']}, reset: true)),
+                  if (subs.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(AppSpacing.space2, AppSpacing.space3, AppSpacing.space2, AppSpacing.space1),
+                      child: Text('Sub-category', style: theme.textTheme.labelSmall?.copyWith(color: AppColors.outline, fontWeight: FontWeight.w700)),
+                    ),
+                    _SubRow(key: const ValueKey('all-subcategories'), label: 'All', selected: !_filters.containsKey('subCategoryId'), onTap: () => _set({'typeId': _filters['typeId']}, reset: true)),
+                    for (final sub in subs)
+                      _SubRow(label: sub.name, selected: _filters['subCategoryId'] == sub.id, onTap: () => _set({'typeId': _filters['typeId'], 'subCategoryId': sub.id}, reset: true)),
+                  ],
+                ]),
+              ),
+              Expanded(
+                child: page.items.isEmpty
+                    ? EmptyView(icon: Icons.filter_alt_off_outlined, title: category?.productCount == 0 ? 'Coming Soon' : 'Nothing matches these filters', body: 'Try another type or clear a filter.')
+                    : Column(children: [
+                        Expanded(
+                          child: GridView.builder(
+                            padding: const EdgeInsets.all(AppSpacing.space3),
+                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 200, mainAxisExtent: 236, crossAxisSpacing: AppSpacing.space3, mainAxisSpacing: AppSpacing.space3),
+                            itemCount: page.items.length,
+                            itemBuilder: (_, i) => _FamilyCard(page.items[i], categoryName: widget.title),
+                          ),
+                        ),
+                        if (page.total > page.pageSize)
+                          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            IconButton(tooltip: 'Previous page', onPressed: _page <= 1 ? null : () => setState(() { _page--; _load(); }), icon: const Icon(Icons.chevron_left_rounded)),
+                            Text('Page $_page', style: theme.textTheme.labelMedium),
+                            IconButton(tooltip: 'Next page', onPressed: !page.hasMore ? null : () => setState(() { _page++; _load(); }), icon: const Icon(Icons.chevron_right_rounded)),
+                          ]),
+                      ]),
+              ),
+            ]),
+          ),
         ]);
       }),
     );
@@ -189,3 +262,115 @@ class _TypeRow extends StatelessWidget {
       );
 }
 
+/// Sub-category under the types, in the rail's style.
+class _SubRow extends StatelessWidget {
+  const _SubRow({super.key, required this.label, required this.selected, required this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.space2, horizontal: AppSpacing.space2),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.primarySidebarSelected : null,
+            border: Border(left: BorderSide(color: selected ? AppColors.primary : Colors.transparent, width: 3)),
+          ),
+          child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: selected ? AppColors.primary : AppColors.onSurfaceVariant, fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
+        ),
+      );
+}
+
+/// One product family card (all its sizes; for pipes & cables all brands — "CPVC PIPE").
+class _FamilyCard extends StatelessWidget {
+  const _FamilyCard(this.p, {required this.categoryName});
+  final ProductCard p;
+  final String categoryName;
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final many = p.variantCount > 1;
+    final hasImage = p.imageUrl != null && p.imageUrl!.isNotEmpty && !p.imageUrl!.startsWith('/files/mock/');
+    return Material(
+      color: AppColors.surface,
+      borderRadius: AppRadius.mdAll,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => context.push('/product/${p.id}'),
+        child: Container(
+          decoration: BoxDecoration(borderRadius: AppRadius.mdAll, border: Border.all(color: AppColors.divider)),
+          padding: const EdgeInsets.all(AppSpacing.space2),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(
+              child: Stack(children: [
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: AppRadius.smAll,
+                    child: ColoredBox(
+                      color: AppColors.surfaceContainer,
+                      child: hasImage ? NetImage(p.imageUrl, fit: BoxFit.contain, fallbackName: p.name) : CategoryArt(name: '$categoryName ${p.catalog?.typeName ?? ''}', fit: BoxFit.contain),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 4,
+                  bottom: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space2, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: p.inStock ? AppColors.accentGreenContainer : AppColors.surfaceVariant,
+                      borderRadius: AppRadius.smAll,
+                      border: Border.all(color: p.inStock ? AppColors.accentGreen : AppColors.outlineVariant),
+                    ),
+                    child: Column(children: [
+                      Text(p.inStock ? 'ADD' : 'SOLD OUT',
+                          style: theme.textTheme.labelMedium?.copyWith(color: p.inStock ? AppColors.onAccentGreenContainer : AppColors.outline, fontWeight: FontWeight.w800)),
+                      Text(many ? '${p.variantCount} sizes' : '1 product', style: theme.textTheme.labelSmall?.copyWith(fontSize: 9, color: AppColors.onSurfaceVariant)),
+                    ]),
+                  ),
+                ),
+              ]),
+            ),
+            const SizedBox(height: AppSpacing.space2),
+            Text.rich(TextSpan(children: [
+              if (many) TextSpan(text: 'from ', style: theme.textTheme.labelSmall?.copyWith(color: AppColors.outline)),
+              TextSpan(text: money(p.fromPrice ?? p.price), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+              TextSpan(text: ' /${p.unit}', style: theme.textTheme.labelSmall?.copyWith(color: AppColors.outline)),
+            ])),
+            Text(!many && p.discountPercent > 0 ? 'discount ${qty(p.discountPercent.roundToDouble())}%' : ' ',
+                style: theme.textTheme.labelSmall?.copyWith(color: AppColors.success, fontWeight: FontWeight.w600)),
+            Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600)),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _Pill<T> extends StatelessWidget {
+  const _Pill({required this.label, required this.options, required this.onSelected});
+  final String label;
+  final Map<T, String> options;
+  final ValueChanged<T> onSelected;
+  @override
+  Widget build(BuildContext context) => PopupMenuButton<T>(
+        onSelected: onSelected,
+        itemBuilder: (_) => [for (final e in options.entries) PopupMenuItem<T>(value: e.key, child: Text(e.value))],
+        child: Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space3),
+          decoration: BoxDecoration(borderRadius: AppRadius.smAll, border: Border.all(color: AppColors.primary)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 120),
+              child: Text(label, overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(color: AppColors.primary, fontWeight: FontWeight.w600)),
+            ),
+            const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: AppColors.primary),
+          ]),
+        ),
+      );
+}

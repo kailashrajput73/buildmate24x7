@@ -178,7 +178,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Deliver to'), findsOneWidget);
-      expect(find.text('Scan'), findsOneWidget);
+      expect(find.byTooltip('Scan product QR'), findsOneWidget);
       expect(find.byTooltip('My Rewards'), findsOneWidget);
       expect(find.text('Coming soon'), findsOneWidget);
       expect(tester.takeException(), isNull);

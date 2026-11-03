@@ -153,7 +153,8 @@ class ProductTile extends ConsumerWidget {
             ]),
           ),
           const SizedBox(height: 6),
-          Text(p.brandName, style: const TextStyle(fontSize: 11, color: BM.inkFaint, fontWeight: FontWeight.w600)),
+          // A card for every brand of a family ("CPVC PIPE") carries no brand name.
+          if (!p.allBrands) Text(p.brandName, style: const TextStyle(fontSize: 11, color: BM.inkFaint, fontWeight: FontWeight.w600)),
           Text(p.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, height: 1.25)),
           const Spacer(),
           if (p.isFamily) ...[

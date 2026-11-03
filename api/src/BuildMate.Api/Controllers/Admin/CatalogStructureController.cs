@@ -18,9 +18,10 @@ public class CatalogStructureController : AdminControllerBase
     public CatalogStructureController(AppDbContext db, ICurrentUser me) { _db = db; _me = me; }
 
     [HttpGet("types"), Authorize(Policy = Permissions.CatalogView)]
-    public async Task<List<TypeDto>> Types([FromQuery] long? categoryId, CancellationToken ct) => await _db.ProductTypes.AsNoTracking()
-        .Where(t => categoryId == null || t.CategoryId == categoryId).OrderBy(t => t.SortOrder).ThenBy(t => t.Name)
-        .Select(t => new TypeDto(t.Id, t.CategoryId, t.Name, t.SortOrder, t.IsActive, t.SubCategories.Select(s => s.SubCategoryId).ToList())).ToListAsync(ct);
+    public async Task<List<TypeDto>> Types([FromQuery] long? categoryId, CancellationToken ct) => (await CatalogStructure.InStoreOrder(_db.ProductTypes.AsNoTracking()
+        .Where(t => categoryId == null || t.CategoryId == categoryId))
+        .Select(t => new { Type = t, Category = t.Category.Name, Subs = t.SubCategories.Select(s => s.SubCategoryId).ToList() }).ToListAsync(ct))
+        .Select(t => CatalogStructure.ToDto(t.Type, t.Category, t.Subs)).ToList();
 
     [HttpPost("types"), Authorize(Policy = Permissions.CatalogManage)]
     public Task<TypeDto> CreateType(TypeInput body, CancellationToken ct) => SaveType(null, body, ct);
@@ -39,11 +40,52 @@ public class CatalogStructureController : AdminControllerBase
         if (id != null && await _db.Products.AnyAsync(p => p.ProductTypeId == id && (p.CategoryId != body.CategoryId || (p.SubCategoryId != null && !subIds.Contains(p.SubCategoryId.Value))), ct))
             throw new AppException("Existing products use these relationships. Reassign those products before removing a relationship or changing category.");
         row.CategoryId = body.CategoryId; row.Name = name; row.Key = key; row.SortOrder = body.SortOrder; row.IsActive = body.IsActive; row.UpdatedById = _me.Id;
+        row.GroupAcrossBrands = body.GroupAcrossBrands;
+        row.ClassLabel = CatalogStructure.Clean(body.ClassLabel, 40, "Class label");
         foreach (var link in row.SubCategories.Where(s => !subIds.Contains(s.SubCategoryId)).ToList()) row.SubCategories.Remove(link);
         foreach (var sub in subIds.Where(sub => !row.SubCategories.Any(s => s.SubCategoryId == sub))) row.SubCategories.Add(new ProductTypeSubCategory { SubCategoryId = sub });
         if (id == null) _db.ProductTypes.Add(row);
         await _db.SaveChangesAsync(ct);
-        return new(row.Id, row.CategoryId, row.Name, row.SortOrder, row.IsActive, subIds);
+        var categoryName = await _db.Categories.Where(c => c.Id == row.CategoryId).Select(c => c.Name).SingleAsync(ct);
+        return CatalogStructure.ToDto(row, categoryName, subIds);
+    }
+
+    /// <summary>
+    /// Families shown once for all brands ("CPVC PIPE"): one row per Type + family name, with the card photo set here.
+    /// Lists the families products actually use, so the admin picks from real data.
+    /// </summary>
+    [HttpGet("family-cards"), Authorize(Policy = Permissions.CatalogView)]
+    public async Task<List<FamilyCardDto>> FamilyCards([FromQuery] long categoryId, CancellationToken ct)
+    {
+        var allBrandTypes = await CatalogStructure.AllBrandTypeIdsAsync(_db, ct);
+        var families = await _db.Products.AsNoTracking()
+            .Where(p => p.CategoryId == categoryId && p.CatalogFamilyId != null && p.ProductTypeId != null && allBrandTypes.Contains(p.ProductTypeId.Value))
+            .Select(p => new { TypeId = p.ProductTypeId!.Value, TypeName = p.ProductType!.Name, p.CatalogFamily!.Key, p.CatalogFamily.Name, p.BrandId })
+            .Distinct().ToListAsync(ct);
+        var rows = families.GroupBy(f => (f.TypeId, f.TypeName, f.Key))
+            .Select(g => new { g.Key.TypeId, g.Key.TypeName, g.Key.Key, Name = g.Min(f => f.Name)!, Brands = g.Select(f => f.BrandId).Distinct().Count() });
+        var cards = await _db.CatalogFamilyCards.AsNoTracking().Where(c => c.CategoryId == categoryId).ToListAsync(ct);
+        return rows.Select(r => new FamilyCardDto(categoryId, r.TypeId, r.TypeName, r.Key, r.Name, CatalogStructure.CardTitle(r.TypeName, r.Name), r.Brands,
+                cards.FirstOrDefault(c => c.ProductTypeId == r.TypeId && c.Key == r.Key)?.ImageUrl))
+            .OrderBy(r => r.TypeName).ThenBy(r => r.Name).ToList();
+    }
+
+    [HttpPut("family-cards"), Authorize(Policy = Permissions.CatalogManage)]
+    public async Task<FamilyCardDto> SaveFamilyCard(FamilyCardInput body, CancellationToken ct)
+    {
+        var type = await _db.ProductTypes.AsNoTracking().Include(t => t.Category).SingleOrDefaultAsync(t => t.Id == body.TypeId && t.CategoryId == body.CategoryId, ct)
+            ?? throw new AppException("Choose a Type of this category.");
+        var key = CatalogStructure.Key(CatalogStructure.Clean(body.FamilyKey, 200, "Family") ?? throw new AppException("Choose a family."));
+        var names = await _db.Products.AsNoTracking().Where(p => p.CategoryId == body.CategoryId && p.ProductTypeId == body.TypeId && p.CatalogFamily!.Key == key)
+            .Select(p => new { p.BrandId, p.CatalogFamily!.Name }).Distinct().ToListAsync(ct);
+        if (names.Count == 0) throw new AppException("No product of this Type uses this family yet.");
+        var image = CatalogStructure.ImageUrl(body.ImageUrl);
+        var row = await _db.CatalogFamilyCards.SingleOrDefaultAsync(c => c.CategoryId == body.CategoryId && c.ProductTypeId == body.TypeId && c.Key == key, ct);
+        if (row == null) { row = new CatalogFamilyCard { CategoryId = body.CategoryId, ProductTypeId = body.TypeId, Key = key, CreatedById = _me.Id }; _db.CatalogFamilyCards.Add(row); }
+        row.ImageUrl = image; row.UpdatedById = _me.Id;
+        await _db.SaveChangesAsync(ct);
+        var name = names.Select(n => n.Name).Min()!;
+        return new(body.CategoryId, type.Id, type.Name, key, name, CatalogStructure.CardTitle(type.Name, name), names.Select(n => n.BrandId).Distinct().Count(), row.ImageUrl);
     }
 
     [HttpGet("families"), Authorize(Policy = Permissions.CatalogView)]
