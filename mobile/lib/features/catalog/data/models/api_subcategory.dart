@@ -1,4 +1,4 @@
-/// Row from `GET /api/subcategories` (material: UPVC, CPVC, PVC, …).
+/// Subcategory reference nested in an ASP.NET category/type response.
 class ApiSubCategory {
   const ApiSubCategory({
     required this.id,

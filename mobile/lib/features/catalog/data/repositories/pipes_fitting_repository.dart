@@ -3,8 +3,8 @@ import '../../domain/models/pipes_fitting_catalog_models.dart';
 import '../mappers/catalog_api_mapper.dart';
 import 'catalog_repository.dart';
 
-/// Loads the "Pipes & Fitting" catalog from the live API
-/// (`http://…/api/catalog`), not from local mock assets.
+/// Loads the "Pipes & Fitting" catalogue from the live ASP.NET API,
+/// not from local mock assets.
 class PipesFittingRepository {
   PipesFittingRepository({CatalogRepository? catalogRepository})
       : _catalogRepository = catalogRepository ?? CatalogRepository();

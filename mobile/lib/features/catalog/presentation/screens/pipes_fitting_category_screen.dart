@@ -23,7 +23,7 @@ import '../widgets/pipes_filter_panel.dart';
 /// lets the shopper pick a server-provided pipe type and sub-category
 /// (Pipe/Fitting/Tubing), and the product grid on the right updates in
 /// place — no new page is opened. Data is loaded live from
-/// `GET /api/catalog` and polled for near-real-time updates.
+/// The ASP.NET catalogue API and polled for near-real-time updates.
 class PipesFittingCategoryScreen extends StatefulWidget {
   const PipesFittingCategoryScreen({
     super.key,

@@ -4,19 +4,13 @@ import '../../domain/models/pipes_fitting_catalog_models.dart';
 import '../mock/upvc_pipe_matrix_data.dart';
 import '../pipe_schedule_util.dart';
 import '../models/api_catalog_product.dart';
-import '../models/api_subcategory.dart';
 
-/// Maps dashboard backend catalog JSON into existing Flutter UI models.
+/// Maps ASP.NET catalogue DTOs into the existing Flutter UI models.
 abstract final class CatalogApiMapper {
   /// Display name used in the app for the pipes category.
   static const String pipesCategoryName = 'PIPES & FITTING';
 
-  /// Query value accepted by `GET /api/catalog?category=...`.
-  static const String pipesCategoryQuery = 'PIPES & FITTING';
-
   static const String electricalCategoryName = 'ELECTRICALS';
-
-  static const String electricalCategoryQuery = 'Electricals';
 
   static bool isPipesCategory(String category) {
     final normalized = category
@@ -38,39 +32,11 @@ abstract final class CatalogApiMapper {
     return normalized.contains('electr');
   }
 
-  /// Category query strings to try before falling back to unfiltered `GET /catalog`.
-  static List<String> catalogQueryCandidates(List<Category> categories) {
-    final seen = <String>{};
-    final queries = <String>[];
-
-    void add(String? value) {
-      final trimmed = value?.trim() ?? '';
-      if (trimmed.isEmpty) return;
-      final key = trimmed.toLowerCase();
-      if (!seen.add(key)) return;
-      queries.add(trimmed);
-    }
-
-    for (final category in categories) {
-      final name = category.name;
-      if (isPipesCategory(name) || isElectricalCategory(name)) {
-        add(name);
-      }
-    }
-
-    add(pipesCategoryQuery);
-    add('Pipes & Fittings');
-    add('Plumbing Pipes & Fittings');
-    add(electricalCategoryQuery);
-    add(electricalCategoryName);
-    add('Electrical');
-    return queries;
-  }
-
-  /// Maps `GET /api/categories` row → domain [Category].
+  /// Maps a `GET /api/catalog/categories` CategoryTree DTO.
   static Category categoryFromJson(Map<String, dynamic> json) {
     final name = json['name']?.toString().trim() ?? '';
     final productCount = _toInt(json['productCount']) ?? 0;
+    final subCategories = json['subCategories'] ?? json['subcategories'];
     return Category(
       id: json['id']?.toString() ?? '',
       name: name,
@@ -81,6 +47,13 @@ abstract final class CatalogApiMapper {
       imageAsset: _categoryImageAsset(name),
       imageUrl: _validImageUrl(json['imageUrl']?.toString()),
       description: '',
+      subCategoryIds: subCategories is List
+          ? subCategories
+              .whereType<Map>()
+              .map((sub) => sub['id']?.toString() ?? '')
+              .where((id) => id.isNotEmpty)
+              .toList()
+          : const [],
     );
   }
 
@@ -154,7 +127,7 @@ abstract final class CatalogApiMapper {
   /// Resolves backend image paths (including relative `/uploads/...`) to absolute URLs.
   static String? resolveImageUrl(String? url) => _validImageUrl(url);
 
-  /// Maps sidebar type labels (UPVC, CPVC, PVC) from `GET /api/subcategories`.
+  /// Maps sidebar type labels (UPVC, CPVC, PVC) from the Type DTO name.
   static String? materialTypeKeyFromName(String name) {
     final normalized = name.trim().toUpperCase();
     if (normalized.isEmpty) return null;
@@ -166,55 +139,6 @@ abstract final class CatalogApiMapper {
       return 'PVC';
     }
     return null;
-  }
-
-  /// Type tile images from `GET /api/catalog/tree` (UPVC / CPVC / PVC `imageUrl`).
-  static Map<String, String> materialImagesFromCatalogTree(
-    Map<String, dynamic> treeEnvelope,
-  ) {
-    final map = <String, String>{};
-    final root = treeEnvelope['data'] ?? treeEnvelope;
-    if (root is! Map<String, dynamic>) return map;
-
-    final categories = root['categories'];
-    if (categories is! List) return map;
-
-    for (final entry in categories) {
-      if (entry is! Map<String, dynamic>) continue;
-      final categoryName = entry['name']?.toString() ?? '';
-      if (!isPipesCategory(categoryName)) continue;
-
-      final types = entry['types'];
-      if (types is! List) continue;
-      for (final typeEntry in types) {
-        if (typeEntry is! Map<String, dynamic>) continue;
-        final typeName = typeEntry['name']?.toString().trim() ?? '';
-        if (typeName.isEmpty) continue;
-        final url = resolveImageUrl(
-          typeEntry['imageUrl']?.toString() ?? typeEntry['image_url']?.toString(),
-        );
-        if (url == null) continue;
-        map[_pipeMaterialKey(typeName)] = url;
-      }
-    }
-    return map;
-  }
-
-  /// Maps sub-category names (UPVC, CPVC, PVC, PVC SWR, …) to server image URLs.
-  static Map<String, String> materialImagesFromSubcategories(
-    List<ApiSubCategory> subcategories,
-  ) {
-    final map = <String, String>{};
-    for (final sub in subcategories) {
-      final url = resolveImageUrl(sub.imageUrl);
-      if (url == null) continue;
-      final material = materialTypeKeyFromName(sub.name);
-      if (material != null) {
-        map[_pipeMaterialKey(material)] = url;
-      }
-      map[_pipeMaterialKey(sub.name)] = url;
-    }
-    return map;
   }
 
   /// Server image for the **Type** sidebar row (UPVC / CPVC / PVC).
@@ -376,7 +300,11 @@ abstract final class CatalogApiMapper {
       mrp: mrp,
       selling: selling,
     );
-    final stockStatus = stockStatusFromQuantity(item.stock);
+    final stockStatus = item.inStock == null
+        ? stockStatusFromQuantity(item.stock)
+        : item.inStock!
+            ? StockStatus.inStock
+            : StockStatus.outOfStock;
     final sizeLabel = _sizeLabel(item);
     final productGroup = item.productGroup?.trim();
     final displayName = _displayName(item);
@@ -405,6 +333,7 @@ abstract final class CatalogApiMapper {
       reviewCount: 0,
       stockStatus: stockStatus,
       specifications: {
+        ...item.specs,
         if (item.productCode != null) 'SKU': item.productCode!,
         if (sizeLabel != null && sizeLabel.isNotEmpty) 'Size': sizeLabel,
         if (item.length != null) 'Length': item.length!,
