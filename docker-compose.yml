@@ -25,6 +25,9 @@ services:
       Cashfree__ClientSecret: ${CASHFREE_CLIENT_SECRET}
       Cashfree__WebReturnUrl: ${SITE_URL}/checkout/return?order={orderId}
       Cashfree__NotifyUrl: ${PUBLIC_API_URL}/api/payments/cashfree/webhook
+      # Encrypts the Cashfree keys saved in Dashboard › Store settings (server-only secret, see docs/CASHFREE_CONFIGURATION.md).
+      PaymentEncryption__ActiveKeyId: ${PAYMENT_ENCRYPTION_KEY_ID:-k1}
+      PaymentEncryption__Keys__k1: ${PAYMENT_ENCRYPTION_KEY_K1}
       Firebase__ProjectId: ${FIREBASE_PROJECT_ID:-buildmate24x7}
       Sms__Provider: ${SMS_PROVIDER:-Log}
       Sms__Msg91AuthKey: ${MSG91_AUTH_KEY}

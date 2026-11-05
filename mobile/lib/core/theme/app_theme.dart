@@ -6,7 +6,7 @@ import 'app_radius.dart';
 import 'app_spacing.dart';
 import 'app_typography.dart';
 
-/// Material 3 [ThemeData] for Shivani Constructions.
+/// Material 3 [ThemeData] for BuildMate 24x7.
 ///
 /// All component themes consume [AppColors], [AppTypography], [AppRadius],
 /// [AppSpacing], and [AppElevation] — do not duplicate those values here.

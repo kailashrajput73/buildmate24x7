@@ -54,5 +54,5 @@ public sealed class PaymentSecrets(IConfiguration configuration)
         catch (FormatException) { throw Unavailable(); }
     }
 
-    private static AppException Unavailable() => new("Payment credential encryption is unavailable. Configure the server encryption key ring.", 503, "payment_encryption_unavailable");
+    private static AppException Unavailable() => new("Payment credential encryption is unavailable. On the API server set PaymentEncryption__ActiveKeyId=k1 and PaymentEncryption__Keys__k1 (a base64 32-byte key, e.g. from: openssl rand -base64 32), then restart the API.", 503, "payment_encryption_unavailable");
 }

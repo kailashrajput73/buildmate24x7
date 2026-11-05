@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Shivani Constructions color tokens — single source of truth.
+/// BuildMate 24x7 color tokens — single source of truth.
 ///
 /// Do not introduce arbitrary colors in widgets. Use these tokens
 /// (or [ThemeData.colorScheme] derived from them) instead.

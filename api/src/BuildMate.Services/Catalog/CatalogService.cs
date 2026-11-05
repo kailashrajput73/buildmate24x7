@@ -103,29 +103,31 @@ public class CatalogService : ICatalogService
         }).ToList();
     }
 
+    private static string Like(string word) => $"%{word.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_")}%";
+
+    /// <summary>Search tiers for one word, tried in order until one finds something: 0 = what the product is (its name,
+    /// code, size family, catalogue family, sub-category, class, size); 1 = also its type and brand; 2 = also its other
+    /// names (aliases, translations); 3 = also the category name and specs. "pipe" therefore finds pipes only, not every
+    /// fitting of the "Pipe &amp; Fitting" category, of a "… Pipes" brand or with a "garam pani pipe" alias.</summary>
+    private const int LastSearchTier = 3;
+
+    private static IQueryable<Product> Matches(IQueryable<Product> q, string like, int tier) =>
+        q.Where(p => EF.Functions.ILike(p.Name, like) || EF.Functions.ILike(p.Code, like)
+                     || (p.VariantFamily != null && EF.Functions.ILike(p.VariantFamily, like))
+                     || (p.CatalogFamily != null && EF.Functions.ILike(p.CatalogFamily.Name, like))
+                     || (p.SubCategory != null && EF.Functions.ILike(p.SubCategory.Name, like))
+                     || (p.ProductClass != null && EF.Functions.ILike(p.ProductClass, like))
+                     || (p.Size != null && EF.Functions.ILike(p.Size, like))
+                     || (tier >= 1 && ((p.ProductType != null && EF.Functions.ILike(p.ProductType.Name, like))
+                                       || EF.Functions.ILike(p.Brand.Name, like)))
+                     || (tier >= 2 && (p.Aliases.Any(a => EF.Functions.ILike(a.Alias, like))
+                                       || p.Translations.Any(t => EF.Functions.ILike(t.Name, like))))
+                     || (tier >= 3 && (EF.Functions.ILike(p.Category.Name, like)
+                                       || p.Specs.Any(s => EF.Functions.ILike(s, like)))));
+
     public async Task<PagedResult<ProductCardDto>> SearchAsync(CatalogQuery q, Viewer v, CancellationToken ct = default)
     {
         var query = CatalogStructure.Filter(Visible(v), q.TypeId, q.Class, q.FamilyId, q.Size, q.Length);
-        if (!string.IsNullOrWhiteSpace(q.Q))
-        {
-            var full = q.Q.Trim();
-            // Exact code / barcode wins outright; otherwise every word must match somewhere,
-            // so "coupler 25" finds "King CPVC Coupler SDR 11 – 25 mm (1")".
-            if (await query.AnyAsync(p => p.Code == full.ToUpper() || p.Barcode == full, ct))
-                query = query.Where(p => p.Code == full.ToUpper() || p.Barcode == full);
-            else
-                foreach (var word in PipeOptions.NormalizeSearch(full).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(6))
-                {
-                    var like = $"%{word.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_")}%";
-                    query = query.Where(p => EF.Functions.ILike(p.Name, like) || EF.Functions.ILike(p.Code, like)
-                                             || EF.Functions.ILike(p.Brand.Name, like)
-                                             || EF.Functions.ILike(p.Category.Name, like)
-                                             || (p.SubCategory != null && EF.Functions.ILike(p.SubCategory.Name, like))
-                                             || p.Specs.Any(s => EF.Functions.ILike(s, like))
-                                             || p.Aliases.Any(a => EF.Functions.ILike(a.Alias, like))
-                                             || p.Translations.Any(t => EF.Functions.ILike(t.Name, like)));
-                }
-        }
         if (q.CategoryId != null) query = query.Where(p => p.CategoryId == q.CategoryId);
         if (q.SubCategoryId != null) query = query.Where(p => p.SubCategoryId == q.SubCategoryId);
         if (q.BrandId != null) query = query.Where(p => p.BrandId == q.BrandId);
@@ -133,6 +135,27 @@ public class CatalogService : ICatalogService
         if (q.InStock == true) query = query.Where(p => p.StockQty - p.ReservedQty > 0);
         if (q.Discounted == true)
             query = v.Kind == CustomerKind.Partner ? query.Where(p => p.PartnerDiscountPercent > 0) : query.Where(p => p.RetailDiscountPercent > 0);
+        string? fullLike = null;
+        if (!string.IsNullOrWhiteSpace(q.Q))
+        {
+            var full = q.Q.Trim();
+            fullLike = Like(full);
+            // Exact code / barcode wins outright. Otherwise every word must match (see Matches for the field order).
+            if (await query.AnyAsync(p => p.Code == full.ToUpper() || p.Barcode == full, ct))
+                query = query.Where(p => p.Code == full.ToUpper() || p.Barcode == full);
+            else
+            {
+                // Each word narrows the list in turn, using the closest fields that match it: "astral pipe" = Astral
+                // products (brand) whose own name or sub-category says pipe.
+                var words = PipeOptions.NormalizeSearch(full).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(6).Select(Like).ToList();
+                foreach (var like in words)
+                    for (var tier = 0; tier <= LastSearchTier; tier++)
+                    {
+                        var found = Matches(query, like, tier);
+                        if (tier == LastSearchTier || await found.AnyAsync(ct)) { query = found; break; }
+                    }
+            }
+        }
         var familyPool = query;
         var allBrandTypes = q.Collapse == true ? await CatalogStructure.AllBrandTypeIdsAsync(_db, ct) : new List<long>();
         if (q.Collapse == true) query = FirstOfEachFamily(query, allBrandTypes);
@@ -148,6 +171,8 @@ public class CatalogService : ICatalogService
                 : query.OrderByDescending(p => p.ListPrice * (100 - p.RetailDiscountPercent)),
             "newest" => query.OrderByDescending(p => p.Id),
             "name" => query.OrderBy(p => p.Name),
+            // Searching: products whose name has the whole search text come first.
+            _ when fullLike != null => query.OrderBy(p => EF.Functions.ILike(p.Name, fullLike) ? 0 : 1).ThenBy(p => p.Sequence).ThenBy(p => p.Name),
             _ => query.OrderBy(p => p.Sequence).ThenBy(p => p.Name)
         };
 

@@ -539,8 +539,30 @@ function search(q, v) {
   let rows = visible(v)
   if (q.q) {
     // every word must match somewhere (name, code, brand, alias or translation), so "coupler 25" finds "… Coupler SDR 11 – 25 mm"
-    const terms = q.q.toLowerCase().split(/\s+/).filter(Boolean)
-    rows = rows.filter((p) => { const hay = [p.name, p.code, brName(p.brandId), ...p.aliases, ...Object.values(p.translations)].join(' ').toLowerCase(); return terms.every((t) => hay.includes(t)) })
+    // Same rules as CatalogService.SearchAsync: the product's own fields first; category name and specs only if nothing matched.
+    const full = q.q.trim().toLowerCase()
+    const terms = full.replace(/(?<=\d)(?=[a-z])|(?<=[a-z])(?=\d)/g, ' ').split(/\s+/).filter(Boolean)
+    const typeName = (p) => typeOf(p)?.name
+    // Per word, the closest fields first: what the product is; then type and brand; then aliases; then category and specs.
+    const tiers = [
+      (p) => [p.name, p.code, p.variantFamily, p.familyName, subName(p.subCategoryId), p.productClass, p.size],
+      (p) => [typeName(p), brName(p.brandId)],
+      (p) => [...p.aliases, ...Object.values(p.translations)],
+      (p) => [catName(p.categoryId), ...(p.specs ?? [])],
+    ]
+    const hay = (p, tier) => tiers.slice(0, tier + 1).flatMap((f) => f(p)).filter(Boolean).join(' ').toLowerCase()
+    const exact = rows.filter((p) => p.code.toLowerCase() === full || (p.barcode ?? '') === q.q.trim())
+    let found = exact
+    if (!found.length) {
+      found = rows
+      for (const t of terms) {
+        for (let tier = 0; tier < tiers.length; tier++) {
+          const hit = found.filter((p) => hay(p, tier).includes(t))
+          if (hit.length || tier === tiers.length - 1) { found = hit; break }
+        }
+      }
+    }
+    rows = found
   }
   if (q.categoryId) rows = rows.filter((p) => p.categoryId == q.categoryId)
   if (q.subCategoryId) rows = rows.filter((p) => p.subCategoryId == q.subCategoryId)
@@ -553,7 +575,7 @@ function search(q, v) {
   if (q.inStock === 'true') rows = rows.filter((p) => avail(p) > 0)
   if (q.discounted === 'true' || q.discounted === true) rows = rows.filter((p) => (v.kind === 'Partner' ? p.partnerDiscountPercent : p.retailDiscountPercent) >= 10)
   const pr = (p) => price(p, v.kind === 'Partner' ? p.partnerDiscountPercent : p.retailDiscountPercent)
-  rows = [...rows].sort(q.sort === 'price_asc' ? (a, b) => pr(a) - pr(b) : q.sort === 'price_desc' ? (a, b) => pr(b) - pr(a) : q.sort === 'newest' ? (a, b) => b.id - a.id : q.sort === 'name' ? (a, b) => a.name.localeCompare(b.name) : (a, b) => a.sequence - b.sequence)
+  rows = [...rows].sort(q.sort === 'price_asc' ? (a, b) => pr(a) - pr(b) : q.sort === 'price_desc' ? (a, b) => pr(b) - pr(a) : q.sort === 'newest' ? (a, b) => b.id - a.id : q.sort === 'name' ? (a, b) => a.name.localeCompare(b.name) : q.q ? (a, b) => (b.name.toLowerCase().includes(q.q.trim().toLowerCase()) - a.name.toLowerCase().includes(q.q.trim().toLowerCase())) || a.sequence - b.sequence : (a, b) => a.sequence - b.sequence)
   const pool = rows
   if (q.collapse === 'true') rows = firstOfEachFamily(rows)
   const res = page(rows.map((p) => card(p, v)), { page: q.page, pageSize: q.pageSize ?? 24 })

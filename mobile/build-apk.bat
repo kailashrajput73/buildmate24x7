@@ -17,7 +17,7 @@ if "%ANDROID_HOME%"=="" set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
 set "ANDROID_SDK_ROOT=%ANDROID_HOME%"
 if exist "C:\Program Files\Android\Android Studio\jbr\bin\java.exe" set "JAVA_HOME=C:\Program Files\Android\Android Studio\jbr"
 set "PATH=%JAVA_HOME%\bin;%PATH%"
-echo API_URL will be set below > apk-build-log.txt
+echo BuildMate APK build log > apk-build-log.txt
 echo ANDROID_HOME=%ANDROID_HOME% >> apk-build-log.txt
 echo JAVA_HOME=%JAVA_HOME% >> apk-build-log.txt
 set "SDKM=%ANDROID_HOME%\cmdline-tools\latest\bin\sdkmanager.bat"
@@ -61,51 +61,19 @@ if "%IP%"=="" set "IP=127.0.0.1"
 
 echo.
 echo  Building BuildMate APK
-echo  API address baked into the app: (see below)
 echo  This takes 5-10 minutes the first time. Please leave this window open.
 echo.
 
-set "API_URL=http://%IP%:5080"
-rem PRODUCTION build: put the live API address (https://...) in production-api-url.txt next to this file.
-rem Then the app talks to the VPS backend and uses Firebase SMS login only - never the demo OTP.
-set "PROD="
-if exist "production-api-url.txt" set /p API_URL=<"production-api-url.txt"
-if exist "production-api-url.txt" set "PROD=1"
-echo API_URL=%API_URL% >> apk-build-log.txt
-
-rem Login mode: real SMS through Firebase when android\app\google-services.json is present AND issued for this
-rem app's package (com.buildmate.customerapp); otherwise the demo OTP (code 123456, no SMS) so the build still works.
-set "AUTH_MODE=otp"
-set "PKG=com.buildmate.customerapp"
-if exist "android\app\google-services.json" findstr /c:"\"%PKG%\"" "android\app\google-services.json" >nul && set "AUTH_MODE=firebase"
-if exist "android\app\google-services.json" if "%AUTH_MODE%"=="otp" echo WARNING: google-services.json is not for %PKG% - using demo OTP >> apk-build-log.txt
-if exist "android\app\google-services.json" if "%AUTH_MODE%"=="otp" move /y "android\app\google-services.json" "android\app\google-services.json.wrong-package" >nul
-if defined PROD if not "%AUTH_MODE%"=="firebase" (
-  echo PRODUCTION build stopped: android\app\google-services.json for %PKG% is missing. >> apk-build-log.txt
-  echo.
-  echo  PRODUCTION build stopped: put google-services.json for %PKG% in android\app\ first. See FIREBASE_SETUP.md.
-  echo.
-  pause
-  exit /b 1
-)
-echo AUTH_MODE=%AUTH_MODE% >> apk-build-log.txt
-echo  API: %API_URL%
-echo  Login mode: %AUTH_MODE%
+rem The app uses its own built-in server address (lib/core/network/api_config.dart). No Firebase.
+echo Build without Firebase >> apk-build-log.txt
 call "%FLUTTER%" --version >> apk-build-log.txt 2>&1
 call "%FLUTTER%" pub get >> apk-build-log.txt 2>&1
 if exist "android\gradlew.bat" (pushd android & call gradlew.bat --stop >> ..\apk-build-log.txt 2>&1 & popd)
-call "%FLUTTER%" build apk --release "--dart-define=API_URL=%API_URL%" "--dart-define=AUTH_MODE=%AUTH_MODE%" >> apk-build-log.txt 2>&1
+call "%FLUTTER%" analyze --no-fatal-infos --no-fatal-warnings > flutter-analyze.txt 2>&1
+echo ANALYZE_EXIT=%ERRORLEVEL% >> apk-build-log.txt
+call "%FLUTTER%" build apk --release >> apk-build-log.txt 2>&1
 set "RC=%ERRORLEVEL%"
 echo EXIT=%RC% >> apk-build-log.txt
-
-rem SHA-1 / SHA-256 of the signing key - add both in Firebase Console > Project settings > Your apps > Android.
-rem Release key (android\key.properties) when present; the passwords are read locally and never written out.
-if exist "android\key.properties" powershell -NoProfile -Command "$p=@{}; Get-Content 'android\key.properties' | ForEach-Object { if($_ -match '^\s*([^=#]+?)\s*=\s*(.*)$'){ $p[$matches[1]]=$matches[2] } }; $ks=$p['storeFile']; if(-not [IO.Path]::IsPathRooted($ks)){ $ks=Join-Path 'android\app' $ks }; & (Join-Path $env:JAVA_HOME 'bin\keytool.exe') -list -v -keystore $ks -alias $p['keyAlias'] -storepass $p['storePassword'] 2>$null | Select-String 'SHA1:','SHA256:' | ForEach-Object { $_.Line.Trim() } | Set-Content firebase-sha.txt"
-if exist "android\key.properties" echo  SHA fingerprints of the release key saved to firebase-sha.txt
-if not exist "android\key.properties" if exist "%USERPROFILE%\.android\debug.keystore" (
-  "%JAVA_HOME%\bin\keytool.exe" -list -v -keystore "%USERPROFILE%\.android\debug.keystore" -alias androiddebugkey -storepass android -keypass android 2>nul | findstr /r /c:"SHA1:" /c:"SHA256:" > firebase-sha.txt
-  echo  SHA fingerprints for Firebase saved to firebase-sha.txt
-)
 
 if exist "build\app\outputs\flutter-apk\app-release.apk" (
   echo  DONE. The APK is here:

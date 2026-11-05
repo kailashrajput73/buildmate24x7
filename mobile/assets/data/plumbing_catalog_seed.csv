@@ -1,0 +1,63 @@
+product_id,sku,name,main_category,sub_category,price_inr,material,size,attributes
+PROD-1001,UPVC-PIP-050-C3,UPVC Pipe - 1.5 Inch (50mm),Pipes & Tubing,UPVC,450,UPVC,50mm,"Class 3 (6 kg/cm2), 6m length"
+PROD-1002,UPVC-PIP-063-C3,UPVC Pipe - 2 Inch (63mm),Pipes & Tubing,UPVC,580,UPVC,63mm,"Class 3 (6 kg/cm2), 6m length"
+PROD-1003,UPVC-PIP-110-C4,UPVC Pipe - 4 Inch (110mm),Pipes & Tubing,UPVC,1150,UPVC,110mm,"Class 4 (10 kg/cm2), 6m length"
+PROD-1004,CPVC-PIP-015-SDR11,CPVC Pipe - 1/2 Inch (15mm),Pipes & Tubing,CPVC,180,CPVC,15mm,"SDR 11, 3m length"
+PROD-1005,CPVC-PIP-025-SDR11,CPVC Pipe - 1 Inch (25mm),Pipes & Tubing,CPVC,320,CPVC,25mm,"SDR 11, 3m length"
+PROD-1006,CPVC-PIP-050-SDR11,CPVC Pipe - 1.5 Inch (50mm),Pipes & Tubing,CPVC,650,CPVC,50mm,"SDR 11, 3m length"
+PROD-1007,PVC-SWR-075-T1,SWR Drainage Pipe - 3 Inch (75mm),Pipes & Tubing,PVC SWR,520,PVC,75mm,"Type A (Low Pressure), 3m length"
+PROD-1008,PVC-SWR-110-T1,SWR Drainage Pipe - 4 Inch (110mm),Pipes & Tubing,PVC SWR,780,PVC,110mm,"Type A (Low Pressure), 3m length"
+PROD-1009,HDPE-PIP-090-PN10,HDPE Pipe - 90mm,Pipes & Tubing,HDPE,1400,HDPE,90mm,"PN10, 6m Coil"
+PROD-1010,HDPE-PIP-110-PN12,HDPE Pipe - 110mm,Pipes & Tubing,HDPE,1800,HDPE,110mm,"PN12, 6m Coil"
+PROD-2001,UPVC-ELB-90-050,UPVC 90° Elbow - 50mm,Fittings,Directional,45,UPVC,50mm,Socket Connection
+PROD-2002,UPVC-ELB-45-050,UPVC 45° Elbow - 50mm,Fittings,Directional,48,UPVC,50mm,Socket Connection
+PROD-2003,UPVC-TEE-050,UPVC Equal Tee - 50mm,Fittings,Directional,65,UPVC,50mm,Socket Connection
+PROD-2004,UPVC-RED-063-050,UPVC Reducer - 63mm x 50mm,Fittings,Connectors,55,UPVC,63mm x 50mm,Socket Connection
+PROD-2005,UPVC-COU-050,UPVC Coupler - 50mm,Fittings,Connectors,35,UPVC,50mm,Socket Connection
+PROD-2006,UPVC-MTA-050,UPVC Male Threaded Adaptor (MTA) - 50mm,Fittings,Transitions,42,UPVC/Brass,50mm,Threaded Male
+PROD-2007,CPVC-ELB-90-015,CPVC 90° Elbow - 15mm,Fittings,Directional,15,CPVC,15mm,Socket Connection
+PROD-2008,CPVC-TEE-015,CPVC Equal Tee - 15mm,Fittings,Directional,22,CPVC,15mm,Socket Connection
+PROD-2009,CPVC-FTA-015,CPVC Female Threaded Adaptor (FTA) - 15mm,Fittings,Transitions,85,CPVC/Brass,15mm,Brass Thread Female
+PROD-2010,SWR-BEN-875-110,SWR Bend 87.5° - 110mm,Fittings,Directional,120,PVC,110mm,With Rubber Ring
+PROD-2011,SWR-TEE-110,SWR Single Tee - 110mm,Fittings,Directional,180,PVC,110mm,With Rubber Ring
+PROD-2012,SWR-YBR-110,SWR Y-Branch - 110mm,Fittings,Directional,240,PVC,110mm,With Rubber Ring
+PROD-3001,VAL-BAL-UPVC-050,UPVC Ball Valve - 50mm,Valves & Controls,Ball Valves,250,UPVC,50mm,Socket End
+PROD-3002,VAL-BAL-BRS-025,Brass Ball Valve - 1 Inch,Valves & Controls,Ball Valves,420,Brass,1 Inch,"Heavy Duty, PN16"
+PROD-3003,VAL-GAT-BRS-050,Brass Gate Valve - 2 Inch,Valves & Controls,Gate Valves,1150,Brass,2 Inch,Wheel Handle
+PROD-3004,VAL-CHK-UPVC-050,UPVC Non-Return Check Valve - 50mm,Valves & Controls,Check Valves,380,UPVC,50mm,Flap Type
+PROD-3005,VAL-CHK-BRS-025,Brass Spring Check Valve - 1 Inch,Valves & Controls,Check Valves,550,Brass,1 Inch,Vertical Mount
+PROD-3006,VAL-FLT-PVC-025,PVC Float Valve - 1 Inch,Valves & Controls,Float Valves,150,PVC,1 Inch,For Water Tanks
+PROD-3007,VAL-FLT-BRS-025,Brass Float Valve with Copper Ball - 1 Inch,Valves & Controls,Float Valves,650,Brass/Copper,1 Inch,Heavy Duty
+PROD-3008,VAL-BFY-CI-110,Cast Iron Butterfly Valve - 110mm,Valves & Controls,Butterfly Valves,2800,Cast Iron,110mm,"Wafer Type, Gear Operated"
+PROD-4001,SAN-WC-WH-WHT,Wall-Hung Water Closet (White),Sanitary Wares,Water Closets,4500,Ceramic,Standard,"P-Trap, Soft Close Seat"
+PROD-4002,SAN-WC-FM-WHT,Floor-Mounted 1-Piece Water Closet,Sanitary Wares,Water Closets,6200,Ceramic,Standard,"S-Trap, Dual Flush"
+PROD-4003,SAN-WB-CT-WHT,Countertop Wash Basin (Round),Sanitary Wares,Wash Basins,2100,Ceramic,16x16 Inch,No Tap Hole
+PROD-4004,SAN-WB-WH-WHT,Wall-Hung Wash Basin,Sanitary Wares,Wash Basins,1500,Ceramic,18x12 Inch,Single Tap Hole
+PROD-4005,SAN-WB-PD-WHT,Full Pedestal for Wash Basin,Sanitary Wares,Wash Basins,850,Ceramic,Standard,Matches Wall-Hung Basin
+PROD-4006,SAN-UR-FH-WHT,Flat Back Urinal,Sanitary Wares,Urinals,1800,Ceramic,Standard,Top Inlet
+PROD-4007,SAN-CIS-CC-WHT,Concealed Cistern (Flush Tank),Sanitary Wares,Cisterns,3200,HDPE/Plastic,Standard,"Dual Flush, Pneumatic"
+PROD-4008,SAN-FP-CHR,Dual Flush Push Plate - Chrome,Sanitary Wares,Accessories,950,ABS Plastic,Standard,Chrome Finish
+PROD-5001,CP-MIX-BSN-CHR,Single Lever Basin Mixer,CP Fittings,Faucets,2800,Brass,Standard,"Chrome Finish, 60cm Hose"
+PROD-5002,CP-TAP-PIL-CHR,Pillar Cock (Basin Tap),CP Fittings,Faucets,1200,Brass,1/2 Inch,"Chrome Finish, Quarter Turn"
+PROD-5003,CP-TAP-BIB-CHR,Bib Cock with Wall Flange,CP Fittings,Faucets,850,Brass,1/2 Inch,"Chrome Finish, Foam Flow"
+PROD-5004,CP-DIV-CON-CHR,Concealed Shower Diverter Body,CP Fittings,Concealed Parts,3500,Brass,Standard,High Flow
+PROD-5005,CP-SHW-OH-CHR,Overhead Rain Shower - 8x8 Inch,CP Fittings,Showers,1400,SS 304,8x8 Inch,"Ultra Thin, Silicone Nozzles"
+PROD-5006,CP-SHW-ARM-CHR,Shower Arm with Flange - 15 Inch,CP Fittings,Showers,450,Brass,15 Inch,Wall Mounted
+PROD-5007,CP-HF-SET-CHR,Health Faucet Set (Jet Spray),CP Fittings,Showers,750,ABS/Brass,1 Meter Hose,Includes Hook & Hose
+PROD-5008,CP-ANG-VAL-CHR,Angle Valve (Stop Cock),CP Fittings,Valves,420,Brass,1/2 Inch,"Quarter Turn, Wall Flange"
+PROD-6001,DRN-FLR-SS-5X5,SS Floor Drain Grating - 5x5 Inch,Drainage & Accessories,Floor Drains,180,SS 304,5x5 Inch,Hinged Cover
+PROD-6002,DRN-FLR-AF-5X5,Anti-Foul Floor Drain (Cockroach Trap),Drainage & Accessories,Floor Drains,320,SS 304,5x5 Inch,Water Seal Trap
+PROD-6003,DRN-TRP-BOT-CP,Bottle Trap for Wash Basin,Drainage & Accessories,Traps,850,Brass,32mm,"Chrome Plated, 12 Inch Pipe"
+PROD-6004,DRN-TRP-PTR-PVC,PVC P-Trap for Water Closet,Drainage & Accessories,Traps,450,PVC,110mm,With Cleansing Eye
+PROD-6005,DRN-COV-MHC-450,Manhole Cover with Frame,Drainage & Accessories,Covers,1500,FRP,450x450mm,Light Duty (2.5 Ton)
+PROD-6006,DRN-WASTE-CP,Pop-up Waste Coupling,Drainage & Accessories,Accessories,380,Brass,32mm,Chrome Plated
+PROD-6007,DRN-PIPE-PVC-040,Flexible Waste Pipe for Sink,Drainage & Accessories,Pipes,90,PVC,40mm,Expandable
+PROD-6008,DRN-CHN-SS-600,Linear Shower Channel Drain,Drainage & Accessories,Floor Drains,1200,SS 304,600mm Length,Tile Insert Type
+PROD-7001,CON-GLU-UPVC-118,UPVC Solvent Cement - Medium Duty,Consumables,Solvent Cement,120,Chemical,118 ml,Brush in Can
+PROD-7002,CON-GLU-CPVC-118,CPVC Solvent Cement - Yellow,Consumables,Solvent Cement,160,Chemical,118 ml,For Hot/Cold Water
+PROD-7003,CON-TAP-TEF-12,Teflon Thread Seal Tape,Consumables,Sealing,25,PTFE,12mm x 10m,"White, 0.1mm Thick"
+PROD-7004,CON-CLM-UPVC-050,UPVC Pipe Clip / Saddle - 50mm,Consumables,Mounting,15,UPVC,50mm,Snap-on
+PROD-7005,CON-CLM-UB-110,GI U-Bolt with Nuts - 110mm,Consumables,Mounting,45,Galvanized Iron,110mm,Heavy Duty
+PROD-7006,CON-LUB-RUB-250,Rubber Ring Lubricant,Consumables,Sealing,180,Soap Base,250g,For SWR Pipes
+PROD-7007,CON-NAIL-MAS-2,Masonry Nails - 2 Inch,Consumables,Hardware,80,Steel,2 Inch,Pack of 100
+PROD-7008,CON-CUT-PVC-42,PVC Pipe Cutter Tool,Consumables,Tools,450,Aluminium/Steel,Up to 42mm,Ratchet Action

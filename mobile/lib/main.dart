@@ -1,68 +1,82 @@
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
-import 'core/glass.dart';
-import 'core/i18n.dart';
-import 'core/theme.dart';
-import 'router.dart';
+import 'core/constants/app_constants.dart';
+import 'core/routes/app_router.dart';
+import 'core/routes/app_routes.dart';
+import 'core/state/catalog_controller.dart';
+import 'core/state/cart_controller.dart';
+import 'core/state/location_controller.dart';
+import 'core/state/order_history_controller.dart';
+import 'core/state/profile_controller.dart';
+import 'core/state/quotation_controller.dart';
+import 'core/state/recently_viewed_controller.dart';
+import 'core/state/reward_controller.dart';
+import 'core/state/session_controller.dart';
+import 'core/state/wishlist_controller.dart';
+import 'core/theme/app_colors.dart';
+import 'core/theme/app_theme.dart';
+import 'features/rewards/data/in_memory_reward_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final prefs = await SharedPreferences.getInstance();
-  final lang = prefs.getString('lang') ?? 'en';
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      systemNavigationBarColor: AppColors.background,
+      systemNavigationBarIconBrightness: Brightness.dark,
+    ),
+  );
 
-  // Push notifications are optional: they start working once google-services.json /
-  // GoogleService-Info.plist are added (see README). Without them the app runs normally.
-  var pushReady = false;
-  try {
-    await Firebase.initializeApp();
-    pushReady = true;
-  } catch (e) {
-    assert(() { debugPrint('Firebase initialization failed: ${e.runtimeType}. Check the Firebase configuration.'); return true; }());
-  }
+  final sessionController = SessionController();
+  await sessionController.restore();
 
-  runApp(ProviderScope(
-    overrides: [
-      langProvider.overrideWith((ref) => LangNotifier(lang)),
-      pushReadyProvider.overrideWithValue(pushReady),
-    ],
-    child: const BuildMateApp(),
-  ));
+  runApp(BuildMateApp(sessionController: sessionController));
 }
 
-final pushReadyProvider = Provider<bool>((ref) => false);
+class BuildMateApp extends StatelessWidget {
+  const BuildMateApp({
+    super.key,
+    required this.sessionController,
+  });
 
-/// Asks for notification permission and returns the FCM token (or null when push isn't configured).
-Future<String?> getPushToken() async {
-  try {
-    final m = FirebaseMessaging.instance;
-    await m.requestPermission();
-    return await m.getToken();
-  } catch (_) {
-    return null;
-  }
-}
-
-class BuildMateApp extends ConsumerWidget {
-  const BuildMateApp({super.key});
+  final SessionController sessionController;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final lang = ref.watch(langProvider);
-    return MaterialApp.router(
-      title: 'BuildMate 24x7',
-      debugShowCheckedModeBanner: false,
-      theme: buildTheme(),
-      routerConfig: ref.watch(routerProvider),
-      // One shared Liquid Glass backdrop behind every screen (scaffolds are transparent).
-      builder: (context, child) => GlassBackdrop(child: child ?? const SizedBox.shrink()),
-      locale: Locale(lang),
-      supportedLocales: const [Locale('en'), Locale('hi')],
-      localizationsDelegates: const [GlobalMaterialLocalizations.delegate, GlobalWidgetsLocalizations.delegate, GlobalCupertinoLocalizations.delegate],
+  Widget build(BuildContext context) {
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: sessionController),
+        ChangeNotifierProvider(
+          create: (_) {
+            final controller = CatalogController();
+            controller.startPipeCatalogSync();
+            return controller;
+          },
+        ),
+        ChangeNotifierProvider(create: (_) => CartController()),
+        ChangeNotifierProvider(create: (_) => WishlistController()),
+        ChangeNotifierProvider(create: (_) => RecentlyViewedController()),
+        ChangeNotifierProvider(create: (_) => QuotationController()),
+        ChangeNotifierProvider(create: (_) => ProfileController()),
+        ChangeNotifierProvider(create: (_) => OrderHistoryController()),
+        ChangeNotifierProvider(create: (_) => LocationController()),
+        ChangeNotifierProvider(
+          create: (context) => RewardController(
+            quotationController: context.read<QuotationController>(),
+            repository: InMemoryRewardRepository.withDemoSeed(),
+          ),
+        ),
+      ],
+      child: MaterialApp(
+        title: AppConstants.appName,
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light(),
+        initialRoute: AppRoutes.splash,
+        onGenerateRoute: AppRouter.onGenerateRoute,
+      ),
     );
   }
 }

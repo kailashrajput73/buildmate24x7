@@ -258,7 +258,8 @@ export function CategoryBrowse({ categoryId, categoryName }: { categoryId: numbe
             All
             <CountPill $selected={!filters.typeId}>{category?.productCount ?? 0}</CountPill>
           </SidebarAllRow>
-          {types.length > 1 && (
+          {/* Shown even for a single Type (Electrical › Cable), same as the app. */}
+          {types.length > 0 && (
             <>
               <SidebarGap $size={theme.spacing.space3} />
               <SidebarSectionLabel>Type</SidebarSectionLabel>
@@ -276,7 +277,7 @@ export function CategoryBrowse({ categoryId, categoryName }: { categoryId: numbe
               })}
             </>
           )}
-          {subs.length > 1 && (
+          {subs.length > 0 && (
             <>
               <SidebarGap $size={theme.spacing.space3} />
               <SidebarSectionLabel>Sub-category</SidebarSectionLabel>

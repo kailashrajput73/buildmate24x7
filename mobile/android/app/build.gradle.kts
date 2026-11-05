@@ -7,11 +7,6 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// Firebase config. Without google-services.json the app still builds; use --dart-define=AUTH_MODE=otp then.
-if (file("google-services.json").exists()) {
-    apply(plugin = "com.google.gms.google-services")
-}
-
 // Release signing: create android/key.properties (see mobile/README.md). Without it, release builds use the debug key.
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
@@ -28,10 +23,8 @@ android {
     }
 
     defaultConfig {
-        // Must match the Android app registered in Firebase. The store's Firebase project (buildmate24x7) has this
-        // Android app registered, and its google-services.json is issued for this package name.
         applicationId = "com.buildmate.customerapp"
-        // Cashfree, mobile_scanner and Firebase Auth need 23+.
+        // Plugins used by the app need 23+.
         minSdk = maxOf(flutter.minSdkVersion, 23)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

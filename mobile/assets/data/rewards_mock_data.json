@@ -1,0 +1,41 @@
+{
+  "tiers": [
+    { "name": "Silver", "minPoints": 0 },
+    { "name": "Gold", "minPoints": 500 },
+    { "name": "Platinum", "minPoints": 1500 }
+  ],
+  "redeemOptions": [
+    {
+      "id": "free_delivery",
+      "title": "Free delivery",
+      "subtitle": "On your next material order",
+      "cost": 300,
+      "icon": "delivery",
+      "color": "#1A56DB"
+    },
+    {
+      "id": "quotation_off_200",
+      "title": "₹200 off",
+      "subtitle": "Min. quotation value ₹4,000",
+      "cost": 250,
+      "icon": "discount",
+      "color": "#D97706"
+    },
+    {
+      "id": "priority_support",
+      "title": "Priority support",
+      "subtitle": "Dedicated site assistance",
+      "cost": 400,
+      "icon": "support",
+      "color": "#059669"
+    },
+    {
+      "id": "free_installation",
+      "title": "Free installation",
+      "subtitle": "On pipes & fittings order",
+      "cost": 500,
+      "icon": "install",
+      "color": "#7C3AED"
+    }
+  ]
+}
