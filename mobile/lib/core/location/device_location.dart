@@ -49,8 +49,6 @@ class LocationException implements Exception {
 class DeviceLocation {
   const DeviceLocation();
 
-  static final Geocoding _geocoding = Geocoding();
-
   Future<ResolvedPlace> currentPlace() async {
     final point = await currentPoint();
     return describe(point);
@@ -87,7 +85,7 @@ class DeviceLocation {
 
   Future<ResolvedPlace> describe(LatLng point) async {
     try {
-      final marks = await _geocoding.placemarkFromCoordinates(
+      final marks = await placemarkFromCoordinates(
         point.latitude,
         point.longitude,
       );

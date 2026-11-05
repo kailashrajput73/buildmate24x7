@@ -1,18 +1,18 @@
 import 'package:dio/dio.dart';
-import 'package:buildmate_app/core/api.dart';
+import 'package:customerapp/core/api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
-import 'package:buildmate_app/features/home/home_screen.dart';
-import 'package:buildmate_app/widgets/auth/auth_otp_fields.dart';
-import 'package:buildmate_app/core/scan_code.dart';
-import 'package:buildmate_app/data/models.dart';
-import 'package:buildmate_app/data/providers.dart';
-import 'package:buildmate_app/data/search_history.dart';
-import 'package:buildmate_app/features/catalog/catalog_screens.dart';
-import 'package:buildmate_app/features/catalog/category_browse.dart';
+import 'package:customerapp/features/home/home_screen.dart';
+import 'package:customerapp/widgets/auth/auth_otp_fields.dart';
+import 'package:customerapp/core/scan_code.dart';
+import 'package:customerapp/data/models.dart';
+import 'package:customerapp/data/providers.dart';
+import 'package:customerapp/data/search_history.dart';
+import 'package:customerapp/features/catalog/catalog_screens.dart';
+import 'package:customerapp/features/catalog/category_browse.dart';
 
 class GuestAuth extends AuthController {
   GuestAuth(super.ref) {

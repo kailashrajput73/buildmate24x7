@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme.dart';
+import '../../core/push_notifications.dart';
 import '../../data/providers.dart';
-import '../../main.dart';
 import '../../core/api.dart';
 import 'dart:io' show Platform;
 

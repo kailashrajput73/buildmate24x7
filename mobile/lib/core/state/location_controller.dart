@@ -5,8 +5,6 @@ import 'package:latlong2/latlong.dart';
 
 /// Real-time GPS location controller using geolocator and geocoding.
 class LocationController extends ChangeNotifier {
-  static final Geocoding _geocoding = Geocoding();
-
   LocationController() {
     // Defer so the first frame can render before the permission dialog.
     Future<void>.microtask(fetchCurrentLocation);
@@ -109,7 +107,7 @@ class LocationController extends ChangeNotifier {
     _error = null;
 
     try {
-      final placemarks = await _geocoding.placemarkFromCoordinates(
+      final placemarks = await placemarkFromCoordinates(
         point.latitude,
         point.longitude,
       );
@@ -171,7 +169,7 @@ class LocationController extends ChangeNotifier {
     if (q.isEmpty) return false;
 
     try {
-      final locations = await _geocoding.locationFromAddress(q);
+      final locations = await locationFromAddress(q);
       if (locations.isEmpty) {
         _error = 'No places found for “$q”';
         notifyListeners();

@@ -10,7 +10,7 @@
 /// Production default: [defaultBaseUrl]. Local dev: emulator → `http://10.0.2.2:8000`.
 ///
 abstract final class ApiConfig {
-  static const String defaultBaseUrl = 'https://dash.buildmate24x7.com';
+  static const String defaultBaseUrl = 'https://api.buildmate24x7.com';
 
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
