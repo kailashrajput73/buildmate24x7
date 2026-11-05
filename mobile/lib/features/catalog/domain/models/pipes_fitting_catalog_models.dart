@@ -1,7 +1,7 @@
 /// Domain models for the "Pipes & Fitting" catalog hierarchy.
 ///
 /// Hierarchy: Category -> Type (UPVC/CPVC/PVC) -> SubCategory -> Class -> Product.
-/// Populated from `GET /api/catalog` (live server), not local mock assets.
+/// Populated from the live ASP.NET catalogue API, not local mock assets.
 class PipesFittingProduct {
   const PipesFittingProduct({
     this.id,

@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' hide Category;
 
-import '../../features/catalog/data/catalog_fallback_loader.dart';
-import '../../features/catalog/data/mock/catalog_mock_data.dart';
 import '../../features/catalog/data/mappers/catalog_api_mapper.dart';
 import '../../features/catalog/data/models/api_catalog_product.dart';
 import '../../features/catalog/data/repositories/catalog_repository.dart';
@@ -49,10 +47,7 @@ class CatalogController extends ChangeNotifier {
 
   List<ProductVariant> get pipeVariants {
     if (_useApi && _apiVariants.isNotEmpty) return _apiVariants;
-    return CatalogMockData.variants
-        .where((v) => CatalogMockData.plumbingModuleCategoryIds
-            .contains(v.categoryId))
-        .toList();
+    return const [];
   }
 
   /// Live categories for Home / category grids.
@@ -70,7 +65,8 @@ class CatalogController extends ChangeNotifier {
         : _pipesFittingCatalog;
   }
 
-  /// `GET /api/subcategories` images keyed for UPVC / CPVC / PVC type tiles.
+  /// Type image URLs are not part of the ASP.NET Type DTO; product imagery is
+  /// used as the existing tile fallback instead.
   Map<String, String> get pipeMaterialTypeImages => _pipeMaterialTypeImages;
 
   /// Resolved server URL for a pipes sidebar **Type** row.
@@ -504,12 +500,8 @@ class CatalogController extends ChangeNotifier {
       }
     } catch (e) {
       if (_disposed) return;
-      if (await _tryApplyBundledCatalogFallback(e)) {
-        notifyListeners();
-      } else {
-        _recordCatalogFetchFailure(e);
-        notifyListeners();
-      }
+      _recordCatalogFetchFailure(e);
+      notifyListeners();
     } finally {
       _catalogRefreshInFlight = false;
       if (!_disposed && showPipeLoading) {
@@ -523,36 +515,8 @@ class CatalogController extends ChangeNotifier {
     }
   }
 
-  /// Demo catalog from bundled JSON when the API blocks mobile browse (HTTP 401).
-  Future<bool> _tryApplyBundledCatalogFallback(Object error) async {
-    if (_hasCachedCatalog()) return false;
-    final isBlocked = error is ApiException &&
-        (error.statusCode == 401 ||
-            error.message.contains('Unable to load catalog'));
-    if (!isBlocked) return false;
-
-    final trees = await CatalogFallbackLoader.loadBundledTrees();
-    if (trees == null) return false;
-
-    _pipesFittingCatalog = trees.pipes;
-    _electricalsCatalog = trees.electricals;
-    _useApi = false;
-    _error = null;
-    return true;
-  }
-
   Future<Map<String, String>> _loadPipeMaterialImages() async {
-    final fromTree = await _repository.fetchPipeTypeImagesFromTree();
-    if (fromTree.isNotEmpty) return fromTree;
-
-    final categoryId = _pipesCategoryId();
-    if (categoryId == null || categoryId.isEmpty) return const {};
-    try {
-      final subs = await _repository.fetchSubcategories(categoryId: categoryId);
-      return CatalogApiMapper.materialImagesFromSubcategories(subs);
-    } catch (_) {
-      return const {};
-    }
+    return const {};
   }
 
   /// Returns true when variants/tree changed.

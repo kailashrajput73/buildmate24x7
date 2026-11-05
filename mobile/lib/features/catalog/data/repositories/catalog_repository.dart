@@ -4,168 +4,172 @@ import '../../../../core/network/api_client.dart';
 import '../../domain/models/catalog_models.dart';
 import '../mappers/catalog_api_mapper.dart';
 import '../models/api_catalog_product.dart';
-import '../models/api_subcategory.dart';
 
 class CatalogRepository {
-  CatalogRepository({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient();
+  CatalogRepository({ApiClient? apiClient})
+      : _apiClient = apiClient ?? ApiClient();
 
   final ApiClient _apiClient;
 
-  /// Fetches active categories from `GET /api/categories`.
+  /// The ASP.NET API returns a direct category array; only active categories
+  /// are included by the backend.
   Future<List<Category>> fetchCategories({bool activeOnly = true}) async {
-    final envelope = await _apiClient.getJson(
-      '/categories',
-      queryParameters: {
-        if (activeOnly) 'active_only': 'true',
-      },
-    );
-
-    final data = envelope['data'] ?? envelope['items'] ?? envelope;
-    if (data is! List) return const [];
-
-    return data
-        .whereType<Map<String, dynamic>>()
-        .map(CatalogApiMapper.categoryFromJson)
-        .where((c) => c.id.isNotEmpty && c.name.isNotEmpty)
+    final rows = _asList(await _apiClient.getJson('/catalog/categories'));
+    return rows
+        .map((row) => CatalogApiMapper.categoryFromJson(row))
+        .where((category) => category.id.isNotEmpty && category.name.isNotEmpty)
         .toList();
   }
 
-  /// Sub-categories for a pipes category (UPVC, CPVC, PVC, …) including `imageUrl`.
-  Future<List<ApiSubCategory>> fetchSubcategories({String? categoryId}) async {
-    final envelope = await _apiClient.getJson(
-      '/subcategories',
-      queryParameters: {
-        if (categoryId != null && categoryId.isNotEmpty)
-          'category_id': categoryId,
-      },
+  /// ProductType DTOs are a direct array with numeric IDs and category IDs.
+  Future<Map<String, String>> fetchProductTypes({
+    required String categoryId,
+  }) async {
+    final rows = _asList(
+      await _apiClient.getJson(
+        '/catalog/types',
+        queryParameters: {'categoryId': categoryId},
+      ),
     );
-
-    final data = envelope['data'] ?? envelope['items'] ?? envelope;
-    if (data is! List) return const [];
-
-    return data
-        .whereType<Map<String, dynamic>>()
-        .map(ApiSubCategory.fromJson)
-        .where((s) => s.id.isNotEmpty && s.name.isNotEmpty)
-        .toList();
+    return {
+      for (final row in rows)
+        if (_string(row['id']).isNotEmpty && _string(row['name']).isNotEmpty)
+          _string(row['id']): _string(row['name']),
+    };
   }
 
-  /// Raw SKU rows from `GET /api/catalog`.
-  ///
-  /// Loads the unfiltered catalog first so pipes, electricals, and all material
-  /// types share one payload. If that is empty, merges every known category
-  /// query (deduped by SKU id) instead of stopping at the first pipes hit.
+  /// Loads live products for the two on-device catalogue modules. The search
+  /// endpoint is paginated; category-items supplies the sub-category IDs and
+  /// specification map needed by the existing filters and product cards.
   Future<List<ApiCatalogProduct>> fetchCatalogSkus({
     List<Category> categories = const [],
   }) async {
-    Object? lastError;
+    final sourceCategories = categories.isEmpty
+        ? await fetchCategories()
+        : categories;
+    final relevant = sourceCategories
+        .where((category) =>
+            CatalogApiMapper.isPipesCategory(category.name) ||
+            CatalogApiMapper.isElectricalCategory(category.name))
+        .toList();
 
-    try {
-      final full = await _fetchCatalogRows();
-      if (full.isNotEmpty) return _dedupeCatalogById(full);
-    } catch (e) {
-      lastError = e;
-      if (kDebugMode) {
-        print('Catalog full fetch failed: $e');
-      }
-    }
-
-    final queries = CatalogApiMapper.catalogQueryCandidates(categories);
-    final merged = <String, ApiCatalogProduct>{};
-
-    for (final category in queries) {
-      try {
-        final items = await _fetchCatalogRows(categoryQuery: category);
-        for (final item in items) {
-          if (item.id.isEmpty) continue;
-          merged[item.id] = item;
-        }
-      } catch (e) {
-        lastError = e;
-        if (kDebugMode) {
-          print('Catalog fetch failed for category="$category": $e');
-        }
-      }
-    }
-
-    if (merged.isNotEmpty) return merged.values.toList();
-
-    if (lastError != null) {
-      throw ApiException(
-        'Unable to load catalog from server',
-        statusCode: lastError is ApiException ? lastError.statusCode : null,
-        body: lastError.toString(),
-      );
-    }
-
-    throw ApiException('Catalog response was empty');
-  }
-
-  static List<ApiCatalogProduct> _dedupeCatalogById(
-    List<ApiCatalogProduct> items,
-  ) {
+    final results = await Future.wait(
+      relevant.map(_fetchCategoryProducts),
+    );
     final byId = <String, ApiCatalogProduct>{};
-    for (final item in items) {
-      if (item.id.isEmpty) continue;
-      byId[item.id] = item;
+    for (final products in results) {
+      for (final product in products) {
+        if (product.id.isNotEmpty) byId[product.id] = product;
+      }
     }
     return byId.values.toList();
   }
 
-  /// Fetches active pipe catalog items from the live backend.
-  Future<List<ApiCatalogProduct>> fetchPipeCatalog({
-    List<Category> categories = const [],
-  }) async {
-    final items = await fetchCatalogSkus(categories: categories);
-    return CatalogApiMapper.filterPipeItems(items);
+  Future<List<ApiCatalogProduct>> _fetchCategoryProducts(
+    Category category,
+  ) async {
+    final categoryId = category.id;
+    final responses = await Future.wait([
+      _fetchProductCards(categoryId),
+      _fetchCategoryItems(categoryId),
+      fetchProductTypes(categoryId: categoryId),
+    ]);
+
+    final cards = responses[0] as Map<String, Map<String, dynamic>>;
+    final details = responses[1] as List<Map<String, dynamic>>;
+    final types = responses[2] as Map<String, String>;
+    final detailById = <String, Map<String, dynamic>>{
+      for (final detail in details)
+        if (_string(detail['id']).isNotEmpty) _string(detail['id']): detail,
+    };
+    final ids = {...cards.keys, ...detailById.keys};
+
+    return ids.map((id) {
+      final card = cards[id] ?? const <String, dynamic>{};
+      final detail = detailById[id] ?? const <String, dynamic>{};
+      final merged = <String, dynamic>{...card, ...detail};
+      merged.putIfAbsent('categoryId', () => int.tryParse(categoryId));
+      merged.putIfAbsent('categoryName', () => category.name);
+      merged.putIfAbsent('category', () => category.name);
+
+      final catalog = Map<String, dynamic>.from(
+        (merged['catalog'] as Map?)?.cast<String, dynamic>() ?? const {},
+      );
+      final typeId = _string(catalog['typeId']);
+      if (_string(catalog['typeName']).isEmpty && types[typeId] != null) {
+        catalog['typeName'] = types[typeId];
+      }
+      merged['catalog'] = catalog;
+
+      return ApiCatalogProduct.fromJson(merged);
+    }).toList();
   }
 
-  /// Fetches active electrical catalog items from the live backend.
-  Future<List<ApiCatalogProduct>> fetchElectricalCatalog({
-    List<Category> categories = const [],
-  }) async {
-    final items = await fetchCatalogSkus(categories: categories);
-    return CatalogApiMapper.filterElectricalItems(items);
+  Future<Map<String, Map<String, dynamic>>> _fetchProductCards(
+    String categoryId,
+  ) async {
+    const pageSize = 200; // ASP.NET PageRequest accepts at most 200.
+    var page = 1;
+    var total = 0;
+    final products = <String, Map<String, dynamic>>{};
+
+    do {
+      final response = await _apiClient.getJson(
+        '/catalog/products',
+        queryParameters: {
+          'categoryId': categoryId,
+          'page': '$page',
+          'pageSize': '$pageSize',
+        },
+      );
+      final rows = _asList(response);
+      final responseMap = _asMap(response);
+      total = _int(responseMap?['total']) ?? rows.length;
+      for (final row in rows) {
+        final id = _string(row['id']);
+        if (id.isNotEmpty) products[id] = row;
+      }
+      if (rows.isEmpty || rows.length < pageSize) break;
+      page++;
+    } while ((page - 1) * pageSize < total);
+
+    return products;
   }
 
-  Future<List<ApiCatalogProduct>> _fetchCatalogRows({
-    String? categoryQuery,
-  }) async {
-    final envelope = await _apiClient.getJson(
-      '/catalog',
-      queryParameters: {
-        if (categoryQuery != null && categoryQuery.isNotEmpty)
-          'category': categoryQuery,
-      },
+  Future<List<Map<String, dynamic>>> _fetchCategoryItems(
+    String categoryId,
+  ) async {
+    final response = await _apiClient.getJson(
+      '/catalog/categories/$categoryId/items',
     );
+    return _asList(response);
+  }
 
-    final data = envelope['data'] ?? envelope['items'] ?? envelope;
-    if (data is! List) return const [];
-
-    return data
-        .whereType<Map<String, dynamic>>()
-        .map(ApiCatalogProduct.fromJson)
+  static List<Map<String, dynamic>> _asList(dynamic response) {
+    dynamic value = response;
+    if (value is Map) {
+      value = value['items'] ?? value['data'] ?? value;
+    }
+    if (value is! List) {
+      throw ApiException('Expected a JSON array from the catalogue API');
+    }
+    return value
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
         .toList();
   }
 
-  /// Sidebar **Type** images (UPVC, CPVC, PVC) from `GET /api/catalog/tree`.
-  Future<Map<String, String>> fetchPipeTypeImagesFromTree({
-    bool activeOnly = true,
-  }) async {
-    try {
-      final envelope = await _apiClient.getJson(
-        '/catalog/tree',
-        queryParameters: {
-          if (activeOnly) 'active_only': 'true',
-        },
-      );
-      return CatalogApiMapper.materialImagesFromCatalogTree(envelope);
-    } catch (e) {
-      if (kDebugMode) {
-        print('Catalog tree fetch failed: $e');
-      }
-      return const {};
-    }
+  static Map<String, dynamic>? _asMap(dynamic response) {
+    if (response is Map) return Map<String, dynamic>.from(response);
+    return null;
+  }
+
+  static String _string(dynamic value) => value?.toString().trim() ?? '';
+
+  static int? _int(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(_string(value));
   }
 
   void dispose() => _apiClient.dispose();

@@ -1,4 +1,4 @@
-/// Raw catalog item from `GET /api/catalog` (dashboard backend schema).
+/// Product row mapped from the current ASP.NET catalogue DTOs.
 class ApiCatalogProduct {
   const ApiCatalogProduct({
     required this.id,
@@ -9,6 +9,8 @@ class ApiCatalogProduct {
     this.productCode,
     this.productName,
     this.type,
+    this.typeId,
+    this.categoryId,
     this.productGroup,
     this.productClass,
     this.subcategory,
@@ -24,7 +26,9 @@ class ApiCatalogProduct {
     this.sellingPrice,
     this.discount,
     this.stock,
+    this.inStock,
     this.imageUrl,
+    this.specs = const {},
     this.isActive = true,
     this.updatedAt,
   });
@@ -37,6 +41,8 @@ class ApiCatalogProduct {
   final String? productCode;
   final String? productName;
   final String? type;
+  final String? typeId;
+  final String? categoryId;
   final String? productGroup;
   final String? productClass;
   final String? subcategory;
@@ -52,81 +58,146 @@ class ApiCatalogProduct {
   final double? sellingPrice;
   final double? discount;
   final double? stock;
+  final bool? inStock;
   final String? imageUrl;
+  final Map<String, String> specs;
   final bool isActive;
   final String? updatedAt;
 
-  /// MRP for display — ignores zero placeholders from the API.
-  double get resolvedMrp {
-    if (mrp != null && mrp! > 0) return mrp!;
-    if (standardRate > 0) return standardRate;
-    return 0;
-  }
+  double get resolvedMrp => mrp ?? standardRate;
 
-  /// Selling price — falls back to MRP / standard rate when selling is 0 or null.
-  double get resolvedSelling {
-    if (sellingPrice != null && sellingPrice! > 0) return sellingPrice!;
-    if (standardRate > 0) return standardRate;
-    return resolvedMrp;
-  }
+  /// Preserve explicit zero prices; only fall back when the API omitted price.
+  double get resolvedSelling => sellingPrice ?? standardRate;
 
+  /// Accepts both paged product cards and detailed category-item/product DTOs.
   factory ApiCatalogProduct.fromJson(Map<String, dynamic> json) {
+    final catalog = json['catalog'] is Map
+        ? Map<String, dynamic>.from(json['catalog'] as Map)
+        : const <String, dynamic>{};
+    final name = _nullableString(json['name']) ?? '';
+    final rawSpecs = json['specs'] ?? json['specifications'];
+    final specs = <String, String>{};
+    if (rawSpecs is Map) {
+      for (final entry in rawSpecs.entries) {
+        final key = entry.key.toString().trim();
+        if (key.isNotEmpty && entry.value != null) {
+          specs[key] = entry.value.toString();
+        }
+      }
+    } else if (rawSpecs is List) {
+      for (final entry in rawSpecs.whereType<Map>()) {
+        final key = _nullableString(entry['name']);
+        final value = _nullableString(entry['value']);
+        if (key != null && value != null) specs[key] = value;
+      }
+    }
+
+    final images = json['imageUrls'];
+    final imageUrl = _nullableString(json['imageUrl'] ?? json['image_url']) ??
+        (images is List && images.isNotEmpty
+            ? _nullableString(images.first)
+            : null);
+    final stockFlag = _toBool(json['inStock'] ?? json['isInStock']);
+    final rawStock = _toDouble(json['stock'] ?? json['availableQty']);
+
     return ApiCatalogProduct(
       id: json['id']?.toString() ?? '',
-      name: json['name']?.toString() ?? '',
-      category: json['category']?.toString() ?? '',
-      unit: json['unit']?.toString() ?? 'pcs',
-      standardRate: _firstPositive(
+      name: name,
+      category: _nullableString(json['categoryName'] ?? json['category']) ?? '',
+      unit: _nullableString(json['unit']) ?? 'pcs',
+      standardRate: _firstNumber(
             json,
-            const ['standardRate', 'standard_rate', 'rate', 'price'],
+            const ['listPrice', 'standardRate', 'standard_rate', 'rate'],
           ) ??
+          _toDouble(json['price']) ??
           0,
-      productCode: _nullableString(json['productCode'] ?? json['product_code']),
-      productName: _nullableString(json['productName'] ?? json['product_name']),
-      type: _nullableString(json['type']),
-      productGroup: _nullableString(json['productGroup'] ?? json['product_group']),
-      productClass: _nullableString(json['productClass'] ?? json['product_class']),
-      subcategory: _nullableString(json['subcategory'] ?? json['sub_category']),
-      subcategoryId:
-          _nullableString(json['subcategoryId'] ?? json['subcategory_id']),
-      brand: _nullableString(json['brand']),
-      brandId: _nullableString(json['brandId'] ?? json['brand_id']),
-      size: _nullableString(json['size']),
-      sizeMm: _toDouble(json['sizeMm'] ?? json['size_mm']),
-      sizeInch: _nullableString(json['sizeInch'] ?? json['size_inch']),
-      length: _nullableString(json['length']),
-      stdPkg: _nullableString(json['stdPkg'] ?? json['std_pkg']),
-      mrp: _firstPositive(json, const ['mrp', 'MRP']),
-      sellingPrice: _firstPositive(
-        json,
-        const ['sellingPrice', 'selling_price', 'salePrice', 'sale_price'],
+      productCode: _nullableString(
+        json['code'] ?? json['productCode'] ?? json['product_code'],
       ),
-      discount: _toDouble(json['discount'] ?? json['discount_rate']),
-      stock: _toDouble(json['stock']),
-      imageUrl: _nullableString(json['imageUrl'] ?? json['image_url']),
+      productName:
+          _nullableString(json['productName'] ?? json['product_name']) ?? name,
+      type: _nullableString(
+        json['type'] ?? catalog['typeName'] ?? catalog['type'],
+      ),
+      typeId: _nullableString(json['typeId'] ?? catalog['typeId']),
+      categoryId: _nullableString(json['categoryId'] ?? json['category_id']),
+      productGroup: _nullableString(
+        json['productGroup'] ??
+            json['product_group'] ??
+            catalog['productFamily'] ??
+            json['family'],
+      ),
+      productClass: _nullableString(
+        json['productClass'] ?? json['product_class'] ?? catalog['class'],
+      ),
+      subcategory: _nullableString(
+        json['subCategoryName'] ??
+            json['subcategoryName'] ??
+            json['subcategory'] ??
+            json['subCategory'],
+      ),
+      subcategoryId: _nullableString(
+        json['subCategoryId'] ??
+            json['subcategoryId'] ??
+            json['subcategory_id'],
+      ),
+      brand: _nullableString(json['brandName'] ?? json['brand']),
+      brandId: _nullableString(json['brandId'] ?? json['brand_id']),
+      size: _nullableString(json['size'] ?? catalog['size']),
+      sizeMm: _toDouble(json['sizeMm'] ?? json['size_mm']) ??
+          (_nullableString(catalog['sizeUnit'])?.toLowerCase() == 'mm'
+              ? _toDouble(catalog['sizeValue'])
+              : null),
+      sizeInch: _nullableString(json['sizeInch'] ?? json['size_inch']),
+      length: _nullableString(json['length'] ?? catalog['length']),
+      stdPkg: _nullableString(
+        json['stdPkg'] ?? json['std_pkg'] ?? catalog['packSize'],
+      ),
+      mrp: _firstNumber(json, const ['mrp', 'MRP']),
+      sellingPrice: _firstNumber(
+        json,
+        const ['price', 'sellingPrice', 'selling_price', 'salePrice', 'sale_price'],
+      ),
+      discount: _toDouble(
+        json['discountPercent'] ??
+            json['discount'] ??
+            json['discount_rate'],
+      ),
+      stock: stockFlag == null
+          ? rawStock
+          : (stockFlag ? (rawStock ?? 1) : -1),
+      inStock: stockFlag,
+      imageUrl: imageUrl,
+      specs: specs,
       isActive: json['isActive'] != false && json['is_active'] != false,
       updatedAt: _nullableString(json['updatedAt'] ?? json['updated_at']),
     );
   }
 
-  /// Stable fingerprint for polling change detection.
   String get syncFingerprint => [
         id,
         productCode ?? '',
         name,
         category,
+        categoryId ?? '',
         type ?? '',
+        typeId ?? '',
         productGroup ?? '',
         productClass ?? '',
         subcategory ?? '',
+        subcategoryId ?? '',
         brand ?? '',
+        brandId ?? '',
         size ?? '',
         sizeMm?.toString() ?? '',
+        length ?? '',
         mrp?.toString() ?? '',
         sellingPrice?.toString() ?? '',
         discount?.toString() ?? '',
         stock?.toString() ?? '',
+        inStock?.toString() ?? '',
         imageUrl ?? '',
+        specs.entries.map((e) => '${e.key}:${e.value}').join(','),
         isActive.toString(),
         updatedAt ?? '',
       ].join('|');
@@ -140,17 +211,29 @@ class ApiCatalogProduct {
   static double? _toDouble(dynamic value) {
     if (value == null) return null;
     if (value is num) return value.toDouble();
-    final parsed = double.tryParse(value.toString().replaceAll(',', '').trim());
-    return parsed;
+    return double.tryParse(value.toString().replaceAll(',', '').trim());
   }
 
-  static double? _firstPositive(
+  static double? _firstNumber(
     Map<String, dynamic> json,
     List<String> keys,
   ) {
     for (final key in keys) {
       final value = _toDouble(json[key]);
-      if (value != null && value > 0) return value;
+      if (value != null) return value;
+    }
+    return null;
+  }
+
+  static bool? _toBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      return switch (value.trim().toLowerCase()) {
+        'true' || '1' || 'yes' => true,
+        'false' || '0' || 'no' => false,
+        _ => null,
+      };
     }
     return null;
   }

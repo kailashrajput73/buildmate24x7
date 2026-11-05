@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 
 import 'api_config.dart';
 
-/// Minimal HTTP client for the FastAPI envelope `{ success, data, error }`.
+/// HTTP client for the public ASP.NET Core mobile APIs.
 class ApiClient {
   ApiClient({http.Client? client}) : _client = client ?? http.Client();
 
@@ -15,7 +15,7 @@ class ApiClient {
   static Future<String?> Function({bool forceRefresh})? authTokenProvider;
 
   /// When [authenticate] is false, no `Authorization` header is sent.
-  Future<Map<String, dynamic>> getJson(
+  Future<dynamic> getJson(
     String path, {
     Map<String, String>? queryParameters,
     Duration timeout = const Duration(seconds: 15),
@@ -35,7 +35,7 @@ class ApiClient {
       if (kDebugMode) {
         print('API RESPONSE (${response.statusCode}): ${response.body}');
       }
-      return _decodeEnvelope(response);
+      return _decodeResponse(response);
     } catch (e) {
       if (kDebugMode) {
         print('API ERROR for $uri: $e');
@@ -63,7 +63,10 @@ class ApiClient {
         ? await _authHeaders(forceRefresh: forceRefreshToken)
         : const <String, String>{};
 
-    final response = await _client.get(uri, headers: headers).timeout(timeout);
+    final response = await _client.get(uri, headers: {
+      'X-Client': 'app',
+      ...headers,
+    }).timeout(timeout);
 
     if (!authenticate) {
       return response;
@@ -103,29 +106,73 @@ class ApiClient {
         (body.contains('invalid or expired') && body.contains('token'));
   }
 
-  Map<String, dynamic> _decodeEnvelope(http.Response response) {
+  dynamic _decodeResponse(http.Response response) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ApiException(
-        'HTTP ${response.statusCode}',
+        _errorMessage(response),
         statusCode: response.statusCode,
         body: response.body,
       );
     }
 
-    final dynamic decoded = jsonDecode(response.body);
-    if (decoded is! Map<String, dynamic>) {
-      throw ApiException('Invalid JSON envelope');
-    }
+    if (response.body.trim().isEmpty) return null;
 
-    final success = decoded['success'] == true;
-    if (!success) {
+    final dynamic decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } on FormatException catch (e) {
       throw ApiException(
-        decoded['error']?.toString() ?? 'API request failed',
+        'Invalid JSON response: ${e.message}',
         statusCode: response.statusCode,
+        body: response.body,
       );
     }
 
+    // Keep support for any older service still returning the legacy envelope,
+    // while passing through the ASP.NET arrays, pages, and objects unchanged.
+    if (decoded is Map<String, dynamic> && decoded.containsKey('success')) {
+      if (decoded['success'] != true) {
+        throw ApiException(
+          (decoded['error'] ?? decoded['message'] ?? 'API request failed')
+              .toString(),
+          statusCode: response.statusCode,
+          body: response.body,
+        );
+      }
+      return decoded.containsKey('data') ? decoded['data'] : decoded;
+    }
+
     return decoded;
+  }
+
+  String _errorMessage(http.Response response) {
+    final body = response.body.trim();
+    if (body.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(body);
+        if (decoded is Map) {
+          final title = decoded['title']?.toString().trim();
+          final detail = decoded['detail']?.toString().trim();
+          final error = decoded['error']?.toString().trim();
+          final message = decoded['message']?.toString().trim();
+          if (title != null && title.isNotEmpty) {
+            return detail == null || detail.isEmpty || detail == title
+                ? title
+                : '$title: $detail';
+          }
+          for (final value in [detail, error, message]) {
+            if (value != null && value.isNotEmpty) return value;
+          }
+        }
+      } on FormatException {
+        // Preserve a plain-text server error below.
+      }
+      return body;
+    }
+    final reason = response.reasonPhrase;
+    return reason == null || reason.isEmpty
+        ? 'HTTP ${response.statusCode}'
+        : 'HTTP ${response.statusCode} $reason';
   }
 
   void dispose() => _client.close();
