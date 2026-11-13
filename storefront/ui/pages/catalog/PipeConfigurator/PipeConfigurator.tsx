@@ -4,6 +4,8 @@ import { useTheme } from 'styled-components';
 import { AppRoutes } from '../../../routes/appRoutes';
 import { useMaybePop } from '../../../hooks/useMaybePop';
 import { useCart } from '../../../session/CartContext';
+import { useDelivery } from '@/lib/delivery';
+import { DeliveryBlockedNote } from '@/components/AddToCart';
 import { CategoryImage } from '../../../shared/CategoryImage';
 import { CartIconButton } from '../../../shared/CartIconButton';
 import { StorefrontHeader } from '../../../shared/StorefrontHeader';
@@ -176,6 +178,8 @@ function PipeConfiguratorView({ groups, initialGroupIndex }: PipeConfiguratorArg
   const navigate = useNavigate();
   const maybePop = useMaybePop();
   const { addVariant } = useCart();
+  const delivery = useDelivery();
+  const deliveryBlocked = !!delivery.selected && !delivery.selected.serviceable;
 
   const initialGroup = groups[initialGroupIndex];
   const [groupIndex, setGroupIndex] = useState(initialGroupIndex);
@@ -211,8 +215,9 @@ function PipeConfiguratorView({ groups, initialGroupIndex }: PipeConfiguratorArg
     setProduct(sameSize ?? newGroup.products[0]);
   };
 
-  const addToCart = () => {
-    addVariant(variantFor(product, group));
+  const addToCart = async () => {
+    // Refused (no snackbar) when the delivery PIN code is not serviceable; the PIN pop-up explains why.
+    if (!(await addVariant(variantFor(product, group)))) return;
     // hideCurrentSnackBar + showSnackBar → remount with a new key.
     setSnackBar((prev) => ({
       id: (prev?.id ?? 0) + 1,
@@ -293,11 +298,12 @@ function PipeConfiguratorView({ groups, initialGroupIndex }: PipeConfiguratorArg
                 </CartPrice>
                 <CartSize>{product.size ?? '—'}</CartSize>
               </CartInfo>
-              <AddToCartButton type="button" onClick={addToCart}>
+              <AddToCartButton type="button" onClick={addToCart} disabled={deliveryBlocked}>
                 <i className="pi pi-cart-plus" aria-hidden="true" />
                 Add to Cart
               </AddToCartButton>
             </CartCard>
+            {deliveryBlocked && <DeliveryBlockedNote message={delivery.selected!.message} onChange={() => delivery.openPicker()} />}
           </DetailsInner>
         </Details>
       </Body>

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -25,13 +24,11 @@ class _ProfessionOption {
     required this.title,
     required this.subtitle,
     required this.role,
-    required this.imageAsset,
   });
 
   final String title;
   final String subtitle;
   final UserRole role;
-  final String imageAsset;
 }
 
 class _ChooseProfessionScreenState extends State<ChooseProfessionScreen> {
@@ -40,31 +37,26 @@ class _ChooseProfessionScreenState extends State<ChooseProfessionScreen> {
       title: 'Contractor',
       subtitle: 'Building & construction',
       role: UserRole.contractor,
-      imageAsset: 'assets/images/professions/contractor.png',
     ),
     _ProfessionOption(
       title: 'Plumber',
       subtitle: 'Pipes, bathrooms & Fittings',
       role: UserRole.dealer,
-      imageAsset: 'assets/images/professions/plumber.png',
     ),
     _ProfessionOption(
       title: 'Electrician',
       subtitle: 'Wiring, switches & lighting',
       role: UserRole.builder,
-      imageAsset: 'assets/images/professions/electrician.png',
     ),
     _ProfessionOption(
       title: 'Flooring',
       subtitle: 'Tiles & Adhesives',
       role: UserRole.dealer,
-      imageAsset: 'assets/images/professions/flooring.png',
     ),
     _ProfessionOption(
       title: 'Home Owner',
       subtitle: 'Buying for my own house',
       role: UserRole.individualCustomer,
-      imageAsset: 'assets/images/professions/home_owner.png',
     ),
   ];
 
@@ -77,40 +69,39 @@ class _ChooseProfessionScreenState extends State<ChooseProfessionScreen> {
 
     setState(() => _saving = true);
     try {
-      final authUser = await PhoneAuthService.instance.currentAuthUser();
-      final mobile = widget.args.mobileNumber.trim();
-      final resolvedMobile = mobile.isNotEmpty
-          ? mobile
-          : (authUser?.mobileNumber ?? '').trim();
-      final userId = (authUser != null && authUser.id.isNotEmpty)
-          ? authUser.id
-          : 'user-mobile-$resolvedMobile';
-      final fullName = widget.args.fullName.trim();
-      final resolvedName =
-          fullName.isNotEmpty ? fullName : authUser?.fullName;
-
-      await context.read<SessionController>().setFromAuth(
-        AuthUser(
-          id: userId,
-          email: widget.args.email,
-          fullName: resolvedName,
-          mobileNumber: resolvedMobile.isNotEmpty ? resolvedMobile : null,
-          role: option.role,
-          referralCode: widget.args.referralCode,
-        ),
+      final result = await PhoneAuthService.instance.completeSignup(
+        mobileNumber: widget.args.mobileNumber,
+        fullName: widget.args.fullName,
+        email: widget.args.email,
+        audience: option.role == UserRole.individualCustomer
+            ? 'Customer'
+            : 'Partner',
+        partnerType: switch (option.title) {
+          'Plumber' => 'Plumber',
+          'Electrician' => 'Electrician',
+          'Flooring' => 'Flooring',
+          'Builder' => 'Builder',
+          _ => 'Contractor',
+        },
+        referralCode: widget.args.referralCode,
       );
+      if (!result.success || result.user == null) {
+        throw Exception(result.message ?? 'Could not create your account.');
+      }
+      if (!mounted) return;
+      await context.read<SessionController>().setFromAuth(result.user!);
 
       if (!mounted) return;
-      await Navigator.of(context, rootNavigator: true).pushNamedAndRemoveUntil(
-        AppRoutes.homePlaceholder,
-        (_) => false,
-      );
+      await Navigator.of(
+        context,
+        rootNavigator: true,
+      ).pushNamedAndRemoveUntil(AppRoutes.homePlaceholder, (_) => false);
     } catch (e, st) {
       debugPrint('ChooseProfession continue failed: $e\n$st');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not continue. Please try again.'),
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -206,23 +197,6 @@ class _ChooseProfessionScreenState extends State<ChooseProfessionScreen> {
                                 ),
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(9),
-                                child: Image.asset(
-                                  option.imageAsset,
-                                  width: 48,
-                                  height: 48,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, _, _) => ColoredBox(
-                                    color: AppColors.surfaceContainer,
-                                    child: Icon(
-                                      Icons.image_outlined,
-                                      size: 20,
-                                      color: AppColors.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ),
-                              ),
                             ),
                             const SizedBox(width: AppSpacing.space4),
                             Expanded(
@@ -231,9 +205,8 @@ class _ChooseProfessionScreenState extends State<ChooseProfessionScreen> {
                                 children: [
                                   Text(
                                     option.title,
-                                    style: theme.textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                    ),
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.w700),
                                   ),
                                   const SizedBox(height: AppSpacing.space1),
                                   Text(

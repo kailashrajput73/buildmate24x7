@@ -52,30 +52,6 @@ class DeliveryAddress {
   String get singleLine => '$house, $area, $city - $pincode, $state';
 }
 
-/// Mock pincode directory used for City/State auto-fill until the
-/// address API exists.
-abstract final class PincodeDirectory {
-  static const Map<String, (String city, String state)> _entries = {
-    '560001': ('Bangalore', 'Karnataka'),
-    '560076': ('Bangalore', 'Karnataka'),
-    '110001': ('New Delhi', 'Delhi'),
-    '201301': ('Noida', 'Uttar Pradesh'),
-    '122001': ('Gurugram', 'Haryana'),
-    '400001': ('Mumbai', 'Maharashtra'),
-    '411001': ('Pune', 'Maharashtra'),
-    '500001': ('Hyderabad', 'Telangana'),
-    '600001': ('Chennai', 'Tamil Nadu'),
-    '700001': ('Kolkata', 'West Bengal'),
-    '302001': ('Jaipur', 'Rajasthan'),
-    '380001': ('Ahmedabad', 'Gujarat'),
-  };
-
-  static Future<(String city, String state)?> lookup(String pincode) async {
-    await Future<void>.delayed(const Duration(milliseconds: 450));
-    return _entries[pincode];
-  }
-}
-
 extension DeliveryAddressCopy on DeliveryAddress {
   DeliveryAddress withDefault(bool value) => DeliveryAddress(
     fullName: fullName,
@@ -106,32 +82,4 @@ enum DeliveryOption {
   final String label;
   final String eta;
   final double fee;
-}
-
-/// Mock saved addresses until the address API exists.
-abstract final class MockAddresses {
-  static const List<DeliveryAddress> saved = [
-    DeliveryAddress(
-      fullName: 'Nandini Sharma',
-      mobile: '9876543210',
-      pincode: '560076',
-      city: 'Bangalore',
-      state: 'Karnataka',
-      house: '123, Green Park',
-      area: 'Near City Mall',
-      type: AddressType.home,
-      isDefault: true,
-    ),
-    DeliveryAddress(
-      fullName: 'Nandini Sharma',
-      mobile: '9876543210',
-      pincode: '560001',
-      city: 'Bangalore',
-      state: 'Karnataka',
-      house: 'Plot No. 45',
-      area: 'Tech Park Road',
-      type: AddressType.office,
-      isDefault: false,
-    ),
-  ];
 }

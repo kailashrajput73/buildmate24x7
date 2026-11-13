@@ -224,7 +224,42 @@ public class SettingsController : AdminControllerBase
     public Task<StoreSettings> Get(CancellationToken ct) => _svc.GetAsync(ct);
 
     [HttpPut, Authorize(Policy = Permissions.SettingsManage)]
-    public Task<StoreSettings> Save(StoreSettings s, CancellationToken ct) => _svc.SaveAsync(s, ct);
+    public async Task<StoreSettings> Save(StoreSettings s, CancellationToken ct)
+    {
+        // Delivery areas are managed on their own page; saving the general settings never changes them.
+        s.DeliveryAreas = (await _svc.GetAsync(ct)).DeliveryAreas;
+        return await _svc.SaveAsync(s, ct);
+    }
+}
+
+/// <summary>Delivery Areas: the serviceable PIN codes that decide where customers can order home delivery.</summary>
+[Route("api/admin/delivery-areas")]
+[Authorize(Policy = Permissions.SettingsManage)]
+public class DeliveryAreasAdminController : AdminControllerBase
+{
+    private readonly IDeliveryAreaService _svc;
+    public DeliveryAreasAdminController(IDeliveryAreaService svc) => _svc = svc;
+
+    [HttpGet]
+    public Task<List<DeliveryArea>> List(CancellationToken ct) => _svc.ListAsync(ct);
+
+    [HttpPost]
+    public Task<DeliveryArea> Add(DeliveryAreaUpsert body, CancellationToken ct) => _svc.AddAsync(body, ct);
+
+    [HttpPut("{pincode}")]
+    public Task<DeliveryArea> Update(string pincode, DeliveryAreaUpsert body, CancellationToken ct) => _svc.UpdateAsync(pincode, body, ct);
+
+    [HttpDelete("{pincode}")]
+    public async Task<IActionResult> Remove(string pincode, CancellationToken ct)
+    {
+        await _svc.RemoveAsync(pincode, ct);
+        return NoContent();
+    }
+
+    /// <summary>City, district and state for a PIN code (India Post directory), to fill in the add form.</summary>
+    [HttpGet("lookup/{pincode}")]
+    public async Task<PincodePlace> Lookup(string pincode, CancellationToken ct) =>
+        await _svc.LookupAsync(pincode, ct) ?? new PincodePlace(pincode.Trim(), null, null, null);
 }
 
 /// <summary>ERP sync monitor: see what was sent, what failed, and retry.</summary>

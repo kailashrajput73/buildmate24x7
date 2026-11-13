@@ -36,12 +36,6 @@ class AppUserProfile {
     return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
 
-  static const demo = AppUserProfile(
-    id: 'guest',
-    name: 'Guest User',
-    isGuest: true,
-  );
-
   /// Logged-out / no-session placeholder — not a real user.
   static const empty = AppUserProfile(id: '', name: '');
 }

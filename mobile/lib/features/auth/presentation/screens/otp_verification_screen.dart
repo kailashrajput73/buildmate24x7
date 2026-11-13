@@ -103,22 +103,37 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         );
         return;
       case OtpPurpose.mobileLogin:
+        if (result.user?.id == PhoneAuthService.pendingUserId) {
+          Navigator.of(context).pushReplacementNamed(
+            AppRoutes.createAccount,
+            arguments: SignupFlowArgs(mobileNumber: _rawMobile, fullName: ''),
+          );
+          return;
+        }
         await context.read<SessionController>().setFromAuth(result.user!);
         if (!mounted) return;
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          AppRoutes.homePlaceholder,
-          (_) => false,
-        );
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil(AppRoutes.homePlaceholder, (_) => false);
         return;
       case OtpPurpose.registration:
-        final mobile = widget.args.mobileNumber ??
-            _contact.replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^91'), '');
+        if (result.user?.id != PhoneAuthService.pendingUserId &&
+            result.user != null) {
+          await context.read<SessionController>().setFromAuth(result.user!);
+          if (!mounted) return;
+          Navigator.of(
+            context,
+          ).pushNamedAndRemoveUntil(AppRoutes.homePlaceholder, (_) => false);
+          return;
+        }
+        final mobile =
+            widget.args.mobileNumber ??
+            _contact
+                .replaceAll(RegExp(r'\D'), '')
+                .replaceFirst(RegExp(r'^91'), '');
         Navigator.of(context).pushReplacementNamed(
           AppRoutes.createAccount,
-          arguments: SignupFlowArgs(
-            mobileNumber: mobile,
-            fullName: '',
-          ),
+          arguments: SignupFlowArgs(mobileNumber: mobile, fullName: ''),
         );
         return;
     }
@@ -247,7 +262,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                           children: [
                             const TextSpan(text: 'Didn\'t receive the code? '),
                             TextSpan(
-                              text: 'Resend OTP in 0:${_seconds.toString().padLeft(2, '0')}',
+                              text:
+                                  'Resend OTP in 0:${_seconds.toString().padLeft(2, '0')}',
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: AppColors.onSurfaceVariant,
                               ),
@@ -270,7 +286,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                 decoration: TextDecoration.underline,
                                 fontWeight: FontWeight.w600,
                               ),
-                              recognizer: TapGestureRecognizer()..onTap = _resend,
+                              recognizer: TapGestureRecognizer()
+                                ..onTap = _resend,
                             ),
                           ],
                         ),

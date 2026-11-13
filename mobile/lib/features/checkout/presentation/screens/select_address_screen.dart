@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../../core/routes/app_routes.dart';
 import '../../../../core/state/cart_controller.dart';
+import '../../../../core/state/delivery_controller.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -17,7 +18,7 @@ import '../widgets/checkout_widgets.dart';
 class SelectAddressScreen extends StatefulWidget {
   const SelectAddressScreen({super.key, this.initialAddresses});
 
-  /// Defaults to [MockAddresses.saved].
+  /// Addresses supplied by the account API, when available.
   final List<DeliveryAddress>? initialAddresses;
 
   @override
@@ -26,15 +27,54 @@ class SelectAddressScreen extends StatefulWidget {
 
 class _SelectAddressScreenState extends State<SelectAddressScreen> {
   late final List<DeliveryAddress> _addresses = [
-    ...widget.initialAddresses ?? MockAddresses.saved,
+    ...widget.initialAddresses ?? const <DeliveryAddress>[],
   ];
   late int _selected = _addresses.indexWhere((a) => a.isDefault);
   var _delivery = DeliveryOption.standard;
+
+  /// Server answer per address PIN code (each address is checked on its own).
+  final Map<String, DeliveryCheck> _status = {};
 
   @override
   void initState() {
     super.initState();
     if (_selected < 0 && _addresses.isNotEmpty) _selected = 0;
+    // Prefer the address in the selected delivery PIN code.
+    final pin = context.read<DeliveryController>().selected?.pincode;
+    final match = pin == null
+        ? -1
+        : _addresses.indexWhere((a) => a.pincode == pin);
+    if (match >= 0) _selected = match;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final a in _addresses) {
+        _checkAddress(a);
+      }
+    });
+  }
+
+  Future<DeliveryCheck?> _checkAddress(DeliveryAddress a) async {
+    try {
+      final r = await context.read<DeliveryController>().check(a.pincode);
+      if (mounted) setState(() => _status[a.pincode] = r);
+      return r;
+    } catch (_) {
+      return null; // Offline: checked again when continuing.
+    }
+  }
+
+  void _choose(int i) {
+    setState(() => _selected = i);
+    // The delivery address becomes the selected delivery PIN code, so Add to Cart and checkout agree.
+    final delivery = context.read<DeliveryController>();
+    if (delivery.selected?.pincode != _addresses[i].pincode) {
+      () async {
+        try {
+          await delivery.choose(_addresses[i].pincode);
+        } catch (_) {
+          // Offline: the address is checked again when continuing.
+        }
+      }();
+    }
   }
 
   void _showSnack(String message) {
@@ -62,12 +102,29 @@ class _SelectAddressScreenState extends State<SelectAddressScreen> {
         _selected = _addresses.length - 1;
       }
     });
+    _checkAddress(address);
     _showSnack('${address.label} address saved');
   }
 
-  void _proceed() {
+  Future<void> _proceed() async {
     if (_selected < 0) {
       _showSnack('Add a shipping address to continue');
+      return;
+    }
+    // Delivery only to a serviceable PIN code — checked with the server, never assumed.
+    final address = _addresses[_selected];
+    final status = await _checkAddress(address) ?? _status[address.pincode];
+    if (!mounted) return;
+    if (status == null) {
+      _showSnack(
+        'Could not check delivery to ${address.pincode}. Check your internet connection and try again.',
+      );
+      return;
+    }
+    if (!status.serviceable) {
+      _showSnack(
+        "Sorry, we don't deliver to ${address.pincode} yet. Choose an address in a serviceable PIN code.",
+      );
       return;
     }
     Navigator.of(context).pushNamed(
@@ -125,7 +182,8 @@ class _SelectAddressScreenState extends State<SelectAddressScreen> {
                             _AddressCard(
                               address: _addresses[i],
                               selected: i == _selected,
-                              onTap: () => setState(() => _selected = i),
+                              status: _status[_addresses[i].pincode],
+                              onTap: () => _choose(i),
                             ),
                             const SizedBox(height: AppSpacing.space3),
                           ],
@@ -173,11 +231,15 @@ class _AddressCard extends StatelessWidget {
     required this.address,
     required this.selected,
     required this.onTap,
+    this.status,
   });
 
   final DeliveryAddress address;
   final bool selected;
   final VoidCallback onTap;
+
+  /// Serviceable / Not serviceable, from the server (null while checking).
+  final DeliveryCheck? status;
 
   @override
   Widget build(BuildContext context) {
@@ -251,6 +313,32 @@ class _AddressCard extends StatelessWidget {
               Text(address.formattedMobile, style: muted),
             ],
           ),
+          if (status != null) ...[
+            const SizedBox(height: AppSpacing.space1),
+            Row(
+              children: [
+                Icon(
+                  status!.serviceable
+                      ? Icons.check_circle_rounded
+                      : Icons.cancel_rounded,
+                  size: 14,
+                  color: status!.serviceable
+                      ? AppColors.success
+                      : AppColors.error,
+                ),
+                const SizedBox(width: AppSpacing.space1),
+                Text(
+                  status!.serviceable ? 'Serviceable' : 'Not serviceable',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: status!.serviceable
+                        ? AppColors.success
+                        : AppColors.error,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

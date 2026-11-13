@@ -4,10 +4,10 @@ import { api } from '@/lib/api';
 import type { Address } from '@/lib/types';
 import { useTheme } from 'styled-components';
 import { AppRoutes } from '../../../routes/appRoutes';
-import type { SignupFlowArgs } from '../../../routes/appRoutes';
 import type { HomeCategory } from '../../../services/catalog/catalogModels';
 import { useSession } from '../../../session/SessionContext';
 import { useLiveLocation } from '../../../session/LocationContext';
+import { useDelivery } from '@/lib/delivery';
 import { useCart } from '../../../session/CartContext';
 import { CategoryImage } from '../../../shared/CategoryImage';
 import { ComingSoonBadge } from '../../../shared/ComingSoonBadge';
@@ -71,7 +71,7 @@ export function HomeDashboard({ categories, onCategoryTap }: HomeDashboardProps)
   const theme = useTheme();
   const { user, isLoggedIn, isPartner, account } = useSession();
   const { totalQuantity: cartCount } = useCart();
-  const { currentLocation, addressStatus, isTracking, trackingError, enable: enableLocation } = useLiveLocation();
+  const { isTracking, trackingError, enable: enableLocation } = useLiveLocation();
   const [locating, setLocating] = useState(false);
   const locateNow = async () => {
     setLocating(true);
@@ -93,21 +93,20 @@ export function HomeDashboard({ categories, onCategoryTap }: HomeDashboardProps)
     return () => { live = false; };
   }, [isLoggedIn, account?.id]);
 
+  // "Deliver to" is the selected delivery PIN code (not the GPS position); it decides whether customers can buy.
+  const delivery = useDelivery();
+  // A signed-in customer with no delivery PIN code chosen yet starts with their default address's PIN code.
+  const { selected: deliverySelected, choose: chooseDelivery } = delivery;
+  useEffect(() => {
+    if (!deliverySelected && saved?.pincode) void chooseDelivery(saved.pincode).catch(() => undefined);
+  }, [deliverySelected, saved?.pincode, chooseDelivery]);
   const locationLabel = 'Deliver to';
-  const locationAddress =
-    currentLocation?.address ??
-    (saved ? [saved.line1, saved.city, saved.pincode].filter(Boolean).join(', ')
-      : addressStatus === 'loading' ? 'Updating your location…' : 'Choose your delivery location');
+  const locationAddress = delivery.label
+    ? `${delivery.label} · ${delivery.checking ? 'checking…' : delivery.canPurchase ? 'Delivery available' : 'Delivery not available'}`
+    : 'Enter your delivery PIN code';
   const rewardPoints = 0;
 
-  const openLocation = () => {
-    const args: SignupFlowArgs = {
-      mobileNumber: user.phone ?? '',
-      fullName: user.name,
-      isLocationUpdate: true,
-    };
-    navigate(AppRoutes.chooseLocation, { state: args });
-  };
+  const openLocation = () => delivery.openPicker();
   const openSearch = () => navigate(AppRoutes.search);
 
   return (
@@ -219,9 +218,10 @@ export function HomeDashboard({ categories, onCategoryTap }: HomeDashboardProps)
                 <CardMedia>
                   <CategoryImage
                     imageAsset={category.imageAsset}
-                    fallbackIcon={category.icon}
-                    fallbackIconColor={category.iconColor}
-                    fallbackBackground={category.iconBackground}
+                    placeholder
+                    fallbackIcon="pi-image"
+                    fallbackIconColor={theme.colors.outline}
+                    fallbackBackground={theme.colors.surfaceContainer}
                     iconSize={theme.spacing.space6}
                   />
                 </CardMedia>

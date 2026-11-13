@@ -15,6 +15,7 @@ import '@fontsource/noto-sans-devanagari/600.css'
 import 'primeicons/primeicons.css'
 import './globals.css'
 import { ShopProvider } from '@/lib/shop'
+import { DeliveryProvider } from '@/lib/delivery'
 import { serverApi } from '@/lib/server-api'
 import StyledComponentsRegistry from './registry'
 import { UiProviders } from '@/ui/Providers'
@@ -34,12 +35,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en">
       <body>
         <StyledComponentsRegistry>
-          <ShopProvider>
-            <UiProviders categories={categories ?? []} store={store ?? null}>
-              {children}
-              <Toaster position="top-center" richColors closeButton />
-            </UiProviders>
-          </ShopProvider>
+          <DeliveryProvider>
+            <ShopProvider>
+              <UiProviders categories={categories ?? []} store={store ?? null}>
+                {children}
+                <Toaster position="top-center" richColors closeButton />
+              </UiProviders>
+            </ShopProvider>
+          </DeliveryProvider>
         </StyledComponentsRegistry>
       </body>
     </html>

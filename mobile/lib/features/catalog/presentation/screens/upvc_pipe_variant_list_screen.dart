@@ -8,12 +8,10 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../shared/widgets/category_image.dart';
-import '../../data/catalog_assets.dart';
-import '../../data/mock/catalog_mock_data.dart';
 import '../../data/pipe_schedule_util.dart';
-import '../../data/mock/upvc_pipe_matrix_data.dart';
 import '../../domain/models/catalog_models.dart';
 import '../widgets/pipes_filter_panel.dart';
+import '../../../../shared/widgets/delivery_pin_sheet.dart';
 
 /// Pipe product configurator — wireframe layout with image carousel,
 /// product details, add-to-cart card, and bottom filters.
@@ -60,72 +58,15 @@ class _UpvcPipeVariantListScreenState extends State<UpvcPipeVariantListScreen> {
   }
 
   List<ProductVariant> _moduleVariants(CatalogController catalog) {
-    if (catalog.isUsingApi && catalog.pipeVariants.isNotEmpty) {
-      return catalog.pipeVariants;
-    }
-    return CatalogMockData.variants
-        .where((variant) => CatalogMockData.plumbingModuleCategoryIds
-            .contains(variant.categoryId))
-        .toList();
-  }
-
-  bool _usesUpvcMatrix(CatalogController catalog) {
-    final isUpvcScope =
-        widget.subCategoryId == CatalogMockData.upvcPipesSubCategoryId ||
-            (widget.categoryIds?.length == 1 &&
-                widget.categoryIds!.first ==
-                    CatalogMockData.pipesTubingCategoryId);
-    if (!isUpvcScope) return false;
-    if (!catalog.isUsingApi) return true;
-
-    final apiUpvc = catalog.pipeVariants.where(
-      (v) => v.subCategoryId == CatalogMockData.upvcPipesSubCategoryId,
-    );
-    return !apiUpvc.any(
-      (v) => _typeLabel(v).toLowerCase().startsWith('sch'),
-    );
-  }
-
-  bool _usesCpvcMatrix(CatalogController catalog) {
-    final isCpvcScope =
-        widget.subCategoryId == CatalogMockData.cpvcPipesSubCategoryId;
-    if (!isCpvcScope) return false;
-    if (!catalog.isUsingApi) return true;
-
-    final apiCpvc = catalog.pipeVariants.where(
-      (v) => v.subCategoryId == CatalogMockData.cpvcPipesSubCategoryId,
-    );
-    return apiCpvc.isEmpty;
-  }
-
-  bool _usesPvcSwrMatrix(CatalogController catalog) {
-    final isPvcSwrScope =
-        widget.subCategoryId == CatalogMockData.pvcSwrPipesSubCategoryId;
-    if (!isPvcSwrScope) return false;
-    if (!catalog.isUsingApi) return true;
-
-    final apiPvcSwr = catalog.pipeVariants.where(
-      (v) => v.subCategoryId == CatalogMockData.pvcSwrPipesSubCategoryId,
-    );
-    return apiPvcSwr.isEmpty;
+    return catalog.pipeVariants;
   }
 
   List<ProductVariant> _all(CatalogController catalog) {
-    if (_usesUpvcMatrix(catalog)) {
-      return CatalogMockData.upvcPipeMatrixVariants;
-    }
-    if (_usesCpvcMatrix(catalog)) {
-      return CatalogMockData.cpvcPipeMatrixVariants;
-    }
-    if (_usesPvcSwrMatrix(catalog)) {
-      return CatalogMockData.pvcSwrPipeMatrixVariants;
-    }
-
     final categoryIds = widget.categoryIds;
     return categoryIds != null
-        ? _moduleVariants(catalog)
-            .where((v) => categoryIds.contains(v.categoryId))
-            .toList()
+        ? _moduleVariants(
+            catalog,
+          ).where((v) => categoryIds.contains(v.categoryId)).toList()
         : catalog.pipeVariantsForSubCategory(widget.subCategoryId);
   }
 
@@ -152,20 +93,21 @@ class _UpvcPipeVariantListScreenState extends State<UpvcPipeVariantListScreen> {
         break;
       case PipeModuleSort.discount:
         list.sort(
-          (a, b) => (b.effectiveDiscountRate ?? 0)
-              .compareTo(a.effectiveDiscountRate ?? 0),
+          (a, b) => (b.effectiveDiscountRate ?? 0).compareTo(
+            a.effectiveDiscountRate ?? 0,
+          ),
         );
       case PipeModuleSort.priceLowHigh:
         list.sort(
-          (a, b) => (a.sellingPrice ?? a.price)
-              .compareTo(b.sellingPrice ?? b.price),
+          (a, b) =>
+              (a.sellingPrice ?? a.price).compareTo(b.sellingPrice ?? b.price),
         );
       case PipeModuleSort.whatsNew:
         list = list.reversed.toList();
       case PipeModuleSort.priceHighLow:
         list.sort(
-          (a, b) => (b.sellingPrice ?? b.price)
-              .compareTo(a.sellingPrice ?? a.price),
+          (a, b) =>
+              (b.sellingPrice ?? b.price).compareTo(a.sellingPrice ?? a.price),
         );
       case PipeModuleSort.ratings:
         list.sort((a, b) => b.rating.compareTo(a.rating));
@@ -200,7 +142,8 @@ class _UpvcPipeVariantListScreenState extends State<UpvcPipeVariantListScreen> {
       if (!mounted) return;
       if (_filtersInitialized && _initializedForSubCategory == key) return;
       final tapped = _variantsForTappedProduct(all);
-      final initial = _cheapestVariant(tapped) ??
+      final initial =
+          _cheapestVariant(tapped) ??
           _defaultVariant(all) ??
           _cheapestVariant(all);
       if (initial == null) return;
@@ -238,7 +181,8 @@ class _UpvcPipeVariantListScreenState extends State<UpvcPipeVariantListScreen> {
     if (_pipeType != null && !types.contains(_pipeType)) {
       _pipeType = null;
     }
-    if (_size != null && !sizes.contains(_size) &&
+    if (_size != null &&
+        !sizes.contains(_size) &&
         !PipeFilterSizes.all.contains(_size)) {
       _size = null;
     }
@@ -250,15 +194,20 @@ class _UpvcPipeVariantListScreenState extends State<UpvcPipeVariantListScreen> {
         .where((s) => s.isNotEmpty)
         .toSet()
         .toList();
-    sizes.sort(UpvcPipeMatrixData.compareSizeLabels);
+    sizes.sort((a, b) {
+      final aSize =
+          int.tryParse(RegExp(r'^\s*(\d+)').firstMatch(a)?.group(1) ?? '') ?? 0;
+      final bSize =
+          int.tryParse(RegExp(r'^\s*(\d+)').firstMatch(b)?.group(1) ?? '') ?? 0;
+      return aSize.compareTo(bSize);
+    });
     return sizes;
   }
 
-  List<String> _brandOptions(List<ProductVariant> all, CatalogController catalog) =>
-      all
-      .map((v) => v.brandId)
-      .toSet()
-      .toList()
+  List<String> _brandOptions(
+    List<ProductVariant> all,
+    CatalogController catalog,
+  ) => all.map((v) => v.brandId).toSet().toList()
     ..sort((a, b) => _brandName(a, catalog).compareTo(_brandName(b, catalog)));
 
   String _typeLabel(ProductVariant variant) =>
@@ -266,12 +215,8 @@ class _UpvcPipeVariantListScreenState extends State<UpvcPipeVariantListScreen> {
       PipeScheduleUtil.normalizePipeSchedule(variant.specifications['Type']) ??
       '';
 
-  List<String> _typeOptions(List<ProductVariant> all) => all
-      .map(_typeLabel)
-      .where((t) => t.isNotEmpty)
-      .toSet()
-      .toList()
-    ..sort();
+  List<String> _typeOptions(List<ProductVariant> all) =>
+      all.map(_typeLabel).where((t) => t.isNotEmpty).toSet().toList()..sort();
 
   String _brandName(String brandId, CatalogController catalog) =>
       catalog.brandById(brandId)?.name ?? brandId;
@@ -310,20 +255,14 @@ class _UpvcPipeVariantListScreenState extends State<UpvcPipeVariantListScreen> {
     return list;
   }
 
-  List<String> _availableSizes(
-    List<ProductVariant> pool, {
-    String? forType,
-  }) {
+  List<String> _availableSizes(List<ProductVariant> pool, {String? forType}) {
     final filtered = forType == null
         ? pool
         : pool.where((v) => _typeLabel(v) == forType).toList();
     return _sizeOptions(filtered);
   }
 
-  List<String> _availableTypes(
-    List<ProductVariant> pool, {
-    String? forSize,
-  }) {
+  List<String> _availableTypes(List<ProductVariant> pool, {String? forSize}) {
     final filtered = forSize == null
         ? pool
         : pool.where((v) => _matchesSize(v, forSize)).toList();
@@ -365,19 +304,11 @@ class _UpvcPipeVariantListScreenState extends State<UpvcPipeVariantListScreen> {
 
     if (_pipeType != null && _pipeType!.isNotEmpty) {
       if (_brandId != null && _brandId!.isNotEmpty) {
-        final match = _applySelections(
-          all,
-          brandId: _brandId,
-          type: _pipeType,
-        );
+        final match = _applySelections(all, brandId: _brandId, type: _pipeType);
         if (match.isNotEmpty) return match.first;
       }
       if (_size != null && _size!.isNotEmpty) {
-        final match = _applySelections(
-          all,
-          size: _size,
-          type: _pipeType,
-        );
+        final match = _applySelections(all, size: _size, type: _pipeType);
         if (match.isNotEmpty) return match.first;
       }
       final byType = _applySelections(all, type: _pipeType);
@@ -415,15 +346,10 @@ class _UpvcPipeVariantListScreenState extends State<UpvcPipeVariantListScreen> {
     if (variants.isEmpty) return null;
     final inStock = variants.where((v) => v.inStock).toList();
     final pool = inStock.isNotEmpty ? inStock : variants;
-    return pool.reduce(
-      (a, b) => a.price <= b.price ? a : b,
-    );
+    return pool.reduce((a, b) => a.price <= b.price ? a : b);
   }
 
-  List<_CarouselSlide> _carouselSlides(
-    List<ProductVariant> all,
-    ProductVariant? variant,
-  ) {
+  List<_CarouselSlide> _carouselSlides(List<ProductVariant> all) {
     final slides = <_CarouselSlide>[];
     final seen = <String>{};
 
@@ -432,23 +358,6 @@ class _UpvcPipeVariantListScreenState extends State<UpvcPipeVariantListScreen> {
       if (url != null && url.isNotEmpty && seen.add(url)) {
         slides.add(_CarouselSlide(imageUrl: url));
       }
-      final asset = item.imageAsset;
-      if (asset.isNotEmpty && seen.add(asset)) {
-        slides.add(_CarouselSlide(imageAsset: asset));
-      }
-    }
-
-    if (slides.isEmpty && widget.heroImageAsset != null) {
-      slides.add(_CarouselSlide(imageAsset: widget.heroImageAsset!));
-    } else if (slides.isEmpty) {
-      slides.add(
-        _CarouselSlide(
-          imageAsset: variant?.imageAsset.isNotEmpty == true
-              ? variant!.imageAsset
-              : CatalogAssets.pipeSummary,
-          imageUrl: variant?.imageUrl,
-        ),
-      );
     }
 
     return slides;
@@ -463,8 +372,7 @@ class _UpvcPipeVariantListScreenState extends State<UpvcPipeVariantListScreen> {
       final pool = _selectionPool(all);
       var matches = pool.where((v) => _matchesSize(v, size)).toList();
       if (_pipeType != null) {
-        final typed =
-            matches.where((v) => _typeLabel(v) == _pipeType).toList();
+        final typed = matches.where((v) => _typeLabel(v) == _pipeType).toList();
         if (typed.isNotEmpty) matches = typed;
       }
       if (matches.isEmpty) return;
@@ -501,15 +409,15 @@ class _UpvcPipeVariantListScreenState extends State<UpvcPipeVariantListScreen> {
       final catalog = context.read<CatalogController>();
       final all = _all(catalog);
       final pool = _selectionPool(all);
-      var matches =
-          pool.where((v) => variantMatchesPipeBrand(v, brandName)).toList();
+      var matches = pool
+          .where((v) => variantMatchesPipeBrand(v, brandName))
+          .toList();
       if (_size != null) {
         final sized = matches.where((v) => _matchesSize(v, _size!)).toList();
         if (sized.isNotEmpty) matches = sized;
       }
       if (_pipeType != null) {
-        final typed =
-            matches.where((v) => _typeLabel(v) == _pipeType).toList();
+        final typed = matches.where((v) => _typeLabel(v) == _pipeType).toList();
         if (typed.isNotEmpty) matches = typed;
       }
       if (matches.isEmpty) return;
@@ -518,12 +426,17 @@ class _UpvcPipeVariantListScreenState extends State<UpvcPipeVariantListScreen> {
   }
 
   void _addToCart(ProductVariant variant) {
+    if (!ensureDeliverable(context)) return;
     context.read<CartController>().addVariant(variant);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.check_circle_rounded, color: AppColors.onPrimary, size: 20),
+            const Icon(
+              Icons.check_circle_rounded,
+              color: AppColors.onPrimary,
+              size: 20,
+            ),
             const SizedBox(width: AppSpacing.space2),
             Expanded(child: Text('${variant.displayName} added to cart')),
           ],
@@ -542,14 +455,15 @@ class _UpvcPipeVariantListScreenState extends State<UpvcPipeVariantListScreen> {
     final all = _all(catalog);
     _ensureDefaultFilters(all, catalog);
     final variant = _resolvedVariant(all, catalog);
-    final slides = _carouselSlides(all, variant);
+    final slides = _carouselSlides(all);
     final selectionPool = _selectionPool(all);
     final sizeOptions = _availableSizes(selectionPool, forType: _pipeType);
     final typeOptions = _availableTypes(selectionPool, forSize: _size);
     final productName =
         variant?.productName ?? widget.title ?? 'Pipe configurator';
     final selectedSize = _size ?? variant?.specifications['Size'];
-    final selectedType = _pipeType ?? (variant == null ? null : _typeLabel(variant));
+    final selectedType =
+        _pipeType ?? (variant == null ? null : _typeLabel(variant));
     final price = variant?.sellingPrice ?? variant?.price;
     final unit = variant?.unit ?? 'piece';
 
@@ -559,10 +473,9 @@ class _UpvcPipeVariantListScreenState extends State<UpvcPipeVariantListScreen> {
         children: [
           _PipeConfiguratorHeader(
             onBack: () => Navigator.of(context).maybePop(),
-            onSearch: () => Navigator.of(context).pushNamed(
-              AppRoutes.search,
-              arguments: const SearchArgs(),
-            ),
+            onSearch: () => Navigator.of(
+              context,
+            ).pushNamed(AppRoutes.search, arguments: const SearchArgs()),
           ),
           Expanded(
             child: Stack(
@@ -596,15 +509,18 @@ class _UpvcPipeVariantListScreenState extends State<UpvcPipeVariantListScreen> {
                         value: selectedSize,
                         options: sizeOptions,
                         hint: 'Select size',
-                        onChanged: sizeOptions.isEmpty ? null : _onSizeDropdownChanged,
+                        onChanged: sizeOptions.isEmpty
+                            ? null
+                            : _onSizeDropdownChanged,
                       ),
                       const SizedBox(height: AppSpacing.space2),
                       _ProductOptionDropdown(
                         value: selectedType,
                         options: typeOptions,
                         hint: 'Select type',
-                        onChanged:
-                            typeOptions.isEmpty ? null : _onTypeDropdownChanged,
+                        onChanged: typeOptions.isEmpty
+                            ? null
+                            : _onTypeDropdownChanged,
                       ),
                       const SizedBox(height: AppSpacing.space4),
                       _AddToCartCard(
@@ -619,11 +535,15 @@ class _UpvcPipeVariantListScreenState extends State<UpvcPipeVariantListScreen> {
                       if (catalog.isLoading && all.isEmpty)
                         const Padding(
                           padding: EdgeInsets.only(top: AppSpacing.space3),
-                          child: LinearProgressIndicator(color: AppColors.primary),
+                          child: LinearProgressIndicator(
+                            color: AppColors.primary,
+                          ),
                         ),
                       if (!catalog.isLoading && all.isEmpty)
                         Padding(
-                          padding: const EdgeInsets.only(top: AppSpacing.space4),
+                          padding: const EdgeInsets.only(
+                            top: AppSpacing.space4,
+                          ),
                           child: Row(
                             children: [
                               const Icon(
@@ -677,17 +597,13 @@ class _UpvcPipeVariantListScreenState extends State<UpvcPipeVariantListScreen> {
 }
 
 class _CarouselSlide {
-  const _CarouselSlide({this.imageAsset, this.imageUrl});
+  const _CarouselSlide({this.imageUrl});
 
-  final String? imageAsset;
   final String? imageUrl;
 }
 
 class _PipeConfiguratorHeader extends StatelessWidget {
-  const _PipeConfiguratorHeader({
-    required this.onBack,
-    required this.onSearch,
-  });
+  const _PipeConfiguratorHeader({required this.onBack, required this.onSearch});
 
   final VoidCallback onBack;
   final VoidCallback onSearch;
@@ -700,10 +616,7 @@ class _PipeConfiguratorHeader extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFFEAF0FF),
-            AppColors.surface,
-          ],
+          colors: [Color(0xFFEAF0FF), AppColors.surface],
         ),
       ),
       child: SafeArea(
@@ -753,9 +666,7 @@ class _PipeConfiguratorHeader extends StatelessWidget {
                               enabledBorder: InputBorder.none,
                               focusedBorder: InputBorder.none,
                               hintText: 'Search products',
-                              hintStyle: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
+                              hintStyle: Theme.of(context).textTheme.bodyMedium
                                   ?.copyWith(color: AppColors.outline),
                               contentPadding: EdgeInsets.zero,
                             ),
@@ -782,10 +693,7 @@ class _PipeConfiguratorHeader extends StatelessWidget {
 }
 
 class _HeaderIconButton extends StatelessWidget {
-  const _HeaderIconButton({
-    required this.icon,
-    required this.onPressed,
-  });
+  const _HeaderIconButton({required this.icon, required this.onPressed});
 
   final IconData icon;
   final VoidCallback onPressed;
@@ -850,7 +758,6 @@ class _ProductImageCarousel extends StatelessWidget {
             itemBuilder: (context, index) {
               final slide = slides[index];
               return CategoryImage(
-                imageAsset: slide.imageAsset ?? '',
                 imageUrl: slide.imageUrl,
                 fallbackIcon: 'plumbing',
                 fallbackIconColor: AppColors.outline,
@@ -965,7 +872,9 @@ class _AddToCartCard extends StatelessWidget {
                 Text(
                   enabled ? selectedSizeLabel : 'Out of stock',
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: enabled ? AppColors.onSurfaceVariant : AppColors.error,
+                    color: enabled
+                        ? AppColors.onSurfaceVariant
+                        : AppColors.error,
                     fontWeight: enabled ? FontWeight.w400 : FontWeight.w700,
                   ),
                 ),
@@ -974,7 +883,9 @@ class _AddToCartCard extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.space2),
           Material(
-            color: enabled ? AppColors.accentGreenContainer : AppColors.disabledContainer,
+            color: enabled
+                ? AppColors.accentGreenContainer
+                : AppColors.disabledContainer,
             borderRadius: AppRadius.lgAll,
             child: InkWell(
               onTap: enabled ? onAddToCart : null,
@@ -1059,10 +970,7 @@ class _ProductOptionDropdown extends StatelessWidget {
           style: textStyle,
           items: [
             for (final option in options)
-              DropdownMenuItem<String>(
-                value: option,
-                child: Text(option),
-              ),
+              DropdownMenuItem<String>(value: option, child: Text(option)),
           ],
           onChanged: onChanged,
         ),

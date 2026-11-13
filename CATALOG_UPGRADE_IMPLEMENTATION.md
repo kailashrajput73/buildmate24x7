@@ -81,7 +81,7 @@ Existing product listing/detail endpoints return an additive `catalog` object. L
 
 Family list pages use `collapse=true` and pagination. Facets/family summary counts are aggregated in PostgreSQL rather than sending the whole category to the device. The legacy category-items endpoint remains available for backward compatibility; the new web/mobile category screens no longer call it.
 
-Admin endpoints retain Staff authentication plus CatalogView/CatalogManage permission policies. No Firebase/Cashfree credentials or configuration were changed.
+Admin endpoints retain Staff authentication plus CatalogView/CatalogManage permission policies. No Cashfree credentials or configuration were changed.
 
 ## Website and Flutter
 
@@ -115,7 +115,7 @@ Production master lists and ambiguous legacy mappings still require the client's
 
 ## Deployment and rollback — instructions only
 
-1. Review the changes and obtain deployment/migration approval. Back up the approved database and verify restoration in an isolated environment. Preserve the existing Firebase/Cashfree configuration and encryption keys.
+1. Review the changes and obtain deployment/migration approval. Back up the approved database and verify restoration in an isolated environment. Preserve the existing Cashfree configuration and encryption keys.
 2. Rehearse the forward migration on a restored copy with representative legacy products, pending payments and orders. Compare row counts, stock balances and historical totals.
 3. Schedule a brief catalog/checkout maintenance window. Apply the SQL transaction with `psql -v ON_ERROR_STOP=1 -f api/db/2026-10-30_catalog_packages.sql` using an approved connection, then deploy compatible API/dashboard/storefront versions. Build and distribute the compatible mobile app separately after approval.
 4. Populate/review Type masters and legacy mappings before bulk import. Test one family from two brands, a piece purchase, a box purchase, dispatch, invoice and cancellation. Confirm production API origins and payment environment without changing credentials.

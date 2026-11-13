@@ -29,6 +29,7 @@ const Content = lazy(() => import('./pages/Content'))
 const Reports = lazy(() => import('./pages/Reports'))
 const Team = lazy(() => import('./pages/Team'))
 const Settings = lazy(() => import('./pages/Settings'))
+const DeliveryAreas = lazy(() => import('./pages/DeliveryAreas'))
 const Integrations = lazy(() => import('./pages/Integrations'))
 
 function Guard({ perm, children }: { perm?: string; children: ReactNode }) {
@@ -71,6 +72,7 @@ export default function App() {
           <Route path="reports" element={<Guard perm={P.reports}><Reports /></Guard>} />
           <Route path="team" element={<Guard perm={P.users}><Team /></Guard>} />
           <Route path="settings" element={<Guard perm={P.settings}><Settings /></Guard>} />
+          <Route path="delivery-areas" element={<Guard perm={P.settings}><DeliveryAreas /></Guard>} />
           <Route path="integrations" element={<Guard perm={P.settings}><Integrations /></Guard>} />
           <Route path="*" element={<div className="card p-8 text-center text-sm">This page doesn't exist.</div>} />
         </Route>

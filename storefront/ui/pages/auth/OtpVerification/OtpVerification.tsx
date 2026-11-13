@@ -6,7 +6,7 @@ import { useShop } from '@/lib/shop';
 import { ApiError } from '@/lib/api';
 import {
   confirmPhoneOtp,
-  firebaseAuthMessage,
+  phoneAuthMessage,
   sendPhoneOtp,
   signInWithVerifiedPhone,
 } from '../../../services/auth/phoneAuth';
@@ -114,7 +114,7 @@ export function OtpVerification() {
       setLoading(false);
       // As in Flutter, clear() reports '' through onChanged, which also resets the error.
       otpRef.current?.clear();
-      setError(firebaseAuthMessage(verifyError));
+      setError(phoneAuthMessage(verifyError));
     }
   };
 
@@ -128,7 +128,7 @@ export function OtpVerification() {
       startTimer();
       setSnackBar((previous) => ({ id: (previous?.id ?? 0) + 1, message: 'Verification code resent.' }));
     } catch (resendError) {
-      if (mounted.current) setError(firebaseAuthMessage(resendError));
+      if (mounted.current) setError(phoneAuthMessage(resendError));
     } finally {
       if (mounted.current) setLoading(false);
     }
@@ -177,7 +177,6 @@ export function OtpVerification() {
             )}
           </Resend>
         </Content>
-        <div id="firebase-recaptcha" />
         {snackBar && (
           <SnackBar key={snackBar.id} message={snackBar.message} onDismissed={dismissSnackBar} />
         )}

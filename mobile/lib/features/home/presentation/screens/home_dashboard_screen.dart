@@ -4,15 +4,15 @@ import 'package:provider/provider.dart';
 import '../../../../core/location/device_location.dart';
 import '../../../../core/routes/app_routes.dart';
 import '../../../../core/state/catalog_controller.dart';
+import '../../../../core/state/delivery_controller.dart';
 import '../../../../core/state/location_controller.dart';
 import '../../../../core/state/recently_viewed_controller.dart';
 import '../../../../core/state/session_controller.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../catalog/domain/models/catalog_models.dart';
-import '../../data/mock/home_mock_data.dart';
+import '../../../../shared/widgets/delivery_pin_sheet.dart';
 import '../widgets/current_offers_section.dart';
-import '../widgets/featured_banner_carousel.dart';
 import '../widgets/featured_products_section.dart';
 import '../widgets/home_app_bar.dart';
 import '../widgets/home_category_card.dart';
@@ -45,8 +45,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
       }
       final catalog = context.read<CatalogController>();
       catalog.refreshHomeCatalog(
-        showLoading: catalog.homeCategories.isEmpty &&
-            catalog.pipeVariants.isEmpty,
+        showLoading:
+            catalog.homeCategories.isEmpty && catalog.pipeVariants.isEmpty,
       );
     });
   }
@@ -69,11 +69,12 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   Widget build(BuildContext context) {
     final user = context.watch<SessionController>().user;
     final recentlyViewed = context.watch<RecentlyViewedController>().items;
-    final location = context.watch<LocationController>();
+    final delivery = context.watch<DeliveryController>();
     final catalog = context.watch<CatalogController>();
 
-    final categories =
-        HomeDashboardCategories.forDashboard(catalog.homeCategories);
+    final categories = HomeDashboardCategories.forDashboard(
+      catalog.homeCategories,
+    );
 
     final brands = catalog.catalogBrands
         .take(8)
@@ -136,26 +137,16 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                         AppSpacing.space4,
                         0,
                       ),
+                      // "Deliver to" is the selected delivery PIN code (not the GPS position); it decides
+                      // whether Add to Cart and checkout are allowed.
                       child: HomeLocationBar(
-                        label: location.hasFix ? 'Home' : 'Location',
-                        address: location.fullAddress,
-                        isLoading: location.isLoading && !location.hasFix,
-                        onTap: () {
-                          if (!location.hasFix &&
-                              location.error != null &&
-                              !location.isLoading) {
-                            location.fetchCurrentLocation();
-                            return;
-                          }
-                          _open(
-                            AppRoutes.chooseLocation,
-                            arguments: SignupFlowArgs(
-                              mobileNumber: user.phone ?? '',
-                              fullName: user.name,
-                              isLocationUpdate: true,
-                            ),
-                          );
-                        },
+                        label: 'Deliver to',
+                        address: delivery.selected == null
+                            ? 'Enter your delivery PIN code'
+                            : '${delivery.selected!.label} · ${delivery.canPurchase ? 'Delivery available' : 'Delivery not available'}',
+                        isLoading:
+                            delivery.checking && delivery.selected == null,
+                        onTap: () => showDeliveryPinSheet(context),
                       ),
                     ),
                     Padding(
@@ -174,18 +165,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                         onScan: () => _open(AppRoutes.search),
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.space4,
-                        AppSpacing.space3,
-                        AppSpacing.space4,
-                        0,
-                      ),
-                      child: FeaturedBannerCarousel(
-                        banners: HomeMockData.banners,
-                        onCta: (banner) => _open(banner.routeName),
-                      ),
-                    ),
                     const SizedBox(height: AppSpacing.space5),
                     Padding(
                       padding: const EdgeInsets.symmetric(
@@ -195,29 +174,30 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                           ? const SizedBox(
                               height: 120,
                               child: Center(
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               ),
                             )
                           : categories.isEmpty
-                              ? const Text(
-                                  'No categories from server yet.',
-                                  style: TextStyle(
-                                    color: AppColors.onSurfaceVariant,
+                          ? const Text(
+                              'No categories from server yet.',
+                              style: TextStyle(
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                            )
+                          : CategoriesSection(
+                              categories: categories,
+                              onCategoryTap: (category) {
+                                _open(
+                                  AppRoutes.categoryBrowse,
+                                  arguments: CategoryBrowseArgs(
+                                    categoryId: category.id,
+                                    categoryName: category.name,
                                   ),
-                                )
-                              : CategoriesSection(
-                                  categories: categories,
-                                  onCategoryTap: (category) {
-                                    _open(
-                                      AppRoutes.categoryBrowse,
-                                      arguments: CategoryBrowseArgs(
-                                        categoryId: category.id,
-                                        categoryName: category.name,
-                                      ),
-                                    );
-                                  },
-                                ),
+                                );
+                              },
+                            ),
                     ),
                     const SizedBox(height: AppSpacing.space5),
                     const _SectionDivider(),
@@ -269,11 +249,11 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                       onViewAll: recentlyViewed.isEmpty
                           ? null
                           : () => _open(
-                                AppRoutes.productList,
-                                arguments: const ProductListArgs(
-                                  title: 'Recently Viewed',
-                                ),
+                              AppRoutes.productList,
+                              arguments: const ProductListArgs(
+                                title: 'Recently Viewed',
                               ),
+                            ),
                       onTap: _openVariant,
                     ),
                     const SizedBox(height: AppSpacing.space5),

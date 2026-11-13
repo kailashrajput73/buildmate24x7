@@ -517,17 +517,6 @@ on('POST', '/api/auth/otp/verify', ({ body }) => {
   if (body.code !== '123456') fail(400, 'Incorrect OTP.', 'otp_invalid')
   return signInByPhone(phone10(body.phone), body)
 })
-// Firebase phone sign-in. DEMO ONLY: the mock decodes the token without checking Google's signature (the real API
-// verifies it — FirebaseTokenVerifier). It still checks the project and that a phone number was verified.
-const FIREBASE_PROJECTS = (process.env.FIREBASE_PROJECT_ID ?? 'buildmate24x7,buildmate-24x7').split(',').map((x) => x.trim())
-on('POST', '/api/auth/firebase', ({ body }) => {
-  let claims
-  try { claims = JSON.parse(Buffer.from(String(body.idToken ?? '').split('.')[1], 'base64url').toString('utf8')) } catch { fail(401, "We couldn't verify your sign-in. Please try again.", 'firebase_token_invalid') }
-  if (!FIREBASE_PROJECTS.includes(claims.aud) || claims.iss !== `https://securetoken.google.com/${claims.aud}`) fail(401, "We couldn't verify your sign-in. Please try again.", 'firebase_token_invalid')
-  if (claims.exp * 1000 < Date.now() - 120e3) fail(401, 'Your sign-in expired. Please verify your number again.', 'firebase_token_expired')
-  if (!claims.phone_number) fail(401, 'Sign in with your mobile number.', 'firebase_phone_required')
-  return signInByPhone(phone10(claims.phone_number), body)
-})
 on('POST', '/api/auth/refresh', ({ body }) => { const id = sessions.get(body.refreshToken); if (!id) fail(401, 'Session expired. Please log in again.', 'refresh_invalid'); return issue(user(id)) })
 on('POST', '/api/auth/logout', () => null)
 on('GET', '/api/auth/me', ({ me }) => authUser(me()))
@@ -778,6 +767,7 @@ on('POST', '/api/orders/checkout', ({ req, me, body }) => {
   const u = me(); const v = viewer(req, u.id); const cart = cartDto(u.id, v, body.fulfilmentType)
   if (!cart.items.length) fail(400, 'Your cart is empty.'); if (!cart.canCheckout) fail(409, cart.issues.join(' '), 'cart_invalid')
   if (body.fulfilmentType === 'HomeDelivery' && !addresses.some((a) => a.id === body.addressId && a.userId === u.id)) fail(400, 'Choose a delivery address.')
+  if (body.fulfilmentType === 'HomeDelivery') { const a = addresses.find((x) => x.id === body.addressId); if (!isServiceable(a.pincode)) fail(409, `Sorry, we don't deliver to ${a.pincode} yet. Choose a serviceable delivery address or store pickup.`, 'pincode_unserviceable') }
   const o = makeOrder({ userId: u.id, kind: v.kind, channel: v.channel, at: now(), lines: cart.items.map((i) => [i.productId, i.quantity]), fulfilment: body.fulfilmentType, status: 'PendingPayment' })
   delete o._clock
   if (body.fulfilmentType === 'HomeDelivery') { const a = addresses.find((x) => x.id === body.addressId); Object.assign(o, { shipLine1: a.line1, shipLine2: a.line2, shipCity: a.city, shipState: a.state, shipPincode: a.pincode }) }
@@ -876,9 +866,43 @@ on('POST', '/api/admin/quotations/:id/cancel', ({ p, body }) => { const q = anyQ
 
 // account
 on('PUT', '/api/account/profile', ({ me, body }) => { Object.assign(me(), { name: body.name, email: body.email ?? null, preferredLanguage: body.preferredLanguage ?? me().preferredLanguage }); return null })
-on('GET', '/api/account/addresses', ({ me }) => addresses.filter((a) => a.userId === me().id))
-on('POST', '/api/account/addresses', ({ me, body }) => { const a = { id: addresses.length + 1, userId: me().id, ...body, isDefault: body.isDefault || !addresses.some((x) => x.userId === me().id) }; if (a.isDefault) addresses.forEach((x) => { if (x.userId === me().id) x.isDefault = false }); addresses.push(a); return a })
-on('PUT', '/api/account/addresses/:id', ({ me, p, body }) => { const a = addresses.find((x) => x.id == p.id && x.userId === me().id); Object.assign(a, body); return a })
+// ---- delivery areas (same rule as the API: only an active PIN code in the list is serviceable)
+const pinDirectory = { '370421': ['Mundra', 'Kachchh', 'Gujarat'], '370001': ['Bhuj', 'Kachchh', 'Gujarat'], '370201': ['Gandhidham', 'Kachchh', 'Gujarat'], '370110': ['Anjar', 'Kachchh', 'Gujarat'], '370465': ['Mandvi', 'Kachchh', 'Gujarat'], '370240': ['Adipur', 'Kachchh', 'Gujarat'], '307501': ['Mount Abu', 'Sirohi', 'Rajasthan'], '302001': ['Jaipur', 'Jaipur', 'Rajasthan'], '400001': ['Mumbai', 'Mumbai', 'Maharashtra'] }
+const deliveryAreas = ['370421', '370001', '370201', '370110'].map((pin) => ({ pincode: pin, city: pinDirectory[pin][0], district: pinDirectory[pin][1], state: pinDirectory[pin][2], isActive: true, addedAt: now() }))
+const syncDeliveryPins = () => { settings.deliveryPincodes = deliveryAreas.filter((a) => a.isActive).map((a) => a.pincode); settings.deliveryAreas = deliveryAreas }
+syncDeliveryPins()
+const normPin = (v) => { const pin = String(v ?? '').replace(/\s/g, ''); return /^[1-9]\d{5}$/.test(pin) ? pin : null }
+const isServiceable = (pin) => { const n = normPin(pin); return !!n && deliveryAreas.some((a) => a.isActive && a.pincode === n) }
+const placeOf = (pin) => { const a = deliveryAreas.find((x) => x.pincode === pin && x.city); if (a) return { pincode: pin, city: a.city, district: a.district, state: a.state }; const d = pinDirectory[pin]; return d ? { pincode: pin, city: d[0], district: d[1], state: d[2] } : null }
+on('GET', '/api/delivery/check', ({ q }) => {
+  const pin = normPin(q.pincode)
+  if (!pin) return { pincode: String(q.pincode ?? '').trim(), status: 'INVALID', serviceable: false, city: null, district: null, state: null, message: 'Enter a valid 6-digit PIN code.' }
+  const ok = isServiceable(pin) && settings.homeDeliveryEnabled; const pl = placeOf(pin); const where = pl?.city ?? pl?.district
+  const at = where ? ` (${where})` : ''
+  return { pincode: pin, status: ok ? 'SERVICEABLE' : 'NOT_SERVICEABLE', serviceable: ok, city: pl?.city ?? null, district: pl?.district ?? null, state: pl?.state ?? null,
+    message: ok ? `Delivery available to ${pin}${at}.` : settings.homeDeliveryEnabled ? `Sorry, we don't deliver to ${pin}${at} yet.` : 'Home delivery is not available right now.' }
+})
+on('GET', '/api/admin/delivery-areas', () => [...deliveryAreas].sort((a, b) => a.pincode.localeCompare(b.pincode)))
+on('GET', '/api/admin/delivery-areas/lookup/:pin', ({ p }) => { const pin = normPin(p.pin); if (!pin) fail(400, 'Enter a valid 6-digit PIN code.'); return placeOf(pin) ?? { pincode: pin, city: null, district: null, state: null } })
+on('POST', '/api/admin/delivery-areas', ({ body }) => {
+  const pin = normPin(body?.pincode); if (!pin) fail(400, 'Enter a valid 6-digit PIN code.')
+  if (deliveryAreas.some((a) => a.pincode === pin)) fail(409, `${pin} is already in the list.`, 'pincode_exists')
+  const d = pinDirectory[pin] ?? []; const clean = (v) => (v ?? '').trim() || null
+  const a = { pincode: pin, city: clean(body.city) ?? d[0] ?? null, district: clean(body.district) ?? d[1] ?? null, state: clean(body.state) ?? d[2] ?? null, isActive: body.isActive ?? true, addedAt: now() }
+  deliveryAreas.push(a); syncDeliveryPins(); return a
+})
+on('PUT', '/api/admin/delivery-areas/:pin', ({ p, body }) => {
+  const a = deliveryAreas.find((x) => x.pincode === p.pin); if (!a) fail(404, 'PIN code not found.')
+  if (typeof body?.isActive === 'boolean') a.isActive = body.isActive
+  for (const k of ['city', 'district', 'state']) if (body?.[k] != null) a[k] = String(body[k]).trim() || null
+  syncDeliveryPins(); return a
+})
+on('DELETE', '/api/admin/delivery-areas/:pin', ({ p }) => { const i = deliveryAreas.findIndex((x) => x.pincode === p.pin); if (i < 0) fail(404, 'PIN code not found.'); deliveryAreas.splice(i, 1); syncDeliveryPins(); return null })
+const withServiceable = (a) => ({ ...a, serviceable: isServiceable(a.pincode) })
+
+on('GET', '/api/account/addresses', ({ me }) => addresses.filter((a) => a.userId === me().id).map(withServiceable))
+on('POST', '/api/account/addresses', ({ me, body }) => { const a = { id: addresses.length + 1, userId: me().id, ...body, isDefault: body.isDefault || !addresses.some((x) => x.userId === me().id) }; if (a.isDefault) addresses.forEach((x) => { if (x.userId === me().id) x.isDefault = false }); addresses.push(a); return withServiceable(a) })
+on('PUT', '/api/account/addresses/:id', ({ me, p, body }) => { const a = addresses.find((x) => x.id == p.id && x.userId === me().id); Object.assign(a, body); return withServiceable(a) })
 on('DELETE', '/api/account/addresses/:id', ({ me, p }) => { const i = addresses.findIndex((x) => x.id == p.id && x.userId === me().id); if (i >= 0) addresses.splice(i, 1); return null })
 on('GET', '/api/account/notifications', ({ me, q }) => page(notifications.filter((n) => n.userId === me().id).reverse(), { ...q, pageSize: 30 }))
 on('GET', '/api/account/notifications/unread-count', ({ me }) => ({ count: notifications.filter((n) => n.userId === me().id && !n.isRead).length }))
@@ -1225,7 +1249,7 @@ on('PUT', '/api/admin/team/roles/:id', ({ p, body }) => upsert(roles, p.id, body
 on('GET', '/api/admin/settings/invoice-numbering', () => numbering())
 on('PUT', '/api/admin/settings/invoice-numbering', ({ body }) => { const n = Number(body?.nextNumber); if (!(n >= 1 && n <= 99999999)) fail(400, 'The next invoice number must be between 1 and 99999999.'); invoiceCounters[fyLabel()] = Math.floor(n); return numbering() })
 on('GET', '/api/admin/settings', () => settings)
-on('PUT', '/api/admin/settings', ({ body }) => Object.assign(settings, body))
+on('PUT', '/api/admin/settings', ({ body }) => { const { deliveryAreas: _a, deliveryPincodes: _p, ...rest } = body ?? {}; Object.assign(settings, rest); syncDeliveryPins(); return settings })
 on('GET', '/api/admin/integrations/erp', ({ q }) => { const items = [...outbox].reverse().filter((m) => !q.status || m.status === q.status); return { connector: 'None', counts: ['Pending', 'Processed', 'Failed', 'Skipped'].map((s) => ({ status: s, count: outbox.filter((m) => m.status === s).length })), items, total: items.length } })
 
 // reports
@@ -1473,7 +1497,7 @@ http.createServer(async (req, res) => {
     if (r.method !== req.method) continue
     const m = r.re.exec(url.pathname)
     if (!m) continue
-    const needsAuth = !url.pathname.startsWith('/api/auth/') && !url.pathname.startsWith('/api/catalog/') && !url.pathname.startsWith('/api/geo/')
+    const needsAuth = !url.pathname.startsWith('/api/auth/') && !url.pathname.startsWith('/api/catalog/') && !url.pathname.startsWith('/api/geo/') && !url.pathname.startsWith('/api/delivery/')
     try {
       if (needsAuth && !uid) throw new HttpError(401, 'Please log in.')
       if (url.pathname.startsWith('/api/admin/') && user(uid)?.userType !== 'Staff') throw new HttpError(403, "You don't have access to this.")

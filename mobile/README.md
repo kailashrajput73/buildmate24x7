@@ -1,7 +1,7 @@
 # BuildMate 24x7 — Flutter app
 
 One app for customers and trade partners (plumbers, electricians, contractors, flooring). Phone OTP login through
-Firebase; at sign-up people pick a profession — Home Owner becomes a customer, trades become partners (partner
+the BuildMate API with MSG91 delivery; at sign-up people pick a profession — Home Owner becomes a customer, trades become partners (partner
 prices and reward points once KYC is approved). Browse by category, search, wishlist, cart → pickup or delivery →
 Cashfree payment, **quotations** (ask the store for its best price on the cart, accept and pay), orders and invoices,
 reward points, addresses, notifications, QR scan, English/Hindi.
@@ -39,36 +39,20 @@ the BuildMate server". Error screens and Profile show the address the app is usi
   `cloudflared tunnel --url http://localhost:5080` (prints `https://….trycloudflare.com`) and build with that.
 - Live: the deployed API's HTTPS address, e.g. `https://api.buildmate24x7.in`.
 
-## Build a test APK (no Firebase yet, against the mock or a test API)
+## Build a test APK
 
 ```bash
-flutter build apk --release --dart-define=API_URL=http://<pc-ip>:5080 --dart-define=AUTH_MODE=otp
-# → build/app/outputs/flutter-apk/app-release.apk  (install on any Android phone; OTP 123456 on the mock)
+flutter build apk --release --dart-define=API_URL=http://<pc-ip>:5080
+# → build/app/outputs/flutter-apk/app-release.apk
 ```
 
 Release builds without `android/key.properties` are signed with the debug key — fine for testing, not for Play.
 
-## Firebase phone login (required)
+## MSG91 phone login
 
-Full guide for web + app: ../FIREBASE_SETUP.md.
-
-The app's package name is **`com.buildmate.customerapp`** — the Android app the store registered in Firebase project
-**`buildmate24x7`** (the same project as the website). Its `google-services.json` is not in this repository.
-
-1. Put that `google-services.json` in `android/app/`. `build-apk.bat` then builds with real SMS login
-   (`AUTH_MODE=firebase`); without it, or if the file is for another package, it builds the demo OTP (`123456`).
-2. Firebase console → Project settings → Your apps → `com.buildmate.customerapp` → **Add fingerprint**: add the
-   **SHA-1 and SHA-256** of every key that signs the app. `build-apk.bat` writes the current key's fingerprints to
-   `firebase-sha.txt` (debug key until `android/key.properties` exists). For Play Store installs also add the
-   **App signing key** fingerprints from Play Console → Setup → App integrity. Phone auth fails without them
-   (`app-not-authorized` / `invalid-app-credential`).
-3. Download `google-services.json` again after adding fingerprints and replace the one in `android/app/`.
-4. Authentication → Sign-in method → enable **Phone**. Real SMS needs the **Blaze** (billing) plan; for testing add
-   numbers under Authentication → Settings → Phone numbers for testing.
-5. The API's `Firebase:ProjectId` already includes `buildmate24x7`.
-
-Firebase error codes are shown in the login error message (e.g. `[app-not-authorized]`) to make set-up problems easy
-to spot.
+Phone verification is sent and checked by the BuildMate API; the MSG91 key and OTP template ID are server-side only.
+For Docker deployments, set `SMS_PROVIDER=Msg91`, `MSG91_AUTH_KEY`, and `MSG91_OTP_TEMPLATE_ID` in the root `.env`.
+The MSG91 template must be approved and DLT-registered. See [MSG91_SETUP.md](../MSG91_SETUP.md).
 
 ## Play Store release
 
@@ -81,17 +65,16 @@ to spot.
    keyAlias=upload
    storeFile=C:/path/to/upload-keystore.jks
    ```
-3. Add this key's SHA-1/SHA-256 to Firebase too, then
-   `flutter build appbundle --release --dart-define=API_URL=https://<live-api>` → `build/app/outputs/bundle/release/app-release.aab`.
+3. Build the app bundle with `flutter build appbundle --release --dart-define=API_URL=https://<live-api>` →
+   `build/app/outputs/bundle/release/app-release.aab`.
 4. Play Console: new app → upload the .aab to Internal testing → fill the store listing, privacy policy URL, data
-   safety form, content rating → test → promote to Production. After Play signing is on, add Play's app-signing
-   SHA-1 to Firebase as well, or OTP login fails for store installs.
+   safety form, content rating → test → promote to Production.
 
 ## Running
 
 ```bash
 # Android emulator against a local API (or the mock API in tools/mock-api) on port 5080
-flutter run --dart-define=API_URL=http://10.0.2.2:5080 --dart-define=AUTH_MODE=otp
+flutter run --dart-define=API_URL=http://10.0.2.2:5080
 
 # Real device on the same Wi-Fi
 flutter run --dart-define=API_URL=http://192.168.1.20:5080
@@ -100,8 +83,8 @@ flutter run --dart-define=API_URL=http://192.168.1.20:5080
 flutter build appbundle --dart-define=API_URL=https://api.buildmate24x7.in
 ```
 
-Dev logins: any phone, OTP `123456` with the mock API; `9999999999` / `8888888888` with OTP `123456` on the real
-API in Development.
+The API's Development profile accepts `123456` for configured test phone numbers. Real-device login requires the
+API to be reachable and configured with the MSG91 provider and approved template.
 
 ## Platform configuration (Android part is already done in `android/`; iOS still needed)
 
@@ -142,27 +125,18 @@ web checkout with the returned `paymentSessionId` and then asks the API to verif
 decides that a payment succeeded. `environment` comes from the API (`SANDBOX` / `PRODUCTION`); `mock` skips the SDK
 for local testing.
 
-## Push notifications (optional)
+## Notifications
 
-Uses the same Firebase project as login. To enable:
-
-```bash
-dart pub global activate flutterfire_cli
-flutterfire configure --project=<firebase-project>
-```
-
-then add `firebase_options.dart` usage in `main.dart` (`Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)`)
-and put the service-account JSON path in the API's `Push:Fcm` settings. The app registers its token via
-`POST /api/account/devices` after login.
+The app shows in-app notifications from the API. Mobile push notifications are not configured.
 
 ## Structure
 
 ```
 lib/
-  core/       config, theme (design-kit tokens in core/theme/), phone_auth (Firebase / API OTP), formatting, i18n (en/hi), API client with token refresh, Cashfree wrapper
+  core/       config, theme (design-kit tokens in core/theme/), phone_auth (API OTP), formatting, i18n (en/hi), API client with token refresh, Cashfree wrapper
   data/       models + Riverpod providers
   widgets/    shared widgets (images, errors, qty stepper, product tile)
-  features/   auth (Firebase phone + sign-up), kyc, home, catalog (+category browse), quotations (+wishlist), scan,
+  features/   auth (MSG91-backed API OTP + sign-up), kyc, home, catalog (+category browse), quotations (+wishlist), scan,
               cart (+checkout), orders, rewards, account
   router.dart go_router: Home · Categories · Wishlist · Quotation · Profile; browsing without login,
               cart/checkout/orders ask to log in; new partners finish registration first

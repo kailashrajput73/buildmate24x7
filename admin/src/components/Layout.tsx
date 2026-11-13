@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import {
-  BarChart3, Boxes, FileText, ClipboardList, FolderTree, Home, Image, LogOut, Menu, Package, PlugZap, ScanLine, Settings, ShieldCheck, Tag, Truck, Users, UserRound, Wrench, Warehouse, X, Layers,
+  BarChart3, Boxes, MapPin, FileText, ClipboardList, FolderTree, Home, Image, LogOut, Menu, Package, PlugZap, ScanLine, Settings, ShieldCheck, Tag, Truck, Users, UserRound, Wrench, Warehouse, X, Layers,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
@@ -65,6 +65,7 @@ export default function Layout() {
     { title: 'Admin', items: [
       { to: '/team', label: 'Team & roles', icon: <ShieldCheck />, perm: P.users },
       { to: '/settings', label: 'Store settings', icon: <Settings />, perm: P.settings },
+      { to: '/delivery-areas', label: 'Delivery areas', icon: <MapPin />, perm: P.settings },
       { to: '/integrations', label: 'ERP sync', icon: <PlugZap />, perm: P.settings },
     ] },
   ]

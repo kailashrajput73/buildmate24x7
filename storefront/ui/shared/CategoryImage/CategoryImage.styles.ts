@@ -15,16 +15,12 @@ export const Img = styled.img<{ $fit: 'contain' | 'cover' }>`
   object-fit: ${({ $fit }) => $fit};
 `;
 
-export const Fallback = styled.div<{ $background: string; $color: string; $size?: number }>`
-  width: 100%;
-  height: 100%;
+/** Neutral placeholder shown when a category / type has no image of its own. */
+export const Placeholder = styled.span`
   display: flex;
   align-items: center;
   justify-content: center;
-  background: ${({ $background }) => $background};
-  color: ${({ $color }) => $color};
-
-  i {
-    font-size: ${({ $size, theme }) => $size ?? theme.spacing.space6}px;
-  }
+  width: 100%;
+  height: 100%;
+  opacity: 0.7;
 `;

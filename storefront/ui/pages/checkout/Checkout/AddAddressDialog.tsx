@@ -9,7 +9,6 @@ import { CircularProgress } from '../../../shared/CircularProgress';
 import {
   addressMapConfig,
   addressTypes,
-  lookupPincode,
 } from '../../../services/checkout/checkoutModels';
 import type { AddressType, DeliveryAddress } from '../../../services/checkout/checkoutModels';
 import addAddressMock from './AddAddressDialog.mock.json';
@@ -43,7 +42,6 @@ import {
   MobileInputWrap,
   MobilePrefix,
   PincodeInputWrap,
-  PincodeSuffix,
   FieldHelper,
   MapFrame,
   MapPin,
@@ -56,8 +54,6 @@ import {
 const copy = addAddressMock;
 
 type TextField = 'fullName' | 'mobile' | 'pincode' | 'city' | 'state' | 'house' | 'area';
-type PincodeStatus = 'idle' | 'loading' | 'found' | 'notFound';
-
 const emptyForm: Record<TextField, string> = {
   fullName: '',
   mobile: '',
@@ -111,7 +107,7 @@ export function AddAddressDialog({ onCancel, onSave, onLocated }: AddAddressDial
   const [type, setType] = useState<AddressType>('home');
   const [customLabel, setCustomLabel] = useState('');
   const [isDefault, setIsDefault] = useState(false);
-  const [pinStatus, setPinStatus] = useState<PincodeStatus>('idle');
+  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
   const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -119,7 +115,6 @@ export function AddAddressDialog({ onCancel, onSave, onLocated }: AddAddressDial
   const firstFieldRef = useRef<HTMLInputElement>(null);
   const houseRef = useRef<HTMLInputElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
-  const pincodeRef = useRef('');
   const mounted = useRef(true);
 
   const errors = submitted ? validate(values) : {};
@@ -141,25 +136,9 @@ export function AddAddressDialog({ onCancel, onSave, onLocated }: AddAddressDial
   const setField = (key: TextField, value: string) =>
     setValues((prev) => ({ ...prev, [key]: value }));
 
-  /** Flutter `_onPincodeChanged` — look up City/State once 6 digits are in. */
-  const onPincodeChanged = async (raw: string) => {
+  const onPincodeChanged = (raw: string) => {
     const value = raw.replace(/\D/g, '').slice(0, 6);
-    pincodeRef.current = value;
     setField('pincode', value);
-    if (value.length < 6) {
-      setPinStatus('idle');
-      return;
-    }
-    setPinStatus('loading');
-    const result = await lookupPincode(value);
-    // Ignore stale lookups if the user kept typing.
-    if (!mounted.current || pincodeRef.current !== value) return;
-    if (!result) {
-      setPinStatus('notFound');
-      return;
-    }
-    setPinStatus('found');
-    setValues((prev) => ({ ...prev, city: result.city, state: result.state }));
   };
 
   /** Uses the device location, moves the pin there and fills in what the map knows about the place. */
@@ -172,11 +151,11 @@ export function AddAddressDialog({ onCancel, onSave, onLocated }: AddAddressDial
         navigator.geolocation.getCurrentPosition(ok, fail, { enableHighAccuracy: true, timeout: 15000 }));
       if (!mounted.current) return;
       const at: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+      setMapCenter(at);
       mapRef.current?.setView(at, addressMapConfig.gpsZoom);
       const place = await reverseGeocodeDetails(at[0], at[1]).catch(() => null);
       if (!mounted.current) return;
       if (place) {
-        if (place.pincode) pincodeRef.current = place.pincode;
         setValues((prev) => ({
           ...prev,
           area: place.area ?? prev.area,
@@ -184,7 +163,6 @@ export function AddAddressDialog({ onCancel, onSave, onLocated }: AddAddressDial
           city: place.city ?? prev.city,
           state: place.state ?? prev.state,
         }));
-        if (place.pincode) setPinStatus('found');
       }
       onLocated?.(copy.locationFound);
       houseRef.current?.focus();
@@ -219,12 +197,7 @@ export function AddAddressDialog({ onCancel, onSave, onLocated }: AddAddressDial
     if (ok === false && mounted.current) setSaving(false);
   };
 
-  const pincodeHelper =
-    pinStatus === 'found'
-      ? copy.pincode.found
-      : pinStatus === 'notFound'
-        ? copy.pincode.notFound
-        : copy.pincode.idle;
+  const pincodeHelper = copy.pincode.idle;
 
   const textInput = (key: TextField, extra?: { ref?: Ref<HTMLInputElement> }) => (
     <Input
@@ -321,16 +294,11 @@ export function AddAddressDialog({ onCancel, onSave, onLocated }: AddAddressDial
                     aria-invalid={errors.pincode ? true : undefined}
                     onChange={(e) => onPincodeChanged(e.target.value)}
                   />
-                  <PincodeSuffix $status={pinStatus} aria-hidden>
-                    {pinStatus === 'loading' && <CircularProgress size={18} strokeWidth={2.5} />}
-                    {pinStatus === 'found' && <i className="pi pi-check-circle" />}
-                    {pinStatus === 'notFound' && <i className="pi pi-info-circle" />}
-                  </PincodeSuffix>
                 </PincodeInputWrap>
                 {errors.pincode ? (
                   <FieldError role="alert">{errors.pincode}</FieldError>
                 ) : (
-                  <FieldHelper $status={pinStatus}>{pincodeHelper}</FieldHelper>
+                  <FieldHelper $status="idle">{pincodeHelper}</FieldHelper>
                 )}
               </Field>
               <Field>
@@ -363,19 +331,23 @@ export function AddAddressDialog({ onCancel, onSave, onLocated }: AddAddressDial
               <FormSectionTrailing>{copy.optional}</FormSectionTrailing>
             </FormSectionHead>
             <MapFrame>
-              <MapContainer
-                ref={mapRef}
-                center={addressMapConfig.defaultCenter}
-                zoom={addressMapConfig.zoom}
-                zoomControl={false}
-                attributionControl={false}
-              >
-                <TileLayer url={copy.tileUrl} />
-              </MapContainer>
-              <MapPin aria-hidden>
-                <i className="pi pi-map-marker" />
-              </MapPin>
-              <MapHint>{copy.mapHint}</MapHint>
+              {mapCenter && (
+                <MapContainer
+                  ref={mapRef}
+                  center={mapCenter}
+                  zoom={addressMapConfig.zoom}
+                  zoomControl={false}
+                  attributionControl={false}
+                >
+                  <TileLayer url={copy.tileUrl} />
+                </MapContainer>
+              )}
+              {mapCenter && (
+                <MapPin aria-hidden>
+                  <i className="pi pi-map-marker" />
+                </MapPin>
+              )}
+              <MapHint>{mapCenter ? copy.mapHint : copy.gps.subtitle}</MapHint>
             </MapFrame>
           </FormSection>
 

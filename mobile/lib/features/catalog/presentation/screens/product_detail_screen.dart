@@ -11,6 +11,8 @@ import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../shared/widgets/catalog_widgets.dart';
 import '../../../../shared/widgets/category_image.dart';
+import '../../../../shared/widgets/delivery_pin_sheet.dart';
+import '../../../../core/state/delivery_controller.dart';
 import '../../data/mappers/catalog_api_mapper.dart';
 import '../../domain/models/catalog_models.dart';
 
@@ -208,6 +210,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final theme = Theme.of(context);
     final wishlist = context.watch<WishlistController>();
     final cart = context.watch<CartController>();
+    final deliveryBlocked = context.watch<DeliveryController>().blocked;
     final compatible = catalog.compatibleProductsFor(
       product,
       sizeFilter: _systemSizeFilter,
@@ -433,8 +436,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: selected.inStock
+                    onPressed: selected.inStock && !deliveryBlocked
                         ? () {
+                            if (!ensureDeliverable(context)) return;
                             cart.addVariant(selected, quantity: _qty);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
@@ -452,7 +456,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 const SizedBox(width: AppSpacing.space3),
                 Expanded(
                   child: FilledButton(
-                    onPressed: () {
+                    onPressed: deliveryBlocked ? null : () {
+                      if (!ensureDeliverable(context)) return;
                       if (selected.inStock &&
                           cart.quantityOf(selected.id) == 0) {
                         cart.addVariant(selected, quantity: _qty);
@@ -464,6 +469,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 ),
               ],
             ),
+            const DeliveryBlockedNote(),
           ],
           const SizedBox(height: AppSpacing.space6),
           Row(
@@ -592,6 +598,7 @@ class _CompatibleProductTile extends StatelessWidget {
                       await showBrandPicker(context, product: product);
                   if (variant == null || !context.mounted) return;
                   if (!variant.inStock) return;
+                  if (!ensureDeliverable(context)) return;
                   context.read<CartController>().addVariant(variant);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(

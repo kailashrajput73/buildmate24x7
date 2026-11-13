@@ -4,6 +4,7 @@ using BuildMate.Domain.Entities;
 using BuildMate.Domain.Enums;
 using BuildMate.Services.Auth;
 using BuildMate.Services.Common;
+using BuildMate.Services.Content;
 using Microsoft.EntityFrameworkCore;
 
 namespace BuildMate.Services.Users;
@@ -122,11 +123,11 @@ public class StaffService : IStaffService
 
 // ---------------------------------------------------------------- Account (customers & partners)
 
-public record AddressDto(long Id, string Name, string Phone, string Line1, string? Line2, string? Landmark, string City, string State, string Pincode, bool IsDefault);
+/// <summary>A saved address. Serviceable: its PIN code is in the active Delivery Areas (checked by the server).</summary>
+public record AddressDto(long Id, string Name, string Phone, string Line1, string? Line2, string? Landmark, string City, string State, string Pincode, bool IsDefault, bool Serviceable);
 public record AddressUpsert(string Name, string Phone, string Line1, string? Line2, string? Landmark, string City, string State, string Pincode, bool IsDefault);
 public record ProfileUpdate(string Name, string? Email, string? PreferredLanguage);
 public record NotificationDto(long Id, DateTime CreatedAt, string Title, string Body, string? Link, bool IsRead);
-public record DeviceRegistration(string Token, DevicePlatform Platform);
 
 public interface IAccountService
 {
@@ -137,21 +138,28 @@ public interface IAccountService
     Task<PagedResult<NotificationDto>> NotificationsAsync(long userId, PageRequest page, CancellationToken ct = default);
     Task<int> UnreadCountAsync(long userId, CancellationToken ct = default);
     Task MarkReadAsync(long userId, long? id, CancellationToken ct = default);
-    Task RegisterDeviceAsync(long userId, DeviceRegistration dto, CancellationToken ct = default);
-    Task UnregisterDeviceAsync(long userId, string token, CancellationToken ct = default);
     Task DeleteAccountAsync(long userId, CancellationToken ct = default);
 }
 
 public class AccountService : IAccountService
 {
     private readonly AppDbContext _db;
-    public AccountService(AppDbContext db) => _db = db;
+    private readonly ISettingsService _settings;
+    public AccountService(AppDbContext db, ISettingsService settings)
+    {
+        _db = db;
+        _settings = settings;
+    }
 
-    private static AddressDto ToDto(Address a) => new(a.Id, a.Name, a.Phone, a.Line1, a.Line2, a.Landmark, a.City, a.State, a.Pincode, a.IsDefault);
+    private static AddressDto ToDto(Address a, StoreSettings s) =>
+        new(a.Id, a.Name, a.Phone, a.Line1, a.Line2, a.Landmark, a.City, a.State, a.Pincode, a.IsDefault, DeliveryAreaRules.IsServiceable(s, a.Pincode));
 
-    public async Task<List<AddressDto>> AddressesAsync(long userId, CancellationToken ct = default) =>
-        (await _db.Addresses.AsNoTracking().Where(a => a.UserId == userId).OrderByDescending(a => a.IsDefault).ThenByDescending(a => a.Id).ToListAsync(ct))
-        .Select(ToDto).ToList();
+    public async Task<List<AddressDto>> AddressesAsync(long userId, CancellationToken ct = default)
+    {
+        var settings = await _settings.GetAsync(ct);
+        return (await _db.Addresses.AsNoTracking().Where(a => a.UserId == userId).OrderByDescending(a => a.IsDefault).ThenByDescending(a => a.Id).ToListAsync(ct))
+            .Select(a => ToDto(a, settings)).ToList();
+    }
 
     public async Task<AddressDto> SaveAddressAsync(long userId, long? id, AddressUpsert dto, CancellationToken ct = default)
     {
@@ -176,7 +184,7 @@ public class AccountService : IAccountService
         if (a.IsDefault) foreach (var o in others) o.IsDefault = false;
         if (id == null) _db.Addresses.Add(a);
         await _db.SaveChangesAsync(ct);
-        return ToDto(a);
+        return ToDto(a, await _settings.GetAsync(ct));
     }
 
     public async Task DeleteAddressAsync(long userId, long id, CancellationToken ct = default)
@@ -214,18 +222,6 @@ public class AccountService : IAccountService
         if (id != null) q = q.Where(n => n.Id == id);
         await q.ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true), ct);
     }
-
-    public async Task RegisterDeviceAsync(long userId, DeviceRegistration dto, CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(dto.Token)) return;
-        var existing = await _db.DeviceTokens.FirstOrDefaultAsync(t => t.Token == dto.Token, ct);
-        if (existing == null) _db.DeviceTokens.Add(new DeviceToken { UserId = userId, Token = dto.Token, Platform = dto.Platform });
-        else { existing.UserId = userId; existing.Platform = dto.Platform; }
-        await _db.SaveChangesAsync(ct);
-    }
-
-    public async Task UnregisterDeviceAsync(long userId, string token, CancellationToken ct = default) =>
-        await _db.DeviceTokens.Where(t => t.UserId == userId && t.Token == token).ExecuteDeleteAsync(ct);
 
     /// <summary>
     /// Account deletion (required by Play Store / App Store). Personal data is anonymised;

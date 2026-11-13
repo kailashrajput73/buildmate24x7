@@ -4,18 +4,14 @@ import '../../../../core/routes/app_routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../services/auth_service.dart';
 import '../../services/auth_service.dart';
-import '../../services/mock_auth_service.dart';
 import '../widgets/auth_primary_button.dart';
 import '../widgets/auth_text_field.dart';
 import '../widgets/auth_validators.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
-  const ResetPasswordScreen({
-    super.key,
-    required this.args,
-    this.authService,
-  });
+  const ResetPasswordScreen({super.key, required this.args, this.authService});
 
   final ResetPasswordArgs args;
   final AuthService? authService;
@@ -34,7 +30,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   @override
   void initState() {
     super.initState();
-    _auth = widget.authService ?? MockAuthService();
+    _auth = widget.authService ?? PhoneAuthService.instance;
   }
 
   @override
@@ -64,10 +60,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       return;
     }
 
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      AppRoutes.passwordUpdated,
-      (_) => false,
-    );
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(AppRoutes.passwordUpdated, (_) => false);
   }
 
   @override

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../features/catalog/data/mappers/catalog_api_mapper.dart';
-import 'app_icons.dart';
 
-/// Local category product image with graceful icon fallback.
-/// Supports local assets and remote `http(s)` URLs.
+/// Shows only server-provided imagery — never local artwork or another item's
+/// image. Absent or unavailable images stay blank, or show a neutral
+/// placeholder when [placeholder] is true (categories and types).
 class CategoryImage extends StatelessWidget {
   const CategoryImage({
     super.key,
@@ -18,6 +18,7 @@ class CategoryImage extends StatelessWidget {
     this.borderRadius,
     this.fit = BoxFit.cover,
     this.iconSize,
+    this.placeholder = false,
   });
 
   final String imageAsset;
@@ -31,37 +32,12 @@ class CategoryImage extends StatelessWidget {
   final BoxFit fit;
   final double? iconSize;
 
+  /// Neutral placeholder (background + image icon) when there is no image.
+  final bool placeholder;
+
   @override
   Widget build(BuildContext context) {
     final radius = borderRadius ?? BorderRadius.zero;
-    final fallback = ColoredBox(
-      color: fallbackBackground,
-      child: Center(
-        child: Icon(
-          appIcon(fallbackIcon),
-          color: fallbackIconColor,
-          size: iconSize,
-        ),
-      ),
-    );
-
-    if (imageAsset.isNotEmpty) {
-      return ClipRRect(
-        borderRadius: radius,
-        child: SizedBox(
-          width: width,
-          height: height,
-          child: Image.asset(
-            imageAsset,
-            fit: fit,
-            width: width,
-            height: height,
-            errorBuilder: (context, error, stackTrace) => fallback,
-          ),
-        ),
-      );
-    }
-
     final remote = CatalogApiMapper.resolveImageUrl(imageUrl);
     if (remote != null && remote.isNotEmpty) {
       return ClipRRect(
@@ -74,10 +50,11 @@ class CategoryImage extends StatelessWidget {
             fit: fit,
             width: width,
             height: height,
-            errorBuilder: (context, error, stackTrace) => fallback,
+            errorBuilder: (context, error, stackTrace) =>
+                placeholder ? _placeholder() : const SizedBox.shrink(),
             loadingBuilder: (context, child, loadingProgress) {
               if (loadingProgress == null) return child;
-              return fallback;
+              return const SizedBox.shrink();
             },
           ),
         ),
@@ -86,8 +63,24 @@ class CategoryImage extends StatelessWidget {
 
     return ClipRRect(
       borderRadius: radius,
-      child: SizedBox(width: width, height: height, child: fallback),
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: placeholder ? _placeholder() : null,
+      ),
     );
   }
 
+  Widget _placeholder() {
+    return ColoredBox(
+      color: fallbackBackground,
+      child: Center(
+        child: Icon(
+          Icons.image_outlined,
+          size: iconSize ?? 24,
+          color: fallbackIconColor.withValues(alpha: 0.7),
+        ),
+      ),
+    );
+  }
 }

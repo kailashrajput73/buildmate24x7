@@ -1,7 +1,6 @@
 import '../../../../core/network/api_config.dart';
 import '../../domain/models/catalog_models.dart';
 import '../../domain/models/pipes_fitting_catalog_models.dart';
-import '../mock/upvc_pipe_matrix_data.dart';
 import '../pipe_schedule_util.dart';
 import '../models/api_catalog_product.dart';
 
@@ -44,15 +43,15 @@ abstract final class CatalogApiMapper {
       itemCount: productCount,
       iconColor: 0xFF1A56DB,
       iconBackground: 0xFFD6E4FF,
-      imageAsset: _categoryImageAsset(name),
+      imageAsset: '',
       imageUrl: _validImageUrl(json['imageUrl']?.toString()),
       description: '',
       subCategoryIds: subCategories is List
           ? subCategories
-              .whereType<Map>()
-              .map((sub) => sub['id']?.toString() ?? '')
-              .where((id) => id.isNotEmpty)
-              .toList()
+                .whereType<Map>()
+                .map((sub) => sub['id']?.toString() ?? '')
+                .where((id) => id.isNotEmpty)
+                .toList()
           : const [],
     );
   }
@@ -82,7 +81,9 @@ abstract final class CatalogApiMapper {
     );
   }
 
-  static List<ApiCatalogProduct> filterPipeItems(List<ApiCatalogProduct> items) {
+  static List<ApiCatalogProduct> filterPipeItems(
+    List<ApiCatalogProduct> items,
+  ) {
     return items
         .where((item) => item.isActive && item.id.isNotEmpty)
         .where((item) => isPipesCategory(item.category))
@@ -152,13 +153,6 @@ abstract final class CatalogApiMapper {
     if (fromMap != null && fromMap.isNotEmpty) {
       return resolveImageUrl(fromMap);
     }
-    final material = materialTypeKeyFromName(typeName);
-    if (material != null) {
-      final fromMaterial = materialImagesByName[_pipeMaterialKey(material)];
-      if (fromMaterial != null && fromMaterial.isNotEmpty) {
-        return resolveImageUrl(fromMaterial);
-      }
-    }
     return resolveImageUrl(catalogFallbackUrl);
   }
 
@@ -177,10 +171,14 @@ abstract final class CatalogApiMapper {
     final pipeItems = pipesOnly ? filterPipeItems(items) : items;
 
     // type -> subcategory -> class -> products
-    final nested = <String, Map<String, Map<String, List<PipesFittingProduct>>>>{};
+    final nested =
+        <String, Map<String, Map<String, List<PipesFittingProduct>>>>{};
 
+    final typeImages = <String, String>{};
     for (final item in pipeItems) {
       final typeName = resolveType(item);
+      final typeImage = _validImageUrl(item.typeImageUrl);
+      if (typeImage != null) typeImages.putIfAbsent(typeName, () => typeImage);
       final subName = resolveSubCategory(item);
       final className = resolveClass(item);
       nested
@@ -226,14 +224,13 @@ abstract final class CatalogApiMapper {
           imageUrl: subImageUrl.isEmpty ? null : subImageUrl,
         );
       }).toList();
-      final typeProducts = subMap.values
-          .expand((classMap) => classMap.values.expand((products) => products));
+      // Only the Type's own server image — never a product image (that made
+      // every Type show the same pipe / cable photo). None → placeholder.
       final typeImageUrl = typeSidebarImageUrl(
-            typeName,
-            materialImagesByName,
-            catalogFallbackUrl: _firstProductImageUrl(typeProducts),
-          ) ??
-          _firstProductImageUrl(typeProducts);
+        typeName,
+        materialImagesByName,
+        catalogFallbackUrl: typeImages[typeName],
+      );
       return PipesFittingType(
         type: typeName,
         subCategories: subCategories,
@@ -241,10 +238,7 @@ abstract final class CatalogApiMapper {
       );
     }).toList();
 
-    return PipesFittingCatalog(
-      category: categoryLabel,
-      types: types,
-    );
+    return PipesFittingCatalog(category: categoryLabel, types: types);
   }
 
   static PipesFittingCatalog toElectricalsCatalog(
@@ -303,8 +297,8 @@ abstract final class CatalogApiMapper {
     final stockStatus = item.inStock == null
         ? stockStatusFromQuantity(item.stock)
         : item.inStock!
-            ? StockStatus.inStock
-            : StockStatus.outOfStock;
+        ? StockStatus.inStock
+        : StockStatus.outOfStock;
     final sizeLabel = _sizeLabel(item);
     final productGroup = item.productGroup?.trim();
     final displayName = _displayName(item);
@@ -412,15 +406,6 @@ abstract final class CatalogApiMapper {
     return 'brand-$slug';
   }
 
-  static String? _spreadsheetSizeLabel(double mm, String? inchLabel) {
-    if (inchLabel != null &&
-        inchLabel.trim().isNotEmpty &&
-        RegExp(r'\d').hasMatch(inchLabel)) {
-      return inchLabel.trim();
-    }
-    return UpvcPipeMatrixData.sizeLabelFor(mm);
-  }
-
   static String? _sizeLabel(ApiCatalogProduct item) {
     final rawSize = item.size?.trim();
     if (rawSize != null &&
@@ -431,8 +416,8 @@ abstract final class CatalogApiMapper {
     }
     if (item.sizeMm != null && item.sizeMm! > 0) {
       final mm = item.sizeMm!;
-      final spreadsheetLabel = _spreadsheetSizeLabel(mm, item.sizeInch);
-      if (spreadsheetLabel != null) return spreadsheetLabel;
+      final inchLabel = item.sizeInch?.trim();
+      if (inchLabel != null && inchLabel.isNotEmpty) return inchLabel;
       final asInt = mm == mm.roundToDouble();
       return asInt ? '${mm.toInt()}mm' : '${mm}mm';
     }
@@ -460,72 +445,6 @@ abstract final class CatalogApiMapper {
     return null;
   }
 
-  static String _categoryImageAsset(String name) {
-    final normalized = name
-        .toLowerCase()
-        .replaceAll('&', 'and')
-        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    const root = 'assets/images/categories/';
-    if (normalized.contains('furniture')) {
-      return '${root}locks_handles.png';
-    }
-    if (normalized.contains('valve')) {
-      return '${root}valves_controls.png';
-    }
-    if (normalized.contains('sanitary') || normalized.contains('bath')) {
-      return '${root}sanitary_wares.png';
-    }
-    if (normalized.contains('plywood') || normalized.contains('mdf')) {
-      return '${root}consumables.png';
-    }
-    if (normalized.contains('waterproof') || normalized.contains('repair')) {
-      return '${root}paints_putty.png';
-    }
-    if (normalized.contains('safety')) {
-      return '${root}hardware_tools.png';
-    }
-    if (normalized.contains('construction') || normalized.contains('sand')) {
-      return '${root}cement_plaster.png';
-    }
-    if (normalized.contains('pipe') ||
-        normalized.contains('plumb') ||
-        (normalized.contains('fitting') && !normalized.contains('furniture'))) {
-      return '${root}plumbing_pipes_fittings.png';
-    }
-    if (normalized.contains('electr')) {
-      return '${root}electricals_lights.png';
-    }
-    if (normalized.contains('cement') || normalized.contains('plaster')) {
-      return '${root}cement_plaster.png';
-    }
-    if (normalized.contains('til') || normalized.contains('grout')) {
-      return '${root}tiling_grouts.png';
-    }
-    if (normalized.contains('paint') || normalized.contains('putty')) {
-      return '${root}paints_putty.png';
-    }
-    if (normalized.contains('fevicol') || normalized.contains('adhesive')) {
-      return '${root}fevicol_adhesives.png';
-    }
-    if (normalized.contains('lock') || normalized.contains('handle')) {
-      return '${root}locks_handles.png';
-    }
-    if (normalized.contains('hardware') || normalized.contains('tool')) {
-      return '${root}hardware_tools.png';
-    }
-    return '';
-  }
-
-  static String? _firstProductImageUrl(Iterable<PipesFittingProduct> products) {
-    for (final product in products) {
-      final url = resolveImageUrl(product.imageUrl);
-      if (url != null && url.isNotEmpty) return url;
-    }
-    return null;
-  }
-
   static String? _validImageUrl(String? url) {
     if (url == null || url.trim().isEmpty) return null;
     final trimmed = url.trim();
@@ -543,6 +462,7 @@ abstract final class CatalogApiMapper {
         uri.host.contains('photos.google.com')) {
       return null;
     }
+    if (uri.path.startsWith('/files/mock/')) return null;
     return uri.toString();
   }
 

@@ -62,8 +62,9 @@ public class CheckoutService : ICheckoutService
         {
             if (req.AddressId == null) throw new AppException("Choose a delivery address.");
             address = await _db.Addresses.FirstOrDefaultAsync(a => a.Id == req.AddressId && a.UserId == userId, ct) ?? throw new NotFoundException("Address");
-            if (settings.DeliveryPincodes.Count > 0 && !settings.DeliveryPincodes.Contains(address.Pincode))
-                throw new AppException($"Sorry, we don't deliver to {address.Pincode} yet. Choose store pickup instead.", 409, "pincode_unserviceable");
+            // Server-side serviceability check: only the delivery address's PIN code decides (Delivery Areas).
+            if (!DeliveryAreaRules.IsServiceable(settings, address.Pincode))
+                throw new AppException($"Sorry, we don't deliver to {address.Pincode} yet. Choose a serviceable delivery address or store pickup.", 409, "pincode_unserviceable");
         }
         if (req.PreferredAt != null && req.PreferredAt < DateTime.UtcNow.AddMinutes(-5)) throw new AppException("Preferred time must be in the future.");
 
@@ -161,8 +162,12 @@ public class CheckoutService : ICheckoutService
 
         Address? address = null;
         if (q.FulfilmentType == FulfilmentType.HomeDelivery)
+        {
             address = await _db.Addresses.FirstOrDefaultAsync(a => a.Id == q.AddressId && a.UserId == userId, ct)
                       ?? throw new AppException("The delivery address on this quotation was removed. Ask the store for a new quotation.", 409, "address_missing");
+            if (!DeliveryAreaRules.IsServiceable(await _settings.GetAsync(ct), address.Pincode))
+                throw new AppException($"Sorry, we don't deliver to {address.Pincode} yet. Ask the store to change the quotation to a serviceable address or store pickup.", 409, "pincode_unserviceable");
+        }
 
         var products = (await _db.LockProductsAsync(q.Items.Select(i => i.ProductId), ct)).ToDictionary(p => p.Id);
         var order = new Order

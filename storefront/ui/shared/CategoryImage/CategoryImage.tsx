@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Frame, Img, Fallback } from './CategoryImage.styles';
+'use client';
+import { useEffect, useState } from 'react';
+import { Frame, Img, Placeholder } from './CategoryImage.styles';
 
 interface CategoryImageProps {
   imageAsset: string;
@@ -13,11 +14,16 @@ interface CategoryImageProps {
   iconSize?: number;
   radius?: number;
   fit?: 'contain' | 'cover';
+  /**
+   * Show a neutral placeholder (background + [fallbackIcon]) when the backend has no image or it fails to load.
+   * Used for categories and types. Without it the frame stays blank (product images, unchanged).
+   */
+  placeholder?: boolean;
 }
 
 /**
- * Flutter `CategoryImage` (local asset + icon fallback). Remote `imageUrl`
- * support is not ported — no screen converted so far uses it.
+ * Shows only the image supplied by the backend — never local artwork or another item's image. Missing or
+ * unavailable images stay blank, or show a neutral placeholder when [placeholder] is set.
  */
 export function CategoryImage({
   imageAsset,
@@ -29,18 +35,19 @@ export function CategoryImage({
   iconSize,
   radius = 0,
   fit = 'cover',
+  placeholder = false,
 }: CategoryImageProps) {
-  const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  const showFallback = !imageAsset || failedSrc === imageAsset;
-
+  const usable = !!imageAsset && !imageAsset.includes('/files/mock/');
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [imageAsset]);
+  const showImage = usable && !failed;
   return (
-    <Frame $width={width} $height={height} $radius={radius}>
-      {showFallback ? (
-        <Fallback $background={fallbackBackground} $color={fallbackIconColor} $size={iconSize}>
-          <i className={`pi ${fallbackIcon}`} aria-hidden="true" />
-        </Fallback>
-      ) : (
-        <Img src={imageAsset} alt="" $fit={fit} onError={() => setFailedSrc(imageAsset)} />
+    <Frame $width={width} $height={height} $radius={radius} style={placeholder && !showImage ? { background: fallbackBackground } : undefined}>
+      {showImage && <Img src={imageAsset} alt="" $fit={fit} onError={() => setFailed(true)} />}
+      {placeholder && !showImage && (
+        <Placeholder className="category-image-placeholder" aria-hidden="true">
+          <i className={`pi ${fallbackIcon}`} style={{ color: fallbackIconColor, fontSize: iconSize ?? 20 }} />
+        </Placeholder>
       )}
     </Frame>
   );

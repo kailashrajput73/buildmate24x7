@@ -14,24 +14,39 @@ enum PayOutcome { returned, failed }
 /// Opens Cashfree checkout. "returned" only means the user came back — the API must confirm the payment
 /// (POST /api/orders/{id}/confirm-payment), which checks with Cashfree server-to-server.
 class CashfreePayment {
-  static Future<({PayOutcome outcome, String? message})> pay(CheckoutResult r) async {
-    if (r.environment == 'mock') return (outcome: PayOutcome.returned, message: null);
-
+  static Future<({PayOutcome outcome, String? message})> pay(
+    CheckoutResult r,
+  ) async {
     if (r.environment != 'sandbox' && r.environment != 'production') {
-      return (outcome: PayOutcome.failed, message: 'Invalid payment environment returned by the server.');
+      return (
+        outcome: PayOutcome.failed,
+        message:
+            'The server returned an unsupported payment environment. No payment was made.',
+      );
     }
 
     final done = Completer<({PayOutcome outcome, String? message})>();
     final service = CFPaymentGatewayService();
     service.setCallback(
-      (String orderId) { if (!done.isCompleted) done.complete((outcome: PayOutcome.returned, message: null)); },
+      (String orderId) {
+        if (!done.isCompleted)
+          done.complete((outcome: PayOutcome.returned, message: null));
+      },
       (CFErrorResponse error, String orderId) {
-        if (!done.isCompleted) done.complete((outcome: PayOutcome.failed, message: error.getMessage()));
+        if (!done.isCompleted)
+          done.complete((
+            outcome: PayOutcome.failed,
+            message: error.getMessage(),
+          ));
       },
     );
     try {
       final session = CFSessionBuilder()
-          .setEnvironment(r.environment == 'production' ? CFEnvironment.PRODUCTION : CFEnvironment.SANDBOX)
+          .setEnvironment(
+            r.environment == 'production'
+                ? CFEnvironment.PRODUCTION
+                : CFEnvironment.SANDBOX,
+          )
           .setOrderId(r.gatewayOrderId)
           .setPaymentSessionId(r.paymentSessionId)
           .build();

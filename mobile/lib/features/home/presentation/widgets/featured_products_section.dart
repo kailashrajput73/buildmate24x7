@@ -10,6 +10,7 @@ import '../../../../shared/widgets/catalog_widgets.dart';
 import '../../../../shared/widgets/category_image.dart';
 import '../../../catalog/domain/models/catalog_models.dart';
 import 'home_section_header.dart';
+import '../../../../shared/widgets/delivery_pin_sheet.dart';
 
 class FeaturedProductsSection extends StatelessWidget {
   const FeaturedProductsSection({
@@ -88,6 +89,7 @@ class FeaturedProductCard extends StatelessWidget {
 
   void _addToCart(BuildContext context) {
     if (!variant.inStock) return;
+    if (!ensureDeliverable(context)) return;
     context.read<CartController>().addVariant(variant);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

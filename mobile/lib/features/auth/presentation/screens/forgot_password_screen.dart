@@ -5,8 +5,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_elevation.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../services/auth_service.dart';
 import '../../services/auth_service.dart';
-import '../../services/mock_auth_service.dart';
 import '../widgets/auth_primary_button.dart';
 import '../widgets/auth_text_field.dart';
 import '../widgets/auth_validators.dart';
@@ -32,7 +32,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   void initState() {
     super.initState();
-    _auth = widget.authService ?? MockAuthService();
+    _auth = widget.authService ?? PhoneAuthService.instance;
   }
 
   @override
@@ -46,8 +46,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _loading = true);
-    final identifier =
-        _isEmail ? _emailController.text.trim() : _mobileController.text.trim();
+    final identifier = _isEmail
+        ? _emailController.text.trim()
+        : _mobileController.text.trim();
     final result = await _auth.sendPasswordResetCode(
       identifier: identifier,
       isEmail: _isEmail,
@@ -248,11 +249,11 @@ class _TabChip extends StatelessWidget {
               child: Text(
                 label,
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                      color: selected
-                          ? AppColors.primary
-                          : AppColors.onSurfaceVariant,
-                    ),
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  color: selected
+                      ? AppColors.primary
+                      : AppColors.onSurfaceVariant,
+                ),
               ),
             ),
           ),

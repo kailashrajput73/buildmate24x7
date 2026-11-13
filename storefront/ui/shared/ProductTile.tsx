@@ -2,7 +2,6 @@
 import { useTheme } from 'styled-components';
 import type { ProductCard } from '@/lib/types';
 import { CategoryImage } from './CategoryImage';
-import { artFor } from '../session/CatalogContext';
 import { WithWishlistHeart } from './WishlistHeart';
 import {
   Card, CardMedia, AddBadge, AddBadgeLabel, AddBadgeCount, CardBody, CardPrice, Rupee, PriceUnit, CardDiscount, CardTitle,
@@ -19,7 +18,7 @@ export function ProductTile({ p, onOpen, categoryName = '' }: { p: ProductCard; 
     <WithWishlistHeart productId={p.id} name={p.name}>
     <Card type="button" onClick={onOpen} aria-label={`${p.name}, ${many ? 'from ' : ''}₹${amount(price)}`}>
       <CardMedia>
-        <CategoryImage imageAsset={p.imageUrl && !p.imageUrl.startsWith('/files/mock/') ? p.imageUrl : artFor(categoryName, p.imageUrl)}
+        <CategoryImage imageAsset={p.imageUrl && !p.imageUrl.startsWith('/files/mock/') ? p.imageUrl : ''}
           fallbackIcon="pi-box" fallbackIconColor={theme.colors.outline} fallbackBackground={theme.colors.surfaceContainer}
           fit="contain" radius={theme.radius.md} iconSize={theme.spacing.space8} />
         <AddBadge>

@@ -7,20 +7,5 @@
     "splashDurationMs": 2200,
     "otpLength": 6,
     "otpResendSeconds": 30
-  },
-  "session": {
-    "storageKey": "session_user_profile",
-    "demoUser": {
-      "id": "user-demo-1",
-      "name": "Rajesh Kumar",
-      "email": "rajesh.kumar@example.com",
-      "phone": "+91 98765 43210",
-      "businessName": null,
-      "isGuest": false
-    }
-  },
-  "catalog": {
-    "pipesTubingCategoryId": "cat-pipes-tubing",
-    "pipesTubingCategoryName": "Pipes & Tubing"
   }
 }

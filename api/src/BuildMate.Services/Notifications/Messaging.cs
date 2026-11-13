@@ -1,9 +1,5 @@
 using BuildMate.Data;
 using BuildMate.Domain.Entities;
-using FirebaseAdmin;
-using FirebaseAdmin.Messaging;
-using Google.Apis.Auth.OAuth2;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Notification = BuildMate.Domain.Entities.Notification;
@@ -49,67 +45,22 @@ public class Msg91SmsSender : ISmsSender
         _opt = opt.Value;
     }
 
+    public bool IsConfigured =>
+        !string.IsNullOrWhiteSpace(_opt.Msg91AuthKey) &&
+        !string.IsNullOrWhiteSpace(_opt.Msg91OtpTemplateId);
+
     public async Task SendOtpAsync(string phone10, string code, CancellationToken ct = default)
     {
-        var url = $"https://control.msg91.com/api/v5/otp?template_id={Uri.EscapeDataString(_opt.Msg91OtpTemplateId ?? "")}" +
+        var authKey = _opt.Msg91AuthKey?.Trim();
+        var templateId = _opt.Msg91OtpTemplateId?.Trim();
+        if (string.IsNullOrWhiteSpace(authKey) || string.IsNullOrWhiteSpace(templateId))
+            throw new InvalidOperationException("MSG91 OTP settings are missing.");
+        var url = $"https://control.msg91.com/api/v5/otp?template_id={Uri.EscapeDataString(templateId)}" +
                   $"&mobile=91{phone10}&otp={code}";
         using var req = new HttpRequestMessage(HttpMethod.Post, url);
-        req.Headers.Add("authkey", _opt.Msg91AuthKey);
+        req.Headers.Add("authkey", authKey);
         using var res = await _http.SendAsync(req, ct);
         res.EnsureSuccessStatusCode();
-    }
-}
-
-// ---------------------------------------------------------------- Push
-
-public class PushOptions
-{
-    /// <summary>Path to the Firebase service-account JSON. Push is disabled when empty.</summary>
-    public string? FirebaseCredentialPath { get; set; }
-}
-
-public interface IPushSender
-{
-    Task SendAsync(IReadOnlyList<string> tokens, string title, string body, string? link, CancellationToken ct = default);
-}
-
-public class NullPushSender : IPushSender
-{
-    public Task SendAsync(IReadOnlyList<string> tokens, string title, string body, string? link, CancellationToken ct = default) => Task.CompletedTask;
-}
-
-public class FcmPushSender : IPushSender
-{
-    private readonly FirebaseMessaging _messaging;
-    private readonly ILogger<FcmPushSender> _log;
-
-    public FcmPushSender(IOptions<PushOptions> opt, ILogger<FcmPushSender> log)
-    {
-        _log = log;
-        var app = FirebaseApp.DefaultInstance ?? FirebaseApp.Create(new AppOptions
-        {
-            Credential = GoogleCredential.FromFile(opt.Value.FirebaseCredentialPath)
-        });
-        _messaging = FirebaseMessaging.GetMessaging(app);
-    }
-
-    public async Task SendAsync(IReadOnlyList<string> tokens, string title, string body, string? link, CancellationToken ct = default)
-    {
-        if (tokens.Count == 0) return;
-        var msg = new MulticastMessage
-        {
-            Tokens = tokens.ToList(),
-            Notification = new FirebaseAdmin.Messaging.Notification { Title = title, Body = body },
-            Data = new Dictionary<string, string> { ["link"] = link ?? "" }
-        };
-        try
-        {
-            await _messaging.SendEachForMulticastAsync(msg, ct);
-        }
-        catch (Exception ex)
-        {
-            _log.LogWarning(ex, "FCM send failed");
-        }
     }
 }
 
@@ -124,18 +75,11 @@ public interface INotificationService
 public class NotificationService : INotificationService
 {
     private readonly AppDbContext _db;
-    private readonly IPushSender _push;
 
-    public NotificationService(AppDbContext db, IPushSender push)
-    {
-        _db = db;
-        _push = push;
-    }
+    public NotificationService(AppDbContext db) => _db = db;
 
     public async Task NotifyAsync(long userId, string title, string body, string? link = null, CancellationToken ct = default)
     {
         _db.Notifications.Add(new Notification { UserId = userId, Title = title, Body = body, Link = link });
-        var tokens = await _db.DeviceTokens.Where(t => t.UserId == userId).Select(t => t.Token).ToListAsync(ct);
-        await _push.SendAsync(tokens, title, body, link, ct);
     }
 }

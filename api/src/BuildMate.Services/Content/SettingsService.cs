@@ -32,8 +32,15 @@ public class StoreSettings
     public decimal MinOrderValue { get; set; } = 0;
     public decimal DeliveryFee { get; set; } = 0;
     public decimal FreeDeliveryAbove { get; set; } = 0;
-    /// <summary>Empty list = deliver to any pincode.</summary>
+    /// <summary>
+    /// Serviceable delivery PIN codes (admin → Delivery Areas). Home delivery, Add to Cart and checkout are allowed
+    /// only for an active PIN code in this list; an empty list means no PIN code is serviceable yet.
+    /// </summary>
+    public List<DeliveryArea> DeliveryAreas { get; set; } = new();
+    /// <summary>Active PIN codes of <see cref="DeliveryAreas"/> (kept in step automatically; read by older app versions).</summary>
     public List<string> DeliveryPincodes { get; set; } = new();
+    /// <summary>Set once the older plain PIN list has been carried over into <see cref="DeliveryAreas"/>.</summary>
+    public bool DeliveryAreasMigrated { get; set; }
     public bool HomeDeliveryEnabled { get; set; } = true;
     public bool StorePickupEnabled { get; set; } = true;
 
@@ -80,6 +87,7 @@ public class SettingsService : ISettingsService
         if (_cache.TryGetValue(CacheKey, out StoreSettings? cached) && cached != null) return cached;
         var row = await _db.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == Key, ct);
         var value = row == null ? new StoreSettings() : JsonSerializer.Deserialize<StoreSettings>(row.Value, Json) ?? new StoreSettings();
+        DeliveryAreaRules.Normalize(value);
         _cache.Set(CacheKey, value, TimeSpan.FromMinutes(5));
         return value;
     }
@@ -87,6 +95,7 @@ public class SettingsService : ISettingsService
     public async Task<StoreSettings> SaveAsync(StoreSettings settings, CancellationToken ct = default)
     {
         var row = await _db.Settings.FirstOrDefaultAsync(s => s.Key == Key, ct);
+        DeliveryAreaRules.Normalize(settings);
         var json = JsonSerializer.Serialize(settings, Json);
         if (row == null) _db.Settings.Add(new AppSetting { Key = Key, Value = json });
         else { row.Value = json; row.UpdatedAt = DateTime.UtcNow; }

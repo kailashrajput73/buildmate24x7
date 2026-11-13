@@ -603,6 +603,57 @@ export const RowLabel = styled.span<{ $selected: boolean; $sub?: boolean }>`
   }
 `;
 
+/**
+ * Mobile only (below the md breakpoint): each Type item stacks a perfect-circle image above its name, centred, and
+ * the name wraps instead of being cut off. Desktop (md and up) keeps the row layout above unchanged.
+ */
+const belowMd = ({ theme }: { theme: { breakpoints: { md: number } } }) =>
+  `@media (max-width: ${theme.breakpoints.md - 0.02}px)`;
+
+export const SidebarTypeItem = styled(SidebarTypeRow)`
+  ${belowMd} {
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    gap: ${({ theme }) => theme.spacing.space1}px;
+    padding: ${({ theme }) => `${theme.spacing.space2}px ${theme.spacing.space1}px`};
+    text-align: center;
+  }
+`;
+
+export const TypeCircle = styled(TypeThumb)`
+  ${belowMd} {
+    width: 48px;
+    height: 48px;
+    padding: 2px;
+    border-radius: 50%;
+    border: 1px solid
+      ${({ theme, $selected }) => ($selected ? theme.colors.primary : theme.colors.outlineVariant)};
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Desktop keeps its existing blank thumb when a Type has no image. */
+  ${({ theme }) => theme.media.md} {
+    .category-image-placeholder {
+      display: none;
+    }
+  }
+`;
+
+export const TypeLabel = styled(RowLabel)`
+  ${belowMd} {
+    flex: 0 0 auto;
+    width: 100%;
+    text-align: center;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    line-height: 1.15;
+  }
+`;
+
 /** _SidebarSubCategoryRow. */
 export const SidebarSubRow = styled.button<{ $selected: boolean }>`
   ${sidebarRow}

@@ -20,6 +20,23 @@ class CategoryBrowseScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogController>();
     final category = catalog.categoryById(categoryId);
+    // Category switched off in the dashboard (not in the server's active list).
+    if (catalog.categoriesLoaded && category == null) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(backgroundColor: AppColors.surface),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.space6),
+            child: Text(
+              'This category is not available.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+        ),
+      );
+    }
     return ProductListScreen(
       categoryId: categoryId,
       title: category?.name ?? 'Category',
@@ -112,12 +129,13 @@ class CategoriesGrid extends StatelessWidget {
                       imageAsset: category.imageAsset,
                       imageUrl: category.imageUrl,
                       fallbackIcon: category.icon,
-                      fallbackIconColor: Color(category.iconColor),
-                      fallbackBackground: Color(category.iconBackground),
+                      fallbackIconColor: AppColors.outline,
+                      fallbackBackground: AppColors.surfaceContainer,
                       width: double.infinity,
                       borderRadius: AppRadius.mdAll,
                       fit: BoxFit.cover,
                       iconSize: AppSpacing.space6,
+                      placeholder: true,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.space3),

@@ -87,7 +87,9 @@ export function WebSideMenu({ activeTab, onSelectTab, showAi }: WebSideMenuProps
               <CategoryItem type="button" onClick={() => openCategory(category)}
                 style={category.comingSoon ? { opacity: 0.6 } : undefined}>
                 <CategoryThumb $tint={category.iconBackground}>
-                  <img src={category.imageAsset} alt="" loading="lazy" />
+                  {category.imageAsset && !category.imageAsset.includes('/files/mock/') && (
+                    <img src={category.imageAsset} alt="" loading="lazy" />
+                  )}
                 </CategoryThumb>
                 <CategoryName>{category.name}</CategoryName>
                 {category.comingSoon ? <ComingSoonBadge>Soon</ComingSoonBadge> : <CategoryCount>{category.itemCount}</CategoryCount>}

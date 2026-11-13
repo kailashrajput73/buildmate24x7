@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTheme } from 'styled-components';
 import { api } from '@/lib/api';
 import { useShop } from '@/lib/shop';
+import { useDelivery } from '@/lib/delivery';
+import { DeliveryBlockedNote } from '@/components/AddToCart';
 import type { ProductDetail } from '@/lib/types';
 import { useNavigate } from '@/ui/router';
 import { AppRoutes } from '../../../routes/appRoutes';
@@ -34,6 +36,8 @@ export function ProductView({ initial }: { initial: ProductDetail }) {
   const navigate = useNavigate();
   const maybePop = useMaybePop();
   const shop = useShop();
+  const delivery = useDelivery();
+  const deliveryBlocked = !!delivery.selected && !delivery.selected.serviceable;
   const { isPartner } = useSession();
   const saved = useWishlist().includes(initial.id);
   const [p, setP] = useState<ProductDetail>(initial);
@@ -76,7 +80,8 @@ export function ProductView({ initial }: { initial: ProductDetail }) {
   const mrp = box ? p.catalog?.packMrp ?? p.mrp : p.mrp;
   const available = box ? Math.floor(p.maxOrderQty / (p.catalog?.packSize ?? 1)) : p.maxOrderQty;
   const max = Math.max(1, Math.floor(available));
-  const images = p.imageUrls.length ? p.imageUrls : p.imageUrl ? [p.imageUrl] : [];
+  const images = (p.imageUrls.length ? p.imageUrls : p.imageUrl ? [p.imageUrl] : [])
+    .filter((src) => !src.includes('/files/mock/'));
   const save = Math.max(0, mrp - price);
 
   return (
@@ -178,14 +183,15 @@ export function ProductView({ initial }: { initial: ProductDetail }) {
                 </Stepper>
               </QtyRow>
               <Actions>
-                <AddToCartButton type="button" disabled={available < 1 || busy} onClick={() => add(false)}>
+                <AddToCartButton type="button" disabled={available < 1 || busy || deliveryBlocked} onClick={() => add(false)}>
                   <i className="pi pi-cart-plus" aria-hidden="true" />
                   Add to Cart
                 </AddToCartButton>
-                <BuyNowButton type="button" disabled={available < 1 || busy} onClick={() => add(true)}>
+                <BuyNowButton type="button" disabled={available < 1 || busy || deliveryBlocked} onClick={() => add(true)}>
                   Buy Now
                 </BuyNowButton>
               </Actions>
+              {deliveryBlocked && <DeliveryBlockedNote message={delivery.selected!.message} onChange={() => delivery.openPicker()} />}
             </BuyCard>
 
             {p.specs.length > 0 && (
@@ -220,7 +226,7 @@ export function ProductView({ initial }: { initial: ProductDetail }) {
                   {p.related.slice(0, 6).map((r) => (
                     <RelatedCard key={r.id} href={`/p/${r.id}`} onClick={(e) => { e.preventDefault(); navigate(`/p/${r.id}`); }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      {r.imageUrl ? <img src={r.imageUrl} alt="" /> : <div className="ph" />}
+                      {r.imageUrl && !r.imageUrl.includes('/files/mock/') ? <img src={r.imageUrl} alt="" /> : null}
                       <strong>{r.variantCount && r.variantCount > 1 ? 'from ' : ''}{money(r.fromPrice ?? r.price)}</strong>
                       <span>{r.name}</span>
                     </RelatedCard>

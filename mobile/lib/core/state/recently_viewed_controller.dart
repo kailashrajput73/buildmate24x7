@@ -7,17 +7,8 @@ class RecentlyViewedController extends ChangeNotifier {
 
   final int maxItems;
   final List<ProductVariant> _items = [];
-  bool _seeded = false;
 
   List<ProductVariant> get items => List.unmodifiable(_items);
-
-  /// Seed demo history once if empty (initial dashboard content).
-  void seedIfEmpty(List<ProductVariant> seed) {
-    if (_seeded || _items.isNotEmpty || seed.isEmpty) return;
-    _items.addAll(seed.take(maxItems));
-    _seeded = true;
-    notifyListeners();
-  }
 
   void add(ProductVariant variant) {
     _items.removeWhere((p) => p.id == variant.id);
@@ -25,7 +16,6 @@ class RecentlyViewedController extends ChangeNotifier {
     if (_items.length > maxItems) {
       _items.removeRange(maxItems, _items.length);
     }
-    _seeded = true;
     notifyListeners();
   }
 

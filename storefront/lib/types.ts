@@ -47,7 +47,7 @@ export type Cart = {
   items: CartLine[]; itemCount: number; subTotal: number; discountTotal: number; total: number; deliveryFee: number; roundOff: number; payable: number
   freeDeliveryAbove: number; minOrderValue: number; canCheckout: boolean; issues: string[]; storePickupEnabled: boolean; homeDeliveryEnabled: boolean
 }
-export type Address = { id: number; name: string; phone: string; line1: string; line2?: string; landmark?: string; city: string; state: string; pincode: string; isDefault: boolean }
+export type Address = { id: number; name: string; phone: string; line1: string; line2?: string; landmark?: string; city: string; state: string; pincode: string; isDefault: boolean; /** Server: PIN code is in the active delivery areas. */ serviceable?: boolean }
 
 export type OrderStatus = 'PendingPayment' | 'Paid' | 'Processing' | 'ReadyForPickup' | 'OutForDelivery' | 'Completed' | 'Cancelled' | 'PaymentFailed'
 export type OrderSummary = { id: number; orderNo: string; createdAt: string; status: OrderStatus; fulfilmentType: 'StorePickup' | 'HomeDelivery'; itemCount: number; grandTotal: number; invoiceNo?: string }

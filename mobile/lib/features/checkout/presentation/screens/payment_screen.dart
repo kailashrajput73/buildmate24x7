@@ -4,32 +4,18 @@ import 'package:provider/provider.dart';
 
 import '../../../../core/routes/app_routes.dart';
 import '../../../../core/state/cart_controller.dart';
-import '../../../../core/state/order_history_controller.dart';
-import '../../../../core/state/session_controller.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../catalog/domain/models/catalog_models.dart';
-import '../../domain/models/order_models.dart';
 import '../../domain/models/payment_models.dart';
 import '../widgets/checkout_widgets.dart';
 
-/// Checkout step 3 of 4 — choose a payment method and place the order.
-///
-/// The selected method expands to collect its details (UPI ID, card, bank).
-/// Payment is mocked: "Place Order" validates, waits briefly, empties the
-/// cart and replaces the checkout flow with the confirmation screen.
+/// Checkout step 3 of 4. This legacy flow is not connected to the live payment API.
 class PaymentScreen extends StatefulWidget {
-  const PaymentScreen({
-    super.key,
-    required this.args,
-    this.processingDelay = const Duration(milliseconds: 1200),
-  });
+  const PaymentScreen({super.key, required this.args});
 
   final PaymentArgs args;
-
-  /// Simulated gateway latency.
-  final Duration processingDelay;
 
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
@@ -45,7 +31,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   var _method = PaymentMethod.upi;
   String? _bank;
-  var _placing = false;
 
   @override
   void dispose() {
@@ -71,37 +56,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
     setState(() => _method = method);
   }
 
-  Future<void> _placeOrder() async {
-    FocusScope.of(context).unfocus();
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-    if (_method == PaymentMethod.netBanking && _bank == null) {
-      _showSnack('Select your bank to continue');
-      return;
-    }
-
-    setState(() => _placing = true);
-    await Future<void>.delayed(widget.processingDelay);
-    if (!mounted) return;
-
-    final cart = context.read<CartController>();
-    final order = PlacedOrder.fromCart(
-      cart,
-      address: widget.args.address,
-      delivery: widget.args.delivery,
-      method: _method,
-    );
-    final userId = context.read<SessionController>().user.id;
-    await context.read<OrderHistoryController>().recordOrder(
-      order,
-      userId: userId,
-    );
-    if (!mounted) return;
-    cart.clear();
-    // Drop cart → address → payment so back can't re-enter a paid checkout.
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      AppRoutes.orderConfirmation,
-      (route) => route.isFirst,
-      arguments: OrderConfirmationArgs(order: order),
+  void _placeOrder() {
+    _showSnack(
+      'Live payment is not connected in this checkout flow. No order has been placed.',
     );
   }
 
@@ -166,9 +123,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
       ),
       bottomNavigationBar: CheckoutTotalBar(
         total: total,
-        label: 'Place Order (${formatInr(total)})',
-        icon: Icons.lock_rounded,
-        loading: _placing,
+        label: 'Payment Unavailable',
+        icon: Icons.cloud_off_rounded,
+        loading: false,
         onShowSummary: () =>
             showCheckoutPriceBreakdown(context, cart: cart, delivery: delivery),
         onPressed: _placeOrder,

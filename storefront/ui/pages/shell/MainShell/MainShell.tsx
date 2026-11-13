@@ -10,7 +10,6 @@ import { HomeDashboard } from '../../home/HomeDashboard';
 import { StorefrontHeader } from '../../../shared/StorefrontHeader';
 import { WebSideMenu } from '../../../shared/WebSideMenu';
 import { StorefrontFooter } from '../../../shared/StorefrontFooter';
-import mock from './MainShell.mock.json';
 import {
   Shell,
   ShellBody,
@@ -25,7 +24,11 @@ import {
   Fab,
 } from './MainShell.styles';
 
-const tabs = mock.AppBottomNavigation.tabs;
+const tabs = [
+  { tab: 'home', icon: 'pi-home', label: 'Home' },
+  { tab: 'categories', icon: 'pi-th-large', label: 'Categories' },
+  { tab: 'wishlist', icon: 'pi-heart', label: 'Wishlist' },
+] as const;
 const tabIndex = (tab?: string) =>
   Math.max(
     0,
@@ -74,7 +77,7 @@ export function MainShell() {
       <ShellBody>
         <WebSideMenu
           activeTab={current.tab}
-          onSelectTab={(tab) => setIndex(tabs.indexOf(tab))}
+          onSelectTab={(tab) => setIndex(tabIndex(tab.tab))}
           showAi={showAi}
         />
 
@@ -87,7 +90,7 @@ export function MainShell() {
               <TabHeader>
                 <TabTitle>{current.label}</TabTitle>
               </TabHeader>
-              <TabBody>{mock._webTabPlaceholder}</TabBody>
+              <TabBody>Coming Soon...</TabBody>
             </>
           )}
         </Main>
@@ -96,11 +99,11 @@ export function MainShell() {
       {showAi && (
         <Fab
           type="button"
-          title={mock.floatingActionButton.tooltip}
-          aria-label={mock.floatingActionButton.tooltip}
+          title="AI Assistant"
+          aria-label="AI Assistant"
           onClick={openAiAssistant}
         >
-          <i className={`pi ${mock.floatingActionButton.icon}`} aria-hidden="true" />
+          <i className="pi pi-sparkles" aria-hidden="true" />
         </Fab>
       )}
 

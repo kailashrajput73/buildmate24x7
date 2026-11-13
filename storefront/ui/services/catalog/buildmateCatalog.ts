@@ -135,7 +135,5 @@ export function buildGroups(items: CatalogItem[]): ProductGroup[] {
     g.maxDiscount = Math.max(g.maxDiscount, i.discountPercent);
     if (i.inStock && !g.inStock) { g.inStock = true; g.openId = i.id; }
   }
-  // Products without a real photo keep the demo artwork so the grid is never blank.
-  for (const g of groups.values()) if (!g.imageUrl) g.imageUrl = g.items.find((i) => i.imageUrl)?.imageUrl ?? null;
   return [...groups.values()];
 }

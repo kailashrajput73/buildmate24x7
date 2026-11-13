@@ -47,7 +47,7 @@ export function CategoryComingSoon({ category: given, categoryId }: { category?:
 
         <Card $accent={accent}>
           <Hero $accent={accent} $tint={tint}>
-            {category?.imageAsset && <HeroImage src={category.imageAsset} alt="" />}
+            {category?.imageAsset && !category.imageAsset.includes('/files/mock/') && <HeroImage src={category.imageAsset} alt="" />}
           </Hero>
           <Badge $accent={accent}>
             <i className="pi pi-clock" aria-hidden="true" />

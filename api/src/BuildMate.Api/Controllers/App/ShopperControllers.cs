@@ -186,20 +186,6 @@ public class AccountController : ControllerBase
         return NoContent();
     }
 
-    [HttpPost("devices")]
-    public async Task<IActionResult> RegisterDevice(DeviceRegistration dto, CancellationToken ct)
-    {
-        await _account.RegisterDeviceAsync(_me.RequireId(), dto, ct);
-        return NoContent();
-    }
-
-    [HttpDelete("devices/{token}")]
-    public async Task<IActionResult> UnregisterDevice(string token, CancellationToken ct)
-    {
-        await _account.UnregisterDeviceAsync(_me.RequireId(), token, ct);
-        return NoContent();
-    }
-
     /// <summary>Permanently anonymises the account (Play Store / App Store requirement).</summary>
     [HttpDelete]
     public async Task<IActionResult> Delete(CancellationToken ct)

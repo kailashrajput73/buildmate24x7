@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from '@/ui/router';
 import { AppRoutes } from '../../../routes/appRoutes';
 import type { OtpVerificationArgs } from '../../../routes/appRoutes';
-import { firebaseAuthMessage, rememberReferral, sendPhoneOtp } from '../../../services/auth/phoneAuth';
-import { authMode } from '../../../firebase';
+import { phoneAuthMessage, rememberReferral, sendPhoneOtp } from '../../../services/auth/phoneAuth';
 import { AuthValidators } from '../../../shared/authValidators';
 import { LoginFlowIconBadge } from '../../../shared/LoginFlowIconBadge';
 import { LoginFlowModeToggle } from '../../../shared/LoginFlowModeToggle';
@@ -47,9 +46,7 @@ export function Login() {
     };
   }, []);
 
-  // Firebase settings were missing when the site was built: say so up front instead of failing on "Send OTP".
-  const setupMissing = authMode === 'missing';
-  const canContinue = !setupMissing && AuthValidators.mobile(mobile) === null;
+  const canContinue = AuthValidators.mobile(mobile) === null;
 
   const handleContinue = async () => {
     const value = mobile.trim();
@@ -67,7 +64,7 @@ export function Login() {
       };
       navigate(AppRoutes.otpVerification, { state: args });
     } catch (sendError) {
-      if (mounted.current) setError(firebaseAuthMessage(sendError));
+      if (mounted.current) setError(phoneAuthMessage(sendError));
     } finally {
       if (mounted.current) setLoading(false);
     }
@@ -104,13 +101,6 @@ export function Login() {
             }}
           />
           <Hint>We'll send a 6-digit OTP to verify this number</Hint>
-          {setupMissing && (
-            <ErrorText role="alert">
-              Phone login is not available right now: this website was built without its Firebase settings. Please
-              contact BuildMate support.
-            </ErrorText>
-          )}
-          {authMode === 'otp' && <Hint>Demo login: no SMS is sent. Use code 123456 on the demo server.</Hint>}
           {error && <ErrorText role="alert">{error}</ErrorText>}
           <LoginFlowContinueButton
             label="Send OTP"
@@ -118,7 +108,6 @@ export function Login() {
             loading={loading}
             onPressed={handleContinue}
           />
-          <div id="firebase-recaptcha" />
           <Spacer $flex={3} />
           <LoginFlowTermsFooter />
         </Content>

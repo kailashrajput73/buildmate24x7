@@ -10,6 +10,7 @@ class ApiCatalogProduct {
     this.productName,
     this.type,
     this.typeId,
+    this.typeImageUrl,
     this.categoryId,
     this.productGroup,
     this.productClass,
@@ -42,6 +43,9 @@ class ApiCatalogProduct {
   final String? productName;
   final String? type;
   final String? typeId;
+
+  /// The product Type's own image from the server (`/api/catalog/types` `imageUrl`), when the API provides one.
+  final String? typeImageUrl;
   final String? categoryId;
   final String? productGroup;
   final String? productClass;
@@ -120,6 +124,7 @@ class ApiCatalogProduct {
         json['type'] ?? catalog['typeName'] ?? catalog['type'],
       ),
       typeId: _nullableString(json['typeId'] ?? catalog['typeId']),
+      typeImageUrl: _nullableString(json['typeImageUrl'] ?? catalog['typeImageUrl']),
       categoryId: _nullableString(json['categoryId'] ?? json['category_id']),
       productGroup: _nullableString(
         json['productGroup'] ??

@@ -1,8 +1,8 @@
 # BuildMate 24x7
 
 Plumbing, electrical and hardware ordering for Shivani Electrochem Services, built from the SOW with these changes:
-a cart with upfront payment plus **quotations** for bulk / site orders, Cashfree as the payment gateway, Firebase
-phone login, and a pluggable ERP sync layer.
+a cart with upfront payment plus **quotations** for bulk / site orders, Cashfree as the payment gateway, MSG91-backed
+phone login through the API, and a pluggable ERP sync layer.
 
 | Folder | What it is | Stack |
 |---|---|---|
@@ -19,7 +19,7 @@ The admin panel drives both apps: products, prices, images, categories, home ban
 minimum order, hours, support number), partner approval and reward rules all come from the API, so a change in admin
 shows up on the website and in the app without a release.
 
-> **Phone login (Firebase) for the website and app: see [FIREBASE_SETUP.md](FIREBASE_SETUP.md).**
+> **Phone login via MSG91 for the website and app: see [MSG91_SETUP.md](MSG91_SETUP.md).**
 
 ## Look and feel: the client's design kit
 
@@ -96,9 +96,7 @@ Set via `appsettings.json` or environment variables (`Section__Key`).
 | `ConnectionStrings:Default` | Postgres connection string |
 | `Jwt:SigningKey` | ≥ 32 random characters. Required in production |
 | `Otp:*` | Length, expiry, attempt and resend limits. `TestNumbers` for store/Play review accounts |
-| `Firebase:ProjectId` | Firebase project id(s) whose phone-login tokens are accepted, comma-separated. Set to `buildmate24x7,buildmate-24x7` because the client's web and Android configs point at two different projects — use one if possible |
-| `Sms:Provider` | Only for the API's own OTP (fallback when Firebase isn't used): `Log` or `Msg91` (needs a DLT-registered template) |
-| `Push:FirebaseCredentialPath` | Service-account JSON for FCM. Empty = push disabled |
+| `Sms:Provider` | `Msg91` for live SMS (requires `Msg91AuthKey` and a DLT-registered `Msg91OtpTemplateId`); `Log` is for development only |
 | `Storage:Provider` | `Local` (folder `storage/`) or `S3` (`S3Bucket`, `S3Region`, `S3PublicBaseUrl`). KYC documents are always private and served only to staff through the API |
 | `Cashfree:*` | `Environment` sandbox/production, `ClientId`, `ClientSecret`, `WebReturnUrl` (storefront `/checkout/return?order={orderId}`), `NotifyUrl` |
 | `Erp:*` | `Provider` `None` or `Webhook`, `WebhookUrl`, `WebhookSecret`, retry settings |
@@ -232,13 +230,11 @@ first). It only adds tables/columns; nothing is deleted.
 
 ## Things to decide or finish before launch
 
-- **Flutter app not yet compiled** — the SDK couldn't be downloaded where this was written. Follow `mobile/README.md`
-  (Firebase setup, SHA fingerprints, package name) and expect a round of analyzer fixes.
-- **One Firebase project** — the website `.env` uses `buildmate24x7`, the Android `google-services.json` uses
-  `buildmate-24x7` (package `com.example.customerapp`). Pick one; register the real Android package there.
+- **Flutter APK not yet built** — the app tests pass, but release signing and physical-device acceptance remain.
+  Follow `mobile/README.md` for the API URL and MSG91 configuration.
 - **Database scripts to run by hand** (after a backup, on staging first): `api/db/2026-10-28_product_movement.sql`,
   `api/db/2026-10-29_quotations.sql`.
-- **API compiled against stubs only** (NuGet was blocked); run `dotnet build` once with real packages.
+- **API build not verified in this environment** — run `dotnet build` with the .NET 8 SDK before deployment.
 - **Policies pages** (`storefront/app/policies`) contain draft text — have them reviewed; Cashfree and the app stores require them.
 - **Contacts harvesting** from the SOW was not built (Play policy / DPDP Act). Suggest a referral share link instead.
 - A few demo images in the mock are placeholder illustrations — upload real product photos from Admin → Products.

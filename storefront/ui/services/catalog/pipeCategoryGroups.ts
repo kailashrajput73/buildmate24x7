@@ -1,4 +1,3 @@
-import mockData from '../../mocks/mockData.json';
 import type { ProductVariant } from './catalogModels';
 import type { PipesFittingProduct } from './pipesFittingModels';
 
@@ -40,7 +39,7 @@ function stringHash(value: string): number {
   return hash;
 }
 
-/** Flutter `_variantFor` — maps a mock product into a cart `ProductVariant`. */
+/** Maps a server product into a cart `ProductVariant`. */
 export function variantFor(
   product: PipesFittingProduct,
   group: CategoryProductGroup,
@@ -70,8 +69,8 @@ export function variantFor(
     sku: product.productCode ?? '',
     brandId: product.brand.toLowerCase(),
     brandName: product.brand,
-    categoryId: mockData.catalog.pipesTubingCategoryId,
-    categoryName: mockData.catalog.pipesTubingCategoryName,
+    categoryId: '',
+    categoryName: group.title,
     subCategoryId: group.subCategory.toLowerCase(),
     subCategoryName: group.subCategory,
     description: group.title,

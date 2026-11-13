@@ -24,7 +24,8 @@ export default function Addresses() {
         <ul className="grid gap-3 sm:grid-cols-2">
           {list.map((a) => (
             <li key={a.id} className="glass rounded-[22px] p-4 text-sm">
-              <div className="font-bold">{a.name} {a.isDefault && <span className="ml-1 rounded bg-pipe-50 px-1.5 text-xs text-pipe-700">Default</span>}</div>
+              <div className="font-bold">{a.name} {a.isDefault && <span className="ml-1 rounded bg-pipe-50 px-1.5 text-xs text-pipe-700">Default</span>}
+                {a.serviceable != null && <span className={`ml-1 rounded px-1.5 text-xs ${a.serviceable ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{a.serviceable ? 'Serviceable' : 'Not serviceable'}</span>}</div>
               <p className="mt-1 text-ink-soft">{[a.line1, a.line2, a.landmark, a.city, a.state, a.pincode].filter(Boolean).join(', ')}<br />{a.phone}</p>
               <div className="mt-3 flex gap-3"><button className="font-semibold text-pipe-700" onClick={() => setEdit(a)}>Edit</button><button className="text-ink-soft hover:text-brick-700" onClick={() => del(a.id)}>Remove</button></div>
             </li>

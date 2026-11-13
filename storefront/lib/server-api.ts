@@ -3,10 +3,10 @@ import type { CategoryTree, HomeFeed, Paged, ProductCard, ProductDetail, StoreIn
 
 const API = process.env.API_URL ?? 'http://localhost:5080'
 
-/** Server-side fetch for public catalogue pages (SEO-friendly, cached briefly). */
-async function get<T>(path: string, revalidate = 60): Promise<T | null> {
+/** Server-side fetch for public catalogue pages without serving stale catalogue data. */
+async function get<T>(path: string): Promise<T | null> {
   try {
-    const res = await fetch(`${API}${path}`, { headers: { 'X-Client': 'web' }, next: { revalidate } })
+    const res = await fetch(`${API}${path}`, { headers: { 'X-Client': 'web' }, cache: 'no-store' })
     if (res.status === 404) return null
     if (!res.ok) throw new Error(`API ${res.status} for ${path}`)
     return (await res.json()) as T
@@ -17,10 +17,10 @@ async function get<T>(path: string, revalidate = 60): Promise<T | null> {
 }
 
 export const serverApi = {
-  home: () => get<HomeFeed>('/api/catalog/home', 60),
-  store: () => get<StoreInfo>('/api/catalog/store', 300),
-  categories: () => get<CategoryTree[]>('/api/catalog/categories', 300),
-  brands: () => get<BrandRef[]>('/api/catalog/brands', 300),
-  product: (id: string) => get<ProductDetail>(`/api/catalog/products/${encodeURIComponent(id)}`, 60),
-  products: (qs: string) => get<Paged<ProductCard>>(`/api/catalog/products?${qs}`, 30),
+  home: () => get<HomeFeed>('/api/catalog/home'),
+  store: () => get<StoreInfo>('/api/catalog/store'),
+  categories: () => get<CategoryTree[]>('/api/catalog/categories'),
+  brands: () => get<BrandRef[]>('/api/catalog/brands'),
+  product: (id: string) => get<ProductDetail>(`/api/catalog/products/${encodeURIComponent(id)}`),
+  products: (qs: string) => get<Paged<ProductCard>>(`/api/catalog/products?${qs}`),
 }

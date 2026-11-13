@@ -1,6 +1,7 @@
 import CashfreeSettings from '../components/CashfreeSettings'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Button, ErrorBox, Field, Input, Loading, NumberInput, PageHeader, Section, Textarea, Toggle } from '../components/ui'
 import { api } from '../lib/api'
 import { useAction } from '../lib/hooks'
@@ -9,9 +10,8 @@ import type { InvoiceNumbering, StoreSettings } from '../lib/types'
 export default function Settings() {
   const { data, isLoading, error } = useQuery({ queryKey: ['settings'], queryFn: () => api.get<StoreSettings>('/api/admin/settings') })
   const [s, setS] = useState<StoreSettings | null>(null)
-  const [pins, setPins] = useState('')
-  useEffect(() => { if (data) { setS(data); setPins(data.deliveryPincodes.join(', ')) } }, [data])
-  const save = useAction(() => api.put<StoreSettings>('/api/admin/settings', { ...s, deliveryPincodes: pins.split(/[\s,]+/).filter((p) => /^\d{6}$/.test(p)) }),
+  useEffect(() => { if (data) setS(data) }, [data])
+  const save = useAction(() => api.put<StoreSettings>('/api/admin/settings', s),
     { success: 'Settings saved — the website and app pick them up within 5 minutes', invalidate: ['settings', 'invoice-numbering'] })
 
   if (isLoading || !s) return error ? <ErrorBox error={error} /> : <Loading />
@@ -66,7 +66,12 @@ export default function Settings() {
               <Field label="Delivery fee (₹)"><NumberInput value={s.deliveryFee} onChange={(v) => set('deliveryFee', v)} /></Field>
               <Field label="Free delivery above (₹)" hint="0 = never free"><NumberInput value={s.freeDeliveryAbove} onChange={(v) => set('freeDeliveryAbove', v)} /></Field>
             </div>
-            <Field label="Delivery pincodes" hint="Comma separated. Leave empty to deliver everywhere."><Textarea value={pins} onChange={(e) => setPins(e.target.value)} placeholder="370421, 370001" /></Field>
+            <Field label="Delivery pincodes" hint="Serviceable PIN codes are managed on their own page.">
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <span className="text-ink-soft">{s.deliveryPincodes.length ? `${s.deliveryPincodes.length} active PIN code${s.deliveryPincodes.length === 1 ? '' : 's'}` : 'No serviceable PIN codes yet'}</span>
+                <Link to="/delivery-areas" className="font-semibold text-pipe-700 hover:underline">Manage delivery areas →</Link>
+              </div>
+            </Field>
           </div>
         </Section>
         <Section title="Rewards & app">

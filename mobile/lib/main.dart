@@ -6,6 +6,7 @@ import 'core/constants/app_constants.dart';
 import 'core/routes/app_router.dart';
 import 'core/routes/app_routes.dart';
 import 'core/state/catalog_controller.dart';
+import 'core/state/delivery_controller.dart';
 import 'core/state/cart_controller.dart';
 import 'core/state/location_controller.dart';
 import 'core/state/order_history_controller.dart';
@@ -18,6 +19,7 @@ import 'core/state/wishlist_controller.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'features/rewards/data/in_memory_reward_repository.dart';
+import 'services/auth_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,6 +32,7 @@ Future<void> main() async {
     ),
   );
 
+  await PhoneAuthService.initialize();
   final sessionController = SessionController();
   await sessionController.restore();
 
@@ -37,10 +40,7 @@ Future<void> main() async {
 }
 
 class BuildMateApp extends StatelessWidget {
-  const BuildMateApp({
-    super.key,
-    required this.sessionController,
-  });
+  const BuildMateApp({super.key, required this.sessionController});
 
   final SessionController sessionController;
 
@@ -63,10 +63,11 @@ class BuildMateApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ProfileController()),
         ChangeNotifierProvider(create: (_) => OrderHistoryController()),
         ChangeNotifierProvider(create: (_) => LocationController()),
+        ChangeNotifierProvider(create: (_) => DeliveryController()),
         ChangeNotifierProvider(
           create: (context) => RewardController(
             quotationController: context.read<QuotationController>(),
-            repository: InMemoryRewardRepository.withDemoSeed(),
+            repository: InMemoryRewardRepository(),
           ),
         ),
       ],

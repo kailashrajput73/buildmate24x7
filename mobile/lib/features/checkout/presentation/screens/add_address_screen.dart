@@ -28,12 +28,10 @@ class AddAddressScreen extends StatefulWidget {
   State<AddAddressScreen> createState() => _AddAddressScreenState();
 }
 
-enum _PincodeStatus { idle, loading, found, notFound }
-
 class _AddAddressScreenState extends State<AddAddressScreen> {
   static const double _maxContentWidth = 720;
   static const _location = DeviceLocation();
-  static const _defaultCenter = LatLng(12.9716, 77.5946);
+  static const _defaultCenter = LatLng(20.5937, 78.9629);
 
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
@@ -49,11 +47,10 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
 
   var _type = AddressType.home;
   var _isDefault = false;
-  var _pinStatus = _PincodeStatus.idle;
   var _locating = false;
   var _saving = false;
   var _autovalidate = AutovalidateMode.disabled;
-  LatLng _pin = _defaultCenter;
+  LatLng? _pin;
 
   @override
   void dispose() {
@@ -74,28 +71,6 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
     super.dispose();
   }
 
-  Future<void> _onPincodeChanged(String value) async {
-    if (value.length < 6) {
-      if (_pinStatus != _PincodeStatus.idle) {
-        setState(() => _pinStatus = _PincodeStatus.idle);
-      }
-      return;
-    }
-    setState(() => _pinStatus = _PincodeStatus.loading);
-    final result = await PincodeDirectory.lookup(value);
-    // Ignore stale lookups if the user kept typing.
-    if (!mounted || _pincode.text != value) return;
-    setState(() {
-      if (result == null) {
-        _pinStatus = _PincodeStatus.notFound;
-      } else {
-        _pinStatus = _PincodeStatus.found;
-        _city.text = result.$1;
-        _state.text = result.$2;
-      }
-    });
-  }
-
   Future<void> _useCurrentLocation() async {
     if (_locating) return;
     FocusScope.of(context).unfocus();
@@ -113,7 +88,6 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
         if (place.state.isNotEmpty) _state.text = place.state;
         if (place.pincode.isNotEmpty) {
           _pincode.text = place.pincode;
-          _pinStatus = _PincodeStatus.found;
         }
         if (place.house.isNotEmpty && _house.text.trim().isEmpty) {
           _house.text = place.house;
@@ -171,15 +145,13 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
       );
   }
 
-  Future<void> _save() async {
+  void _save() {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) {
       setState(() => _autovalidate = AutovalidateMode.onUserInteraction);
       return;
     }
     setState(() => _saving = true);
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
 
     Navigator.of(context).pop(
       DeliveryAddress(
@@ -284,21 +256,8 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
                                 FilteringTextInputFormatter.digitsOnly,
                                 LengthLimitingTextInputFormatter(6),
                               ],
-                              onChanged: _onPincodeChanged,
                               validator: _pincodeValidator,
-                              suffixIcon: _PincodeSuffix(status: _pinStatus),
-                              helperText: switch (_pinStatus) {
-                                _PincodeStatus.found =>
-                                  'Delivery available · City & State filled',
-                                _PincodeStatus.notFound =>
-                                  "Couldn't find this pincode — enter City & State",
-                                _ => 'City & State fill in automatically',
-                              },
-                              helperColor: switch (_pinStatus) {
-                                _PincodeStatus.found => AppColors.success,
-                                _PincodeStatus.notFound => AppColors.warning,
-                                _ => null,
-                              },
+                              helperText: 'Enter the delivery pincode.',
                             ),
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -369,7 +328,7 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
                             children: [
                               _MapPreview(
                                 controller: _mapController,
-                                initialCenter: _pin,
+                                initialCenter: _pin ?? _defaultCenter,
                                 onMoved: (center) => _pin = center,
                               ),
                             ],
@@ -748,11 +707,8 @@ class _Field extends StatelessWidget {
     this.inputFormatters,
     this.autofillHints,
     this.validator,
-    this.onChanged,
     this.prefixText,
-    this.suffixIcon,
     this.helperText,
-    this.helperColor,
   });
 
   final TextEditingController controller;
@@ -764,11 +720,8 @@ class _Field extends StatelessWidget {
   final List<TextInputFormatter>? inputFormatters;
   final Iterable<String>? autofillHints;
   final FormFieldValidator<String>? validator;
-  final ValueChanged<String>? onChanged;
   final String? prefixText;
-  final Widget? suffixIcon;
   final String? helperText;
-  final Color? helperColor;
 
   @override
   Widget build(BuildContext context) {
@@ -785,7 +738,6 @@ class _Field extends StatelessWidget {
         inputFormatters: inputFormatters,
         autofillHints: autofillHints,
         validator: validator,
-        onChanged: onChanged,
         style: theme.textTheme.bodyLarge?.copyWith(color: AppColors.onSurface),
         decoration: InputDecoration(
           labelText: label,
@@ -794,52 +746,11 @@ class _Field extends StatelessWidget {
             color: AppColors.onSurface,
             fontWeight: FontWeight.w600,
           ),
-          suffixIcon: suffixIcon,
           helperText: helperText,
-          helperStyle: helperColor == null
-              ? null
-              : theme.textTheme.bodySmall?.copyWith(
-                  color: helperColor,
-                  fontWeight: FontWeight.w600,
-                ),
           helperMaxLines: 2,
           errorMaxLines: 2,
         ),
       ),
-    );
-  }
-}
-
-class _PincodeSuffix extends StatelessWidget {
-  const _PincodeSuffix({required this.status});
-
-  final _PincodeStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 200),
-      child: switch (status) {
-        _PincodeStatus.loading => const Padding(
-          key: ValueKey('loading'),
-          padding: EdgeInsets.all(14),
-          child: SizedBox.square(
-            dimension: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
-        _PincodeStatus.found => const Icon(
-          Icons.check_circle_rounded,
-          key: ValueKey('found'),
-          color: AppColors.success,
-        ),
-        _PincodeStatus.notFound => const Icon(
-          Icons.info_outline_rounded,
-          key: ValueKey('notFound'),
-          color: AppColors.warning,
-        ),
-        _PincodeStatus.idle => const SizedBox.shrink(key: ValueKey('idle')),
-      },
     );
   }
 }

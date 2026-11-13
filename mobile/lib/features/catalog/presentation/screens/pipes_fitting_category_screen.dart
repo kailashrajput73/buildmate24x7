@@ -16,6 +16,8 @@ import '../../data/mappers/catalog_api_mapper.dart';
 import '../widgets/pdp_configurator_chips.dart';
 import '../widgets/pipe_configurator_classes.dart';
 import '../widgets/pipes_filter_panel.dart';
+import '../../../../shared/widgets/delivery_pin_sheet.dart';
+import '../../../../core/state/delivery_controller.dart';
 
 /// Category-level entry screen for Plumbing Pipes & Fittings.
 ///
@@ -1123,6 +1125,18 @@ class _PipesFittingCategoryScreenState
     final catalogCtrl = context.watch<CatalogController>();
     final catalog = _activeCatalog(catalogCtrl);
 
+    // Category switched off in the dashboard: no cached products are shown.
+    final moduleCategoryId = widget.module == CategoryModuleKind.electricals
+        ? catalogCtrl.electricalCategoryId
+        : catalogCtrl.pipesCategoryId;
+    if (catalogCtrl.categoriesLoaded && moduleCategoryId == null) {
+      return const _CatalogStateMessage(
+        icon: Icons.block_rounded,
+        title: 'This category is not available',
+        subtitle: 'Please choose another category.',
+      );
+    }
+
     if (catalogCtrl.isLoading && catalog == null) {
       return const Center(
         child: CircularProgressIndicator(color: AppColors.primary),
@@ -2047,6 +2061,7 @@ class _CategorySidebarState extends State<_CategorySidebar> {
                       meta.typeName?.toLowerCase(),
                   onTap: () => widget.onSectionSelected(meta.typeName),
                   imageUrl: meta.imageUrl,
+                  isType: true,
                 ),
               if (widget.selectedType != null) ...[
                 const SizedBox(height: AppSpacing.space3),
@@ -2193,6 +2208,7 @@ class _SidebarImageTile extends StatelessWidget {
     required this.onTap,
     this.imageAsset = '',
     this.imageUrl,
+    this.isType = false,
   });
 
   final String label;
@@ -2200,6 +2216,11 @@ class _SidebarImageTile extends StatelessWidget {
   final VoidCallback onTap;
   final String imageAsset;
   final String? imageUrl;
+
+  /// Type items: neutral placeholder when the Type has no image, and the name
+  /// wraps (up to 3 lines) instead of being cut off. Sub-category tiles keep
+  /// their existing look.
+  final bool isType;
 
   static const double _circleSize = 52;
 
@@ -2249,15 +2270,18 @@ class _SidebarImageTile extends StatelessWidget {
                     fallbackIcon: 'plumbing',
                     fallbackIconColor: AppColors.outline,
                     fallbackBackground: AppColors.surface,
-                    fit: BoxFit.contain,
+                    fit: isType ? BoxFit.cover : BoxFit.contain,
                     iconSize: 26,
+                    borderRadius: isType ? BorderRadius.circular(_circleSize) : null,
+                    placeholder: isType,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.space1),
                 Text(
                   label,
                   textAlign: TextAlign.center,
-                  maxLines: 2,
+                  maxLines: isType ? 3 : 2,
+                  softWrap: true,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelMedium?.copyWith(
                     height: 1.15,
@@ -2869,6 +2893,7 @@ class _PipeConfiguratorScreenState extends State<_PipeConfiguratorScreen> {
   }
 
   void _addToCart() {
+    if (!ensureDeliverable(context)) return;
     final catalog = context.read<CatalogController>();
     final categoryId = catalog.pipesCategoryId;
     final live = _product.id != null ? catalog.variantById(_product.id!) : null;
@@ -3133,8 +3158,9 @@ class _PipeConfiguratorScreenState extends State<_PipeConfiguratorScreen> {
                       selectedSizeLabel: _product.size ?? '—',
                       price: _resolvedProductPrice(context),
                       unit: _group.unit,
-                      onAddToCart: _inStock(_product) ? _addToCart : null,
+                      onAddToCart: _inStock(_product) && !context.watch<DeliveryController>().blocked ? _addToCart : null,
                     ),
+                    const DeliveryBlockedNote(),
                   ],
                 ),
               ),

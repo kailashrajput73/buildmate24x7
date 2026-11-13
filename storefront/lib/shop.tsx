@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { api, session } from './api'
+import { useDelivery } from './delivery'
 import type { AuthResult, AuthUser, Cart } from './types'
 
 const GUEST_KEY = 'bm_guest_cart'
@@ -12,7 +13,7 @@ type Shop = {
   ready: boolean
   requestOtp: (phone: string) => Promise<void>
   verifyOtp: (phone: string, code: string, name?: string) => Promise<AuthResult>
-  /** Stores a sign-in result (Firebase or OTP) and moves the guest cart into the account. */
+  /** Stores a sign-in result and moves the guest cart into the account. */
   signIn: (r: AuthResult) => Promise<AuthResult>
   logout: () => Promise<void>
   cart: Cart | null
@@ -40,6 +41,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false)
   const [cart, setCart] = useState<Cart | null>(null)
   const [cartBusy, setBusy] = useState(false)
+  const delivery = useDelivery()
 
   useEffect(() => {
     setUser(session.get()?.user ?? null)
@@ -59,7 +61,12 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     try { await fn(); return true } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not update the cart'); return false } finally { setBusy(false) }
   }
 
-  const add = (productId: number, qty = 1, name?: string, quiet = false, purchaseUnit: "Piece" | "Box" = "Piece") => run(async () => {
+  // Every Add to Cart / Buy Now goes through here: allowed only for a serviceable delivery PIN code.
+  const add = async (productId: number, qty = 1, name?: string, quiet = false, purchaseUnit: "Piece" | "Box" = "Piece") => {
+    if (!delivery.requireServiceable()) return false
+    return addToCart(productId, qty, name, quiet, purchaseUnit)
+  }
+  const addToCart = (productId: number, qty = 1, name?: string, quiet = false, purchaseUnit: "Piece" | "Box" = "Piece") => run(async () => {
     if (session.get()) setCart(await api<Cart>('/api/cart/items', { method: 'POST', body: { productId, quantity: qty, purchaseUnit } }))
     else {
       const g = readGuest()
@@ -107,7 +114,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const value = useMemo<Shop>(() => ({
     user, ready, requestOtp, verifyOtp, signIn, logout, cart, cartBusy, add, setQty, remove, reloadCart,
     cartCount: cart?.itemCount ?? 0,
-  }), [user, ready, cart, cartBusy]) // eslint-disable-line react-hooks/exhaustive-deps
+  }), [user, ready, cart, cartBusy, delivery.requireServiceable]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

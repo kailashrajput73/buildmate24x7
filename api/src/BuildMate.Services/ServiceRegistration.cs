@@ -37,7 +37,6 @@ public static class ServiceRegistration
         services.Configure<JwtOptions>(config.GetSection("Jwt"));
         services.Configure<OtpOptions>(config.GetSection("Otp"));
         services.Configure<SmsOptions>(config.GetSection("Sms"));
-        services.Configure<PushOptions>(config.GetSection("Push"));
         services.Configure<StorageOptions>(config.GetSection("Storage"));
         services.Configure<CashfreeOptions>(config.GetSection("Cashfree"));
         services.Configure<ErpOptions>(config.GetSection("Erp"));
@@ -47,9 +46,6 @@ public static class ServiceRegistration
         // Integrations (provider chosen by configuration)
         if (config["Sms:Provider"] == "Msg91") services.AddHttpClient<ISmsSender, Msg91SmsSender>();
         else services.AddSingleton<ISmsSender, LogSmsSender>();
-
-        if (!string.IsNullOrWhiteSpace(config["Push:FirebaseCredentialPath"])) services.AddSingleton<IPushSender, FcmPushSender>();
-        else services.AddSingleton<IPushSender, NullPushSender>();
 
         if (config["Storage:Provider"] == "S3")
         {
@@ -72,10 +68,10 @@ public static class ServiceRegistration
         services.AddHostedService<OutboxProcessor>();
 
         // Business services
-        services.Configure<FirebaseOptions>(config.GetSection("Firebase"));
-        services.AddHttpClient<IFirebaseTokenVerifier, FirebaseTokenVerifier>(c => c.Timeout = TimeSpan.FromSeconds(10));
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<ISettingsService, SettingsService>();
+        services.AddScoped<IDeliveryAreaService, DeliveryAreaService>();
+        services.AddHttpClient<IPincodeDirectory, IndiaPostPincodeDirectory>(c => c.Timeout = TimeSpan.FromSeconds(5));
         services.Configure<GeocodingOptions>(config.GetSection("Geocoding"));
         services.AddHttpClient<IGeocodingService, GeocodingService>(c => c.Timeout = TimeSpan.FromSeconds(10));
         services.AddScoped<BuildMate.Services.Orders.IInvoiceNumbers, BuildMate.Services.Orders.InvoiceNumbers>();

@@ -131,22 +131,11 @@ class PipesFittingType {
     );
   }
 
-  /// First non-empty image from API-backed catalog data (type, sub-category, or product).
+  /// The Type's own server image only (no sub-category or product image
+  /// fallback); null → the sidebar shows a neutral placeholder.
   String? get resolvedImageUrl {
-    if (imageUrl != null && imageUrl!.trim().isNotEmpty) {
-      return imageUrl!.trim();
-    }
-    for (final sub in subCategories) {
-      final subUrl = sub.imageUrl?.trim();
-      if (subUrl != null && subUrl.isNotEmpty) return subUrl;
-      for (final cls in sub.classes) {
-        for (final product in cls.products) {
-          final url = product.imageUrl?.trim();
-          if (url != null && url.isNotEmpty) return url;
-        }
-      }
-    }
-    return null;
+    final url = imageUrl?.trim();
+    return url == null || url.isEmpty ? null : url;
   }
 
   int get productCount =>

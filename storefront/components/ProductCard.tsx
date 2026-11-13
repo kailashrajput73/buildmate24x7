@@ -9,7 +9,7 @@ export default function ProductCard({ p }: { p: P }) {
   return (
     <article className="group flex flex-col glass-tile p-2.5">
       <Link href={`/p/${p.id}`} className="relative mb-3 block aspect-square overflow-hidden rounded-[16px] bg-white">
-        {p.imageUrl ? <img src={p.imageUrl} alt="" loading="lazy" className="h-full w-full object-cover transition-transform group-hover:scale-[1.03]" /> : null}
+        {p.imageUrl && !p.imageUrl.includes('/files/mock/') ? <img src={p.imageUrl} alt="" loading="lazy" className="h-full w-full object-cover transition-transform group-hover:scale-[1.03]" /> : null}
         {saving >= 5 && <span className="num absolute left-2 top-2 rounded bg-tape-400 px-1.5 py-0.5 text-xs font-bold text-ink">{saving}% off MRP</span>}
       </Link>
       <div className="px-1 text-xs font-semibold text-ink-faint">{p.brandName}</div>

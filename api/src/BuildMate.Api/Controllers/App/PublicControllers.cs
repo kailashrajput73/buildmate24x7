@@ -3,12 +3,10 @@ using BuildMate.Services.Auth;
 using BuildMate.Services.Catalog;
 using BuildMate.Services.Common;
 using BuildMate.Services.Content;
-using BuildMate.Services.Notifications;
 using BuildMate.Services.Orders;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.Extensions.Options;
 
 namespace BuildMate.Api.Controllers.App;
 
@@ -35,22 +33,6 @@ public class AuthController : ControllerBase
 
     [HttpPost("otp/verify"), EnableRateLimiting("otp")]
     public Task<AuthResult> VerifyOtp(OtpVerifyRequest req, CancellationToken ct) => _auth.VerifyOtpAsync(req, ct);
-
-    /// <summary>Website / app sign-in after Firebase phone OTP. Returns 409 "signup_required" for a new number without an audience.</summary>
-    [HttpPost("firebase"), EnableRateLimiting("otp")]
-    public Task<AuthResult> Firebase(FirebaseLoginRequest req, CancellationToken ct) => _auth.FirebaseLoginAsync(req, ct);
-
-    /// <summary>
-    /// Which phone-login methods this server accepts (no secrets): the Firebase project ids it trusts and whether the
-    /// API's own SMS OTP really sends SMS. For set-up checks — see FIREBASE_SETUP.md.
-    /// </summary>
-    [HttpGet("config")]
-    public object Config([FromServices] IOptions<FirebaseOptions> firebase, [FromServices] ISmsSender sms) => new
-    {
-        firebaseProjects = firebase.Value.ProjectIds,
-        firebaseEnabled = firebase.Value.ProjectIds.Count > 0,
-        smsOtpSendsSms = sms is not LogSmsSender,
-    };
 
     [HttpPost("staff/login"), EnableRateLimiting("login")]
     public Task<AuthResult> StaffLogin(StaffLoginRequest req, CancellationToken ct) => _auth.StaffLoginAsync(req, ct);
@@ -133,6 +115,22 @@ public class GeoController : ControllerBase
 
     [HttpGet("reverse"), EnableRateLimiting("geo")]
     public Task<GeocodedPlace> Reverse([FromQuery] double lat, [FromQuery] double lng, CancellationToken ct) => _geo.ReverseAsync(lat, lng, ct);
+}
+
+/// <summary>
+/// Is this delivery PIN code serviceable? Decided only by the PIN code the customer selects (Delivery Areas),
+/// never by where the customer is.
+/// </summary>
+[ApiController]
+[Route("api/delivery")]
+[AllowAnonymous]
+public class DeliveryController : ControllerBase
+{
+    private readonly IDeliveryAreaService _svc;
+    public DeliveryController(IDeliveryAreaService svc) => _svc = svc;
+
+    [HttpGet("check"), EnableRateLimiting("geo")]
+    public Task<DeliveryCheckResult> Check([FromQuery] string? pincode, CancellationToken ct) => _svc.CheckAsync(pincode, ct);
 }
 
 [ApiController]

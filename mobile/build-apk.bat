@@ -64,8 +64,8 @@ echo  Building BuildMate APK
 echo  This takes 5-10 minutes the first time. Please leave this window open.
 echo.
 
-rem The app uses its own built-in server address (lib/core/network/api_config.dart). No Firebase.
-echo Build without Firebase >> apk-build-log.txt
+rem The app uses the API_URL configured in lib/core/config.dart.
+echo Building with MSG91 API authentication >> apk-build-log.txt
 call "%FLUTTER%" --version >> apk-build-log.txt 2>&1
 call "%FLUTTER%" pub get >> apk-build-log.txt 2>&1
 if exist "android\gradlew.bat" (pushd android & call gradlew.bat --stop >> ..\apk-build-log.txt 2>&1 & popd)

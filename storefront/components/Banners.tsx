@@ -37,7 +37,7 @@ export default function Banners({ banners }: { banners: Banner[] }) {
             <div className="relative h-full w-full">
               <picture>
                 {b.mobileImageUrl && <source media="(max-width: 640px)" srcSet={b.mobileImageUrl} />}
-                <img src={b.imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                {b.imageUrl && !b.imageUrl.includes('/files/mock/') && <img src={b.imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />}
               </picture>
               <div className="relative flex h-full max-w-[60%] flex-col justify-center p-6 text-white sm:p-10">
                 <h2 className="text-2xl font-extrabold leading-tight sm:text-4xl">{b.title}</h2>

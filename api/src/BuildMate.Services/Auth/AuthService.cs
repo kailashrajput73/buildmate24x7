@@ -50,8 +50,6 @@ public record OtpRequest(string Phone, OtpAudience? Audience = null);
 /// <param name="PartnerType">For new partner accounts: the profession chosen at sign-up.</param>
 /// <param name="ReferralCode">Refer &amp; Earn code entered at sign-up (used only when the account is created).</param>
 public record OtpVerifyRequest(string Phone, string Code, OtpAudience? Audience, string? Name, string? Email = null, PartnerType? PartnerType = null, string? ReferralCode = null);
-/// <summary>Sign-in with a Firebase phone-auth ID token (website and app). Same account rules as <see cref="OtpVerifyRequest"/>.</summary>
-public record FirebaseLoginRequest(string IdToken, OtpAudience? Audience = null, string? Name = null, string? Email = null, PartnerType? PartnerType = null, string? ReferralCode = null);
 public record StaffLoginRequest(string Email, string Password);
 public record RefreshRequest(string RefreshToken);
 
@@ -64,7 +62,6 @@ public interface IAuthService
 {
     Task RequestOtpAsync(OtpRequest req, CancellationToken ct = default);
     Task<AuthResult> VerifyOtpAsync(OtpVerifyRequest req, CancellationToken ct = default);
-    Task<AuthResult> FirebaseLoginAsync(FirebaseLoginRequest req, CancellationToken ct = default);
     Task<AuthResult> StaffLoginAsync(StaffLoginRequest req, CancellationToken ct = default);
     Task<AuthResult> RefreshAsync(string refreshToken, CancellationToken ct = default);
     Task LogoutAsync(string refreshToken, CancellationToken ct = default);
@@ -79,15 +76,13 @@ public class AuthService : IAuthService
     private readonly JwtOptions _jwt;
     private readonly OtpOptions _otp;
     private readonly IHostEnvironment _env;
-    private readonly IFirebaseTokenVerifier _firebase;
     private readonly BuildMate.Services.Partners.IMemberService _members;
     private readonly PasswordHasher<AppUser> _hasher = new();
 
-    public AuthService(AppDbContext db, ISmsSender sms, IOptions<JwtOptions> jwt, IOptions<OtpOptions> otp, IHostEnvironment env, IFirebaseTokenVerifier firebase,
+    public AuthService(AppDbContext db, ISmsSender sms, IOptions<JwtOptions> jwt, IOptions<OtpOptions> otp, IHostEnvironment env,
         BuildMate.Services.Partners.IMemberService members)
     {
         _members = members;
-        _firebase = firebase;
         _db = db;
         _sms = sms;
         _jwt = jwt.Value;
@@ -115,10 +110,11 @@ public class AuthService : IAuthService
             if (user is { IsActive: false }) return;
         }
 
-        // Outside development the "Log" SMS sender only writes the code to the server log — nobody would receive it.
-        // Fail clearly instead of answering "OTP sent". Production login uses Firebase (POST /api/auth/firebase).
-        if (!_env.IsDevelopment() && _sms is LogSmsSender && !_otp.TestNumbers.ContainsKey(phone))
-            throw new AppException("SMS OTP is not set up on the server. Please use the app or website login (Firebase).", 503, "otp_sms_not_configured");
+        // Never report a successful request if the configured production sender cannot deliver SMS.
+        if (!_otp.TestNumbers.ContainsKey(phone) &&
+            ((!_env.IsDevelopment() && _sms is LogSmsSender) ||
+             (_sms is Msg91SmsSender msg91 && !msg91.IsConfigured)))
+            throw new AppException("SMS OTP is not configured on the server. Please contact BuildMate support.", 503, "otp_sms_not_configured");
 
         var code = _otp.TestNumbers.TryGetValue(phone, out var fixedCode)
             ? fixedCode
@@ -138,31 +134,29 @@ public class AuthService : IAuthService
             .OrderByDescending(o => o.CreatedAt).FirstOrDefaultAsync(ct);
         if (otp == null) throw new AppException("OTP expired. Please request a new one.", 400, "otp_expired");
 
-        otp.Attempts++;
         var ok = CryptographicOperations.FixedTimeEquals(
             Encoding.UTF8.GetBytes(otp.CodeHash), Encoding.UTF8.GetBytes(Sha256(phone + ":" + (req.Code ?? "").Trim())));
         if (!ok)
         {
+            otp.Attempts++;
             if (otp.Attempts >= _otp.MaxAttempts) otp.Consumed = true;
             await _db.SaveChangesAsync(ct);
             throw new AppException("Incorrect OTP.", 400, "otp_invalid");
         }
+
+        // Keep a valid OTP available when no account exists yet. The client can
+        // collect signup details and retry with an audience before consuming it.
+        var result = await SignInByPhoneAsync(phone, req.Audience, req.Name, req.Email, req.PartnerType, req.ReferralCode, ct);
         otp.Consumed = true;
         await _db.SaveChangesAsync(ct);
-        return await SignInByPhoneAsync(phone, req.Audience, req.Name, req.Email, req.PartnerType, req.ReferralCode, ct);
-    }
-
-    public async Task<AuthResult> FirebaseLoginAsync(FirebaseLoginRequest req, CancellationToken ct = default)
-    {
-        var identity = await _firebase.VerifyAsync(req.IdToken, ct);
-        return await SignInByPhoneAsync(identity.Phone, req.Audience, req.Name, req.Email, req.PartnerType, req.ReferralCode, ct);
+        return result;
     }
 
     /// <summary>
     /// One phone number can have a partner account and a customer account. With an audience, that account is used
     /// (and created if new: partners start with KYC "not submitted"). Without one, the partner account is preferred,
     /// then the customer account; a number with neither gets 409 "signup_required" so the client can ask for name and
-    /// profession and call again (the Firebase token stays valid for an hour).
+    /// profession and call again with the same unconsumed OTP.
     /// </summary>
     private async Task<AuthResult> SignInByPhoneAsync(string phone, OtpAudience? audience, string? name, string? email, PartnerType? partnerType, string? referralCode, CancellationToken ct)
     {

@@ -14,12 +14,11 @@ import { CircularProgress } from '../../../shared/CircularProgress';
 import { CategoryImage } from '../../../shared/CategoryImage';
 import { WithWishlistHeart } from '../../../shared/WishlistHeart';
 import { sectionName } from '../../../services/catalog/buildmateCatalog';
-import pipesMock from '../PipesFittingCategory/PipesFittingCategory.mock.json';
 import {
   Screen, AppHeaderSlot, Header, HeaderInner, BackSlot, SearchSlot, HeaderTitle, ToolbarHeading, FilterRow, HeaderIconButton,
   FilterButton, MenuBackdrop, MenuCard, MenuSearchWrap, MenuSearchField, MenuList, MenuEmpty, MenuTile, MenuTileLabel, MenuCheck,
   Centered, Sidebar, SidebarBrand, SidebarBrandText, SidebarBrandTitle, SidebarBrandMeta, SidebarNav, AllIcon, CountPill, SidebarGap,
-  SidebarSectionLabel, SidebarAllRow, SidebarTypeRow, TypeThumb, RowLabel, SidebarSubRow, Content, ContentHeading, ContentTitle,
+  SidebarSectionLabel, SidebarAllRow, SidebarTypeItem, TypeCircle, TypeLabel, RowLabel, SidebarSubRow, Content, ContentHeading, ContentTitle,
   ContentSubtitle, ResultsBar, ResultsCount, FilterChip, Grid, StateMessage, StateIcon, StateTitle, StateSubtitle, Card, CardMedia,
   AddBadge, AddBadgeLabel, AddBadgeCount, CardBody, CardPrice, Rupee, PriceUnit, CardDiscount, CardTitle,
 } from '../PipesFittingCategory/PipesFittingCategory.styles';
@@ -29,8 +28,6 @@ import {
  * sidebar, Sort / Brand / Class (Color for cables) / Size / Length filters, one card per product family.
  * Data: GET /api/catalog/products?collapse=true (paginated families), /api/catalog/types and /api/catalog/facets.
  */
-const sidebarImages = pipesMock._CatSidebarImages as Record<string, string>;
-const defaultIcon = 'pi-wrench';
 const PAGE_SIZE = 24;
 
 const sortOptions: { sort: string; label: string }[] = [
@@ -40,10 +37,8 @@ const sortOptions: { sort: string; label: string }[] = [
   { sort: 'price_desc', label: 'Price (highest first)' },
 ];
 type OpenMenu = 'sort' | 'size' | 'brand' | 'class' | 'length' | null;
-type TypeRef = { id: number; name: string; subCategoryIds: number[]; classLabel?: string };
+type TypeRef = { id: number; name: string; subCategoryIds: number[]; classLabel?: string; imageUrl?: string | null };
 type Facets = { types: { id: number; name: string; count: number }[]; brands: { id: number; name: string }[]; classes: { value: string }[]; sizes: { value: string }[]; lengths: { value: string }[] };
-
-const imageForType = (type: string) => sidebarImages[type.toLowerCase()] ?? sidebarImages.all;
 
 const Pagination = styled.nav`
   display: flex; align-items: center; justify-content: center; gap: 16px; margin: 20px 0;
@@ -118,7 +113,7 @@ function FamilyCard({ p, onOpen }: { p: Card_; onOpen: () => void }) {
   return (
     <Card type="button" onClick={onOpen} aria-label={title}>
       <CardMedia>
-        <CategoryImage imageAsset={p.imageUrl ?? imageForType(p.catalog?.typeName ?? '')} fallbackIcon={defaultIcon} fallbackIconColor={theme.colors.outline}
+        <CategoryImage imageAsset={p.imageUrl ?? ''} fallbackIcon="pi-wrench" fallbackIconColor={theme.colors.outline}
           fallbackBackground={theme.colors.surfaceContainer} fit="contain" radius={theme.radius.md} iconSize={theme.spacing.space8} />
         <AddBadge>
           <AddBadgeLabel>{p.inStock ? 'ADD' : 'SOLD OUT'}</AddBadgeLabel>
@@ -266,13 +261,14 @@ export function CategoryBrowse({ categoryId, categoryName }: { categoryId: numbe
               {types.map((t) => {
                 const on = filters.typeId === String(t.id);
                 return (
-                  <SidebarTypeRow key={t.id} type="button" $selected={on} aria-pressed={on} onClick={() => set({ ...reset, typeId: String(t.id) })}>
-                    <TypeThumb $selected={on}>
-                      <CategoryImage imageAsset={imageForType(t.name)} fallbackIcon={defaultIcon} fallbackIconColor={theme.colors.outline} fallbackBackground={theme.colors.surface} fit="contain" iconSize={16} />
-                    </TypeThumb>
-                    <RowLabel $selected={on}>{t.name}</RowLabel>
+                  <SidebarTypeItem key={t.id} type="button" $selected={on} aria-pressed={on} onClick={() => set({ ...reset, typeId: String(t.id) })}>
+                    <TypeCircle $selected={on}>
+                      {/* Only the Type's own image from the server; otherwise a neutral placeholder (never a product image). */}
+                      <CategoryImage imageAsset={t.imageUrl ?? ''} placeholder fallbackIcon="pi-image" fallbackIconColor={theme.colors.outline} fallbackBackground={theme.colors.surface} fit="cover" iconSize={16} />
+                    </TypeCircle>
+                    <TypeLabel $selected={on}>{t.name}</TypeLabel>
                     <CountPill $selected={on}>{typeCount(t.id)}</CountPill>
-                  </SidebarTypeRow>
+                  </SidebarTypeItem>
                 );
               })}
             </>
@@ -298,7 +294,10 @@ export function CategoryBrowse({ categoryId, categoryName }: { categoryId: numbe
         </SidebarNav>
       </Sidebar>
       <Content $fullOnMobile={!data}>
-        {loading ? (
+        {/* Switched off in the dashboard while this page was open (the category list refreshes): no products shown. */}
+        {tree.length > 0 && !category ? (
+          <StateMsg icon="pi-ban" title="This category is not available" subtitle="Please choose another category." />
+        ) : loading ? (
           <Centered><CircularProgress size={36} color={theme.colors.primary} /></Centered>
         ) : error ? (
           <>

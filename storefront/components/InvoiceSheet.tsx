@@ -41,7 +41,7 @@ export default function InvoiceSheet({ inv, copyLabel = COPY_LABELS[0] }: { inv:
       <div className="frame">
         {/* letterhead */}
         <div className="head">
-          <div className="logo">{inv.logoUrl && <img src={inv.logoUrl} alt="" />}</div>
+          <div className="logo">{inv.logoUrl && !inv.logoUrl.includes('/files/mock/') && <img src={inv.logoUrl} alt="" />}</div>
           <div className="firm">
             <div className="legal">{s.name.toUpperCase()}</div>
             <div className="addr">{s.address}</div>

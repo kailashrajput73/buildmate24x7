@@ -38,6 +38,10 @@ class CatalogController extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
   bool get isHomeLoading => _isHomeLoading;
+
+  /// True once the server has sent the active category list at least once.
+  bool get categoriesLoaded => _categoriesLoaded;
+  bool _categoriesLoaded = false;
   String? get error => _error;
   bool get isUsingApi => _useApi;
   bool get isPolling => _isPolling;
@@ -478,19 +482,33 @@ class CatalogController extends ChangeNotifier {
     try {
       final categoriesFuture = _repository.fetchCategories();
       List<Category> categories = _categories;
+      var categoriesFromServer = false;
       try {
         categories = await categoriesFuture;
-        if (!_disposed && categories.isNotEmpty) {
-          _categories = categories;
+        categoriesFromServer = true;
+        _categoriesLoaded = true;
+        if (!_disposed) {
+          // The server list is the truth, even when it shrinks or is empty:
+          // a category switched off in the dashboard must disappear here too.
+          if (!_sameCategories(_categories, categories)) {
+            _categories = categories;
+            notifyListeners();
+          }
         }
       } catch (_) {
-        // Keep last good categories.
+        // Offline: keep the last list the server sent (never a built-in one).
       }
+
+      if (categoriesFromServer) _dropInactiveCatalogs();
 
       final items = await _repository.fetchCatalogSkus(categories: categories);
       if (_disposed) return;
 
-      final changed = await _applyCatalogItems(items, categories: categories);
+      final changed = await _applyCatalogItems(
+        items,
+        categories: categories,
+        authoritative: categoriesFromServer,
+      );
 
       if (_hasCachedCatalog()) {
         _error = null;
@@ -519,12 +537,54 @@ class CatalogController extends ChangeNotifier {
     return const {};
   }
 
+  static bool _sameCategories(List<Category> a, List<Category> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id ||
+          a[i].name != b[i].name ||
+          a[i].imageUrl != b[i].imageUrl ||
+          a[i].itemCount != b[i].itemCount) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// Clears the Pipes / Electricals trees and their products when the server no
+  /// longer lists that category (switched off in the dashboard), so no cached
+  /// copy keeps showing it.
+  void _dropInactiveCatalogs() {
+    var dropped = false;
+    if (_pipesCategoryId() == null && _pipesFittingCatalog != null) {
+      _pipesFittingCatalog = null;
+      _apiVariants = _apiVariants
+          .where((v) => !CatalogApiMapper.isPipesCategory(v.categoryName))
+          .toList();
+      dropped = true;
+    }
+    if (_electricalCategoryId() == null && _electricalsCatalog != null) {
+      _electricalsCatalog = null;
+      _apiVariants = _apiVariants
+          .where((v) => !CatalogApiMapper.isElectricalCategory(v.categoryName))
+          .toList();
+      dropped = true;
+    }
+    if (dropped) {
+      _apiSyncToken = '';
+      notifyListeners();
+    }
+  }
+
   /// Returns true when variants/tree changed.
+  ///
+  /// [authoritative]: the category list came from the server just now, so an
+  /// empty tree means "nothing to show" rather than "keep the old copy".
   Future<bool> _applyCatalogItems(
     List<ApiCatalogProduct> items, {
     List<Category> categories = const [],
+    bool authoritative = false,
   }) async {
-    if (categories.isNotEmpty) {
+    if (categories.isNotEmpty || authoritative) {
       _categories = categories;
     }
 
@@ -560,14 +620,16 @@ class CatalogController extends ChangeNotifier {
       materialImagesByName: materialImages,
     );
 
-    if (nextPipeTree.types.isEmpty &&
+    if (!authoritative &&
+        nextPipeTree.types.isEmpty &&
         (_pipesFittingCatalog?.types.isNotEmpty ?? false)) {
       nextPipeTree = _pipesFittingCatalog!;
       pipeVariants = _apiVariants
           .where((v) => CatalogApiMapper.isPipesCategory(v.categoryName))
           .toList();
     }
-    if (nextElectricalTree.types.isEmpty &&
+    if (!authoritative &&
+        nextElectricalTree.types.isEmpty &&
         (_electricalsCatalog?.types.isNotEmpty ?? false)) {
       nextElectricalTree = _electricalsCatalog!;
       electricalVariants = _apiVariants
@@ -579,7 +641,7 @@ class CatalogController extends ChangeNotifier {
 
     final nextVariants = [...pipeVariants, ...electricalVariants];
 
-    if (nextVariants.isEmpty && _apiVariants.isNotEmpty) {
+    if (!authoritative && nextVariants.isEmpty && _apiVariants.isNotEmpty) {
       return false;
     }
 

@@ -20,7 +20,6 @@ const PARTNER_TYPES: Record<string, 'Plumber' | 'Electrician' | 'Contractor' | '
 import { LoginFlowBackButton } from '../../../shared/LoginFlowBackButton';
 import { LoginFlowContinueButton } from '../../../shared/LoginFlowContinueButton';
 import { AuthWebLayout } from '../../../shared/AuthWebLayout';
-import chooseProfessionMock from './ChooseProfession.mock.json';
 import {
   Screen,
   Content,
@@ -31,8 +30,6 @@ import {
   List,
   Option,
   Thumb,
-  ThumbImage,
-  ThumbFallback,
   OptionText,
   OptionTitle,
   OptionSubtitle,
@@ -45,29 +42,18 @@ interface ProfessionOption {
   title: string;
   subtitle: string;
   role: UserRole;
-  imageAsset: string;
 }
 
-const options = chooseProfessionMock._options as ProfessionOption[];
+const options: ProfessionOption[] = [
+  { title: 'Contractor', subtitle: 'Building & construction', role: 'contractor' },
+  { title: 'Plumber', subtitle: 'Pipes, bathrooms & Fittings', role: 'dealer' },
+  { title: 'Electrician', subtitle: 'Wiring, switches & lighting', role: 'builder' },
+  { title: 'Flooring', subtitle: 'Tiles & Adhesives', role: 'dealer' },
+  { title: 'Home Owner', subtitle: 'Buying for my own house', role: 'individualCustomer' },
+];
 
 /** AppRouter fallback when no SignupFlowArgs are passed. */
 const fallbackArgs: SignupFlowArgs = { mobileNumber: '', fullName: '' };
-
-/** Image.asset with its errorBuilder fallback. */
-function ProfessionThumb({ src }: { src: string }) {
-  const [failed, setFailed] = useState(false);
-  return (
-    <Thumb>
-      {failed ? (
-        <ThumbFallback>
-          <i className="pi pi-image" aria-hidden="true" />
-        </ThumbFallback>
-      ) : (
-        <ThumbImage src={src} alt="" onError={() => setFailed(true)} />
-      )}
-    </Thumb>
-  );
-}
 
 /** Step 4 — profession selection before entering the app. */
 export function ChooseProfession() {
@@ -141,7 +127,7 @@ export function ChooseProfession() {
                   aria-pressed={selected}
                   onClick={() => setSelectedIndex(index)}
                 >
-                  <ProfessionThumb src={option.imageAsset} />
+                  <Thumb />
                   <OptionText>
                     <OptionTitle>{option.title}</OptionTitle>
                     <OptionSubtitle>{option.subtitle}</OptionSubtitle>

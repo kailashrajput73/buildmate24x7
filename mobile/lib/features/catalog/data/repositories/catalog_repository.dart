@@ -31,12 +31,26 @@ class CatalogRepository {
         queryParameters: {'categoryId': categoryId},
       ),
     );
+    for (final row in rows) {
+      final id = _string(row['id']);
+      if (id.isEmpty) continue;
+      final image = _string(row['imageUrl'] ?? row['image_url']);
+      if (image.isNotEmpty) {
+        _typeImagesById[id] = image;
+      } else {
+        _typeImagesById.remove(id);
+      }
+    }
     return {
       for (final row in rows)
         if (_string(row['id']).isNotEmpty && _string(row['name']).isNotEmpty)
           _string(row['id']): _string(row['name']),
     };
   }
+
+  /// Type image URLs by Type ID from `/api/catalog/types` (empty while the API
+  /// has no Type image field — the app then shows a neutral placeholder).
+  final Map<String, String> _typeImagesById = {};
 
   /// Loads live products for the two on-device catalogue modules. The search
   /// endpoint is paginated; category-items supplies the sub-category IDs and
@@ -98,6 +112,10 @@ class CatalogRepository {
       final typeId = _string(catalog['typeId']);
       if (_string(catalog['typeName']).isEmpty && types[typeId] != null) {
         catalog['typeName'] = types[typeId];
+      }
+      final typeImage = _typeImagesById[typeId];
+      if (typeImage != null && typeImage.isNotEmpty) {
+        catalog['typeImageUrl'] = typeImage;
       }
       merged['catalog'] = catalog;
 

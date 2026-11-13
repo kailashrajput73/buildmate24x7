@@ -53,7 +53,7 @@ export default function OrderPage() {
       <ul className="glass divide-y divide-line overflow-hidden rounded-[22px]">
         {o.items.map((i) => (
           <li key={i.id} className="flex items-center gap-3 p-3">
-            <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-white bg-white">{i.imageUrl && <img src={i.imageUrl} alt="" className="h-full w-full object-cover" />}</div>
+            <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-white bg-white">{i.imageUrl && !i.imageUrl.includes('/files/mock/') && <img src={i.imageUrl} alt="" className="h-full w-full object-cover" />}</div>
             <div className="min-w-0 flex-1"><Link href={`/p/${i.productId}`} className="font-semibold hover:text-pipe-700">{i.productName}</Link><div className="num text-sm text-ink-soft">{i.purchaseUnit === "Box" ? `${i.purchaseQuantity} box(es) of ${i.packSize}` : `${i.quantity} × ${money(i.unitPrice)}`}</div></div>
             <div className="num font-bold">{money(i.lineTotal)}</div>
           </li>

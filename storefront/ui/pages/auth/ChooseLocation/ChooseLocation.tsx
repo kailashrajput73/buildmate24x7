@@ -9,7 +9,6 @@ import type { SignupFlowArgs } from '../../../routes/appRoutes';
 import { useCurrentLocation } from '../../../session/LocationContext';
 import { CircularProgress } from '../../../shared/CircularProgress';
 import { LoginFlowContinueButton } from '../../../shared/LoginFlowContinueButton';
-import chooseLocationMock from './ChooseLocation.mock.json';
 import {
   Screen,
   Body,
@@ -44,7 +43,14 @@ import {
   CTA_SPINNER_STROKE,
 } from './ChooseLocation.styles';
 
-const { _defaultCenter: defaultCenter } = chooseLocationMock;
+const defaultCenter = { latitude: 20.5937, longitude: 78.9629 };
+const initialZoom = 5;
+const locatedZoom = 16;
+const tileLayer = {
+  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  attribution:
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+};
 
 /** AppRouter fallback when no SignupFlowArgs are passed. */
 const fallbackArgs: SignupFlowArgs = { mobileNumber: '', fullName: '' };
@@ -111,7 +117,7 @@ export function ChooseLocation() {
     if (!currentLocation || !mapRef.current) return;
     mapRef.current.setView(
       [currentLocation.latitude, currentLocation.longitude],
-      chooseLocationMock.locatedZoom,
+      locatedZoom,
       { animate: false },
     );
     setLocated(true);
@@ -128,7 +134,7 @@ export function ChooseLocation() {
       if (!mountedRef.current) return;
       mapRef.current?.setView(
         [next.latitude, next.longitude],
-        chooseLocationMock.locatedZoom,
+        locatedZoom,
         { animate: true },
       );
       setLocated(true);
@@ -162,12 +168,12 @@ export function ChooseLocation() {
           <MapSurface
             ref={mapRef}
             center={initialCenter}
-            zoom={chooseLocationMock.initialZoom}
+            zoom={initialZoom}
             zoomControl={false}
           >
             <TileLayer
-              url={chooseLocationMock.tileLayer.urlTemplate}
-              attribution={chooseLocationMock.tileLayer.attribution}
+              url={tileLayer.urlTemplate}
+              attribution={tileLayer.attribution}
             />
           </MapSurface>
 

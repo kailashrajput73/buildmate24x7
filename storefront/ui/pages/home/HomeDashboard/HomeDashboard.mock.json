@@ -3,18 +3,12 @@
     "logo": "/assets/images/branding/buildmate_logo.png",
     "brandPrimary": "BuildMate",
     "brandSecondary": " 24x7",
-    "notificationCount": 3,
-    "rewardPoints": 0,
     "tooltips": {
       "rewards": "My Rewards",
       "cart": "Cart",
       "notifications": "Notifications",
       "profile": "Profile"
     }
-  },
-  "HomeLocationBar": {
-    "label": "Home",
-    "address": "B-14/15, Navprena CHS, Sector 8, Chembur"
   },
   "HomeSearchBar": {
     "placeholder": "Search products, brands or categories",

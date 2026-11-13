@@ -493,7 +493,8 @@ class _RewardHistoryTile extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        'Quotation #${entry.quotationDisplayId.isEmpty ? entry.quotationId : entry.quotationDisplayId}',
+                        entry.title ??
+                            'Quotation #${entry.quotationDisplayId.isEmpty ? entry.quotationId : entry.quotationDisplayId}',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),

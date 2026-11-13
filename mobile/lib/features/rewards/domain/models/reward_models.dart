@@ -13,6 +13,7 @@ class RewardLedgerEntry {
     this.quotationDisplayId = '',
     this.quotationGrandTotal = 0,
     this.description = '',
+    this.title,
   });
 
   final String id;
@@ -24,6 +25,10 @@ class RewardLedgerEntry {
   final String quotationDisplayId;
   final double quotationGrandTotal;
   final String description;
+
+  /// Heading for a server reward transaction ("Order #…", "Referral"); null
+  /// keeps the quotation heading.
+  final String? title;
 
   bool get isEarned => type == RewardLedgerType.earned;
 }

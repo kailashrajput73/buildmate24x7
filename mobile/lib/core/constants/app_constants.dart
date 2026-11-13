@@ -16,10 +16,6 @@ abstract final class AppConstants {
   static const String taglineEmphasis = 'One Trusted Platform.';
 
   static const Duration splashDuration = Duration(milliseconds: 2200);
-  static const Duration mockNetworkDelay = Duration(milliseconds: 900);
-
-  /// Mock OTP accepted by [MockAuthService].
-  static const String mockOtp = '123456';
 
   static const int otpLength = 6;
   static const int otpResendSeconds = 60;

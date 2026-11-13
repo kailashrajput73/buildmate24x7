@@ -153,7 +153,7 @@ export type StoreSettings = {
   storeName: string; legalName: string; addressLine: string; city: string; state: string; pincode: string; gstin?: string; pan?: string
   bankName?: string; bankBranch?: string; bankAccountNo?: string; bankIfsc?: string; invoiceLogoUrl?: string; invoiceNumberDigits: number
   supportPhone: string; supportEmail?: string; whatsAppNumber?: string; openingHours: string
-  minOrderValue: number; deliveryFee: number; freeDeliveryAbove: number; deliveryPincodes: string[]
+  minOrderValue: number; deliveryFee: number; freeDeliveryAbove: number; deliveryPincodes: string[]; deliveryAreas?: DeliveryArea[]
   homeDeliveryEnabled: boolean; storePickupEnabled: boolean; rewardPointValue: number; referralRewardPoints?: number; referralWelcomePoints?: number; invoicePrefix: string; invoiceTerms: string
   supportedLanguages: string[]; androidAppUrl?: string; iosAppUrl?: string; minAppVersion?: string
 }
@@ -192,3 +192,7 @@ export type Quotation = QuotationSummary & {
   discountTotal: number; shippingFee: number; roundOff: number; rewardPoints: number; storeMessage?: string | null
   quotedAt?: string | null; quotedByName?: string | null; respondedAt?: string | null; cancelReason?: string | null; orderNo?: string | null
 }
+
+/** A serviceable delivery PIN code (admin → Delivery areas). */
+export interface DeliveryArea { pincode: string; city: string | null; district: string | null; state: string | null; isActive: boolean; addedAt?: string | null }
+export interface PincodePlace { pincode: string; city: string | null; district: string | null; state: string | null }

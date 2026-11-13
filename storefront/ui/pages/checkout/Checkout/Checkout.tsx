@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { api } from '@/lib/api';
+import { useDelivery } from '@/lib/delivery';
 import type { Address, Cart } from '@/lib/types';
 import { Navigate, useLocation, useNavigate } from '@/ui/router';
 import { AppRoutes } from '../../../routes/appRoutes';
@@ -59,6 +60,7 @@ export function Checkout() {
   const cart = useCart();
   const { isLoggedIn, ready } = useSession();
   const { store } = useCatalog();
+  const delivery = useDelivery();
   const restored = useLocation().state as PaymentArgs | null;
   const [addresses, setAddresses] = useState<Address[] | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(restored?.addressId ?? null);
@@ -84,7 +86,13 @@ export function Checkout() {
     api<Address[]>('/api/account/addresses')
       .then((list) => {
         setAddresses(list);
-        setSelectedId((cur) => cur ?? list.find((a) => a.isDefault)?.id ?? list[0]?.id ?? null);
+        // Prefer the address in the selected delivery PIN code, then a serviceable one, then the default.
+        const pin = delivery.selected?.pincode;
+        setSelectedId((cur) => cur
+          ?? list.find((a) => pin && a.pincode === pin && a.serviceable !== false)?.id
+          ?? list.find((a) => a.isDefault && a.serviceable !== false)?.id
+          ?? list.find((a) => a.serviceable !== false)?.id
+          ?? list.find((a) => a.isDefault)?.id ?? list[0]?.id ?? null);
       })
       .catch(() => setAddresses([]));
   }, [isLoggedIn]);
@@ -105,6 +113,7 @@ export function Checkout() {
       });
       setAddresses((prev) => [saved, ...(prev ?? []).map((a) => (saved.isDefault ? { ...a, isDefault: false } : a))]);
       setSelectedId(saved.id);
+      void delivery.choose(saved.pincode).catch(() => undefined);
       setDialogOpen(false);
       showSnack(fill(_labels.addressSaved, { label: addressLabel(toDelivery(saved)) }));
       return true;
@@ -115,9 +124,18 @@ export function Checkout() {
   };
 
   const selected = addresses?.find((a) => a.id === selectedId) ?? null;
+  // Home delivery only to a serviceable address (the server checks again before creating the order).
+  const unserviceable = fulfilment === 'HomeDelivery' && selected != null && selected.serviceable === false;
+  const unserviceableMessage = selected ? `Sorry, we don't deliver to ${selected.pincode} yet. Choose an address in a serviceable PIN code or store pickup.` : '';
+  const chooseAddress = (a: Address) => {
+    setSelectedId(a.id);
+    // The delivery address becomes the selected delivery PIN code, so Add to Cart and checkout agree.
+    if (a.pincode !== delivery.selected?.pincode) void delivery.choose(a.pincode).catch(() => undefined);
+  };
   // Bulk / site orders: send the cart to the store for its best price instead of paying now.
   const askForQuote = async () => {
     if (fulfilment === 'HomeDelivery' && !selected) { showSnack(_labels.noAddress); return; }
+    if (unserviceable) { showSnack(unserviceableMessage); return; }
     setQuoting(true);
     try {
       const q = await api<{ id: number }>('/api/quotations', {
@@ -137,6 +155,7 @@ export function Checkout() {
   const fee = quote?.deliveryFee ?? 0;
   const proceed = () => {
     if (fulfilment === 'HomeDelivery' && !selected) { showSnack(_labels.noAddress); return; }
+    if (unserviceable) { showSnack(unserviceableMessage); return; }
     if (quote && !quote.canCheckout) { showSnack(quote.issues[0] ?? 'Please review your cart.'); return; }
     const args: PaymentArgs = {
       fulfilment,
@@ -220,7 +239,7 @@ export function Checkout() {
                 const d = toDelivery(a);
                 return (
                   <OptionCard key={a.id} $selected={on}>
-                    <HiddenRadio name="address" value={a.id} checked={on} onChange={() => setSelectedId(a.id)} />
+                    <HiddenRadio name="address" value={a.id} checked={on} onChange={() => chooseAddress(a)} />
                     <RadioMark $selected={on} aria-hidden />
                     <AddressBody>
                       <AddressTop>
@@ -230,6 +249,11 @@ export function Checkout() {
                       <AddressLine>{d.house}{d.area ? `, ${d.area}` : ''}</AddressLine>
                       <AddressLine>{d.city} - {d.pincode}, {d.state}</AddressLine>
                       <AddressLine>{formatMobile(d.mobile)}</AddressLine>
+                      {a.serviceable != null && (
+                        <AddressLine style={{ color: a.serviceable ? '#15803D' : '#DC2626', fontWeight: 600 }}>
+                          <i className={`pi ${a.serviceable ? 'pi-check-circle' : 'pi-times-circle'}`} aria-hidden /> {a.serviceable ? 'Serviceable' : 'Not serviceable'}
+                        </AddressLine>
+                      )}
                     </AddressBody>
                   </OptionCard>
                 );
@@ -244,6 +268,9 @@ export function Checkout() {
       )}
 
       <SectionCard>
+        {unserviceable && (
+          <AddressLine role="alert" style={{ color: '#DC2626', marginBottom: 12, display: 'block' }}>{unserviceableMessage}</AddressLine>
+        )}
         {quote && quote.issues.length > 0 && (
           <AddressLine role="alert" style={{ color: '#DC2626', marginBottom: 12 }}>{quote.issues.join(' ')}</AddressLine>
         )}
@@ -256,7 +283,7 @@ export function Checkout() {
             <i className="pi pi-file-edit" aria-hidden />
             {quoting ? 'Sending…' : 'Ask for a quote instead'}
           </BackLink>
-          <PrimaryButton type="button" onClick={proceed}>
+          <PrimaryButton type="button" onClick={proceed} disabled={unserviceable}>
             {_labels.proceed}
             <i className="pi pi-arrow-right" aria-hidden />
           </PrimaryButton>
