@@ -26,7 +26,7 @@ export type AuthUser = {
 export type AuthResult = { accessToken: string; accessTokenExpiresAt: string; refreshToken: string; user: AuthUser; isNewUser: boolean }
 
 export type Category = { id: number; name: string; description?: string; imageUrl?: string; sortOrder: number; isActive: boolean; productCount: number; subCategoryCount: number }
-export type SubCategory = { id: number; categoryId: number; categoryName: string; name: string; sortOrder: number; isActive: boolean; productCount: number }
+export type SubCategory = { id: number; categoryId: number; categoryName: string; name: string; imageUrl?: string | null; sortOrder: number; isActive: boolean; productCount: number }
 export type Brand = { id: number; name: string; logoUrl?: string; sortOrder: number; isActive: boolean; productCount: number }
 
 export type CatalogFields = {

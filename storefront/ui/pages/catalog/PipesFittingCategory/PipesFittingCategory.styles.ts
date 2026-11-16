@@ -655,6 +655,23 @@ export const TypeLabel = styled(RowLabel)`
 `;
 
 /** _SidebarSubCategoryRow. */
+/** Sub-category image set in the dashboard (rendered only when one exists). */
+export const SubThumb = styled.img`
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  margin-right: ${({ theme }) => theme.spacing.space2}px;
+  object-fit: contain;
+  background: ${({ theme }) => theme.colors.surface};
+  border-radius: ${({ theme }) => theme.radius.sm}px;
+  border: 1px solid ${({ theme }) => theme.colors.outlineVariant};
+
+  ${({ theme }) => theme.media.md} {
+    width: 32px;
+    height: 32px;
+  }
+`;
+
 export const SidebarSubRow = styled.button<{ $selected: boolean }>`
   ${sidebarRow}
   padding: ${({ theme }) => `${theme.spacing.space2}px ${theme.spacing.space3}px`};
@@ -670,6 +687,20 @@ export const SidebarSubRow = styled.button<{ $selected: boolean }>`
 
   ${({ theme }) => theme.media.md} {
     padding: ${({ theme }) => `${theme.spacing.space2}px ${theme.spacing.space4}px`};
+  }
+`;
+
+/** A sub-category row that has an image: on mobile the image sits above the name (narrow sidebar). */
+export const SidebarSubImageRow = styled(SidebarSubRow)`
+  @media (max-width: ${({ theme }) => theme.breakpoints.md - 0.02}px) {
+    flex-direction: column;
+    align-items: center;
+    gap: ${({ theme }) => theme.spacing.space1}px;
+    text-align: center;
+
+    & > img {
+      margin-right: 0;
+    }
   }
 `;
 

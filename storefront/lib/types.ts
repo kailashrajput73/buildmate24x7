@@ -21,7 +21,7 @@ export type ProductDetail = ProductCard & {
   hsnCode?: string; gstRate: number; imageUrls: string[]; maxOrderQty: number; otherNames: string[]; related: ProductCard[]
   variants: VariantOption[]; specs: Spec[]; variantAxes?: VariantAxis[]
 }
-export type CategoryTree = { id: number; name: string; imageUrl?: string; productCount: number; subCategories: { id: number; name: string }[] }
+export type CategoryTree = { id: number; name: string; imageUrl?: string; productCount: number; subCategories: { id: number; name: string; imageUrl?: string | null }[] }
 export type BrandRef = { id: number; name: string; logoUrl?: string | null }
 export type Banner = { id: number; title: string; subtitle?: string; imageUrl: string; mobileImageUrl?: string | null; linkType: string; linkValue?: string | null }
 export type StoreInfo = {
