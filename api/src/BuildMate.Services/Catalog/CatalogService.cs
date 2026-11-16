@@ -219,7 +219,7 @@ public class CatalogService : ICatalogService
                 c.Id, c.Name, c.ImageUrl,
                 Count = visible.Count(p => p.CategoryId == c.Id),
                 Subs = c.SubCategories.Where(s => s.IsActive).OrderBy(s => s.SortOrder).ThenBy(s => s.Name)
-                    .Select(s => new SubCategoryRefDto(s.Id, s.Name)).ToList()
+                    .Select(s => new SubCategoryRefDto(s.Id, s.Name, s.ImageUrl)).ToList()
             }).ToListAsync(ct);
         return cats.Select(c => new CategoryTreeDto(c.Id, c.Name, c.ImageUrl, c.Count, c.Subs)).ToList();
     }

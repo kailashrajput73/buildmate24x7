@@ -6,8 +6,8 @@ namespace BuildMate.Services.Catalog;
 public record CategoryDto(long Id, string Name, string? Description, string? ImageUrl, int SortOrder, bool IsActive, int ProductCount, int SubCategoryCount);
 public record CategoryUpsert(string Name, string? Description, string? ImageUrl, int SortOrder, bool IsActive);
 
-public record SubCategoryDto(long Id, long CategoryId, string CategoryName, string Name, int SortOrder, bool IsActive, int ProductCount);
-public record SubCategoryUpsert(long CategoryId, string Name, int SortOrder, bool IsActive);
+public record SubCategoryDto(long Id, long CategoryId, string CategoryName, string Name, int SortOrder, bool IsActive, int ProductCount, string? ImageUrl = null);
+public record SubCategoryUpsert(long CategoryId, string Name, int SortOrder, bool IsActive, string? ImageUrl = null);
 
 public record BrandDto(long Id, string Name, string? LogoUrl, int SortOrder, bool IsActive, int ProductCount);
 public record BrandUpsert(string Name, string? LogoUrl, int SortOrder, bool IsActive);
@@ -94,7 +94,7 @@ public record CatalogItemDto(long Id, string Code, string Name, string BrandName
     string? Family, string? VariantLabel, Dictionary<string, string> Specs, int Sequence, CatalogFields? Catalog = null);
 
 public record CategoryTreeDto(long Id, string Name, string? ImageUrl, int ProductCount, List<SubCategoryRefDto> SubCategories);
-public record SubCategoryRefDto(long Id, string Name);
+public record SubCategoryRefDto(long Id, string Name, string? ImageUrl = null);
 public record BrandRefDto(long Id, string Name, string? LogoUrl);
 public record GroupRefDto(long Id, string Name, string? ImageUrl);
 

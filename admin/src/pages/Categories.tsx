@@ -88,7 +88,7 @@ function SubCategoryList() {
   const params = { search: f.search, categoryId: f.categoryId, page: f.page, pageSize: 50 }
   const { data, isLoading, error } = useQuery({ queryKey: ['subcategories', params], queryFn: () => api.get<Paged<SubCategory>>('/api/admin/subcategories', params), placeholderData: keepPreviousData })
   const save = useAction((s: Partial<SubCategory>) => {
-    const body = { categoryId: s.categoryId, name: s.name, sortOrder: s.sortOrder ?? 0, isActive: s.isActive ?? true }
+    const body = { categoryId: s.categoryId, name: s.name, imageUrl: s.imageUrl ?? null, sortOrder: s.sortOrder ?? 0, isActive: s.isActive ?? true }
     return s.id ? api.put(`/api/admin/subcategories/${s.id}`, body) : api.post('/api/admin/subcategories', body)
   }, { success: 'Sub category saved', invalidate: ['subcategories', 'categories'], onSuccess: () => setEdit(null) })
   const del = useAction((id: number) => api.del(`/api/admin/subcategories/${id}`), { success: 'Deleted', invalidate: ['subcategories', 'categories'], onSuccess: () => setEdit(null) })
@@ -112,10 +112,11 @@ function SubCategoryList() {
       <div className="card overflow-x-auto">
         {isLoading ? <Loading /> : !data?.items.length ? <Empty title="No sub categories found" /> : (
           <table className="tbl">
-            <thead><tr><th>Category</th><th>Sub category</th><th className="text-right">Products</th><th className="text-right">Order</th><th>Status</th><th /></tr></thead>
+            <thead><tr><th /><th>Category</th><th>Sub category</th><th className="text-right">Products</th><th className="text-right">Order</th><th>Status</th><th /></tr></thead>
             <tbody>
               {data.items.map((s) => (
                 <tr key={s.id}>
+                  <td className="w-12">{s.imageUrl ? <img src={s.imageUrl} alt="" className="h-9 w-9 rounded border border-line bg-white object-contain" /> : <div className="h-9 w-9 rounded border border-dashed border-line" />}</td>
                   <td className="text-ink-soft">{s.categoryName}</td>
                   <td className="font-semibold">{s.name}</td>
                   <td className="num text-right">{s.productCount}</td>
@@ -144,6 +145,7 @@ function SubCategoryList() {
             </Field>
             <Field label="Name"><Input autoFocus value={edit.name ?? ''} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></Field>
             <Field label="Display order"><NumberInput value={edit.sortOrder ?? 0} onChange={(v) => setEdit({ ...edit, sortOrder: v })} /></Field>
+            <Field label="Image" hint="Shown on the website for this sub category. No image uploaded = no image shown."><ImageUploader folder="subcategories" max={1} value={edit.imageUrl ? [edit.imageUrl] : []} onChange={(v) => setEdit({ ...edit, imageUrl: v[0] ?? null })} /></Field>
             <Toggle checked={edit.isActive ?? true} onChange={(v) => setEdit({ ...edit, isActive: v })} label="Active" />
           </div>
         </Drawer>

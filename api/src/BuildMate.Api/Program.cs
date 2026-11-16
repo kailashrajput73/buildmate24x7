@@ -134,6 +134,8 @@ using (var scope = app.Services.CreateScope())
         if (db.Database.GetMigrations().Any()) await db.Database.MigrateAsync();
         else await db.Database.EnsureCreatedAsync(); // first run before migrations are generated
     }
+    // Sub category image: the one column it needs on databases created before the feature (no-op once added).
+    await SubCategoryImageColumn.EnsureAsync(db);
     await scope.ServiceProvider.GetRequiredService<DbSeeder>().SeedAsync();
 }
 

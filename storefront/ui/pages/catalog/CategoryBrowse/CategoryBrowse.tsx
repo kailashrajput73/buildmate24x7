@@ -18,7 +18,7 @@ import {
   Screen, AppHeaderSlot, Header, HeaderInner, BackSlot, SearchSlot, HeaderTitle, ToolbarHeading, FilterRow, HeaderIconButton,
   FilterButton, MenuBackdrop, MenuCard, MenuSearchWrap, MenuSearchField, MenuList, MenuEmpty, MenuTile, MenuTileLabel, MenuCheck,
   Centered, Sidebar, SidebarBrand, SidebarBrandText, SidebarBrandTitle, SidebarBrandMeta, SidebarNav, AllIcon, CountPill, SidebarGap,
-  SidebarSectionLabel, SidebarAllRow, SidebarTypeItem, TypeCircle, TypeLabel, RowLabel, SidebarSubRow, Content, ContentHeading, ContentTitle,
+  SidebarSectionLabel, SidebarAllRow, SidebarTypeItem, TypeCircle, TypeLabel, RowLabel, SidebarSubRow, SidebarSubImageRow, SubThumb, Content, ContentHeading, ContentTitle,
   ContentSubtitle, ResultsBar, ResultsCount, FilterChip, Grid, StateMessage, StateIcon, StateTitle, StateSubtitle, Card, CardMedia,
   AddBadge, AddBadgeLabel, AddBadgeCount, CardBody, CardPrice, Rupee, PriceUnit, CardDiscount, CardTitle,
 } from '../PipesFittingCategory/PipesFittingCategory.styles';
@@ -282,10 +282,13 @@ export function CategoryBrowse({ categoryId, categoryName }: { categoryId: numbe
               </SidebarSubRow>
               {subs.map((s) => {
                 const on = filters.subCategoryId === String(s.id);
+                const Row = s.imageUrl ? SidebarSubImageRow : SidebarSubRow;
                 return (
-                  <SidebarSubRow key={s.id} type="button" $selected={on} aria-pressed={on} onClick={() => set({ subCategoryId: String(s.id), brandId: '', class: '', size: '', length: '' })}>
+                  <Row key={s.id} type="button" $selected={on} aria-pressed={on} onClick={() => set({ subCategoryId: String(s.id), brandId: '', class: '', size: '', length: '' })}>
+                    {/* Only the image uploaded for this sub category in the dashboard; none (or failed) = nothing shown. */}
+                    {s.imageUrl && <SubThumb src={s.imageUrl} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
                     <RowLabel $selected={on} $sub>{subLabel(s.name)}</RowLabel>
-                  </SidebarSubRow>
+                  </Row>
                 );
               })}
             </>

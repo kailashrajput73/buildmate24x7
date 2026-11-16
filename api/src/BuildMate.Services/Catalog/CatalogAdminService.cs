@@ -103,7 +103,7 @@ public class CatalogAdminService : ICatalogAdminService
         var page = new PageRequest(q.Page, q.PageSize);
         var total = await query.CountAsync(ct);
         var items = await query.OrderBy(s => s.Category.Name).ThenBy(s => s.SortOrder).ThenBy(s => s.Name).Page(page)
-            .Select(s => new SubCategoryDto(s.Id, s.CategoryId, s.Category.Name, s.Name, s.SortOrder, s.IsActive, s.Products.Count))
+            .Select(s => new SubCategoryDto(s.Id, s.CategoryId, s.Category.Name, s.Name, s.SortOrder, s.IsActive, s.Products.Count, s.ImageUrl))
             .ToListAsync(ct);
         return new PagedResult<SubCategoryDto>(items, total, page.SafePage, page.SafeSize);
     }
@@ -118,13 +118,14 @@ public class CatalogAdminService : ICatalogAdminService
         var s = id == null ? new SubCategory { CreatedById = _me.Id } : await _db.SubCategories.FindAsync(new object[] { id.Value }, ct) ?? throw new NotFoundException("Sub category");
         s.CategoryId = dto.CategoryId;
         s.Name = name;
+        s.ImageUrl = string.IsNullOrWhiteSpace(dto.ImageUrl) ? null : dto.ImageUrl.Trim();
         s.SortOrder = dto.SortOrder;
         s.IsActive = dto.IsActive;
         s.UpdatedById = _me.Id;
         if (id == null) _db.SubCategories.Add(s);
         await _db.SaveChangesAsync(ct);
         return await _db.SubCategories.AsNoTracking().Where(x => x.Id == s.Id)
-            .Select(x => new SubCategoryDto(x.Id, x.CategoryId, x.Category.Name, x.Name, x.SortOrder, x.IsActive, x.Products.Count))
+            .Select(x => new SubCategoryDto(x.Id, x.CategoryId, x.Category.Name, x.Name, x.SortOrder, x.IsActive, x.Products.Count, x.ImageUrl))
             .FirstAsync(ct);
     }
 
