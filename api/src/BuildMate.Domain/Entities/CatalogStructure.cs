@@ -17,6 +17,8 @@ public class ProductType : AuditableEntity
     public bool? GroupAcrossBrands { get; set; }
     /// <summary>Name shown for the Class option, e.g. "Color" for cables. Null = automatic ("Color" for Electrical › Cable, else "Class").</summary>
     public string? ClassLabel { get; set; }
+    /// <summary>Type image shown next to the type name in the shop's category sidebar. Null = no image (neutral icon).</summary>
+    public string? ImageUrl { get; set; }
     public ICollection<ProductTypeSubCategory> SubCategories { get; set; } = new List<ProductTypeSubCategory>();
 }
 

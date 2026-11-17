@@ -80,6 +80,7 @@ public static class ServiceRegistration
         services.AddScoped<ICatalogService, CatalogService>();
         services.AddSingleton<IQrService, QrService>();
         services.AddScoped<IStockService, StockService>();
+        services.AddScoped<IBulkStockService, BulkStockService>();
         services.AddScoped<IRackService, RackService>();
         services.AddScoped<IPurchaseService, PurchaseService>();
         services.AddScoped<IPartnerService, PartnerService>();

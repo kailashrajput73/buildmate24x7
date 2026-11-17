@@ -187,7 +187,7 @@ public class CatalogAdminService : ICatalogAdminService
 
     public async Task<PagedResult<ProductAdminDto>> ListProductsAsync(ProductAdminQuery q, CancellationToken ct = default)
     {
-        var query = CatalogStructure.Filter(ProductQuery(), q.TypeId, q.Class, q.FamilyId, q.Size, q.Length);
+        var query = CatalogStructure.Filter(ProductQuery(), q.TypeId, q.Class, q.FamilyId, q.Size, q.Length, q.Module, q.Color, q.Series, q.CurrentRating);
         if (q.Ids != null)
         {
             var parts = q.Ids.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

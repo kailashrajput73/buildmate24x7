@@ -19,7 +19,7 @@ export default function CatalogStructure() {
   const familyCards = useFamilyCards(categoryId || undefined)
   const [card, setCard] = useState<FamilyCard | null>(null)
   const saveType = useAction(() => {
-    const body = { ...type, categoryId, sortOrder: type.sortOrder ?? 0, groupAcrossBrands: type.groupAcrossBrandsSetting ?? null, classLabel: type.classLabelSetting || null }
+    const body = { ...type, categoryId, sortOrder: type.sortOrder ?? 0, groupAcrossBrands: type.groupAcrossBrandsSetting ?? null, classLabel: type.classLabelSetting || null, imageUrl: type.imageUrl || null }
     return type.id ? api.put(`/api/admin/catalog-structure/types/${type.id}`, body) : api.post('/api/admin/catalog-structure/types', body)
   }, { invalidate: ['catalog-types'], success: 'Type saved', onSuccess: () => setType({ name: '', isActive: true, subCategoryIds: [] }) })
   const saveFamily = useAction(() => {
@@ -49,6 +49,7 @@ export default function CatalogStructure() {
           <Field label="Class label" hint={`Name of the Class option on the product page. Empty = automatic (${type.id ? type.classLabel ?? 'Class' : '"Color" for Electrical › Cable, else "Class"'}).`}>
             <Input maxLength={40} value={type.classLabelSetting ?? ''} placeholder={type.classLabel ?? 'Class'} onChange={e => setType({ ...type, classLabelSetting: e.target.value })} />
           </Field>
+          <Field label="Type image" hint="Shown next to the type name in the shop's category sidebar. Product and family images are not affected."><ImageUploader folder="types" value={type.imageUrl ? [type.imageUrl] : []} max={1} onChange={urls => setType({ ...type, imageUrl: urls[0] ?? null })} /></Field>
           <p className="text-sm">Allowed Sub-Categories (manage the list in Categories):</p>
           {subs.filter(s => s.isActive).map(s => <label className="mr-3 inline-flex gap-2" key={s.id}><input type="checkbox" checked={type.subCategoryIds?.includes(s.id) ?? false} onChange={e => setType({ ...type, subCategoryIds: e.target.checked ? [...(type.subCategoryIds ?? []), s.id] : type.subCategoryIds?.filter(id => id !== s.id) })} />{s.name}</label>)}
           <div className="flex gap-2"><Button type="submit" busy={saveType.isPending}>{type.id ? 'Save Type' : 'Add Type'}</Button><Button type="button" variant="secondary" onClick={() => setType({ name: '', isActive: true, subCategoryIds: [] })}>New Type</Button></div>

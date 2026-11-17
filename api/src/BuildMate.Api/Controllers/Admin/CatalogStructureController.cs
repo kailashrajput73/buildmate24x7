@@ -42,6 +42,7 @@ public class CatalogStructureController : AdminControllerBase
         row.CategoryId = body.CategoryId; row.Name = name; row.Key = key; row.SortOrder = body.SortOrder; row.IsActive = body.IsActive; row.UpdatedById = _me.Id;
         row.GroupAcrossBrands = body.GroupAcrossBrands;
         row.ClassLabel = CatalogStructure.Clean(body.ClassLabel, 40, "Class label");
+        row.ImageUrl = CatalogStructure.ImageUrl(body.ImageUrl);
         foreach (var link in row.SubCategories.Where(s => !subIds.Contains(s.SubCategoryId)).ToList()) row.SubCategories.Remove(link);
         foreach (var sub in subIds.Where(sub => !row.SubCategories.Any(s => s.SubCategoryId == sub))) row.SubCategories.Add(new ProductTypeSubCategory { SubCategoryId = sub });
         if (id == null) _db.ProductTypes.Add(row);

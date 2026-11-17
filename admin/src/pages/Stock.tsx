@@ -1,7 +1,8 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { Download, SlidersHorizontal } from 'lucide-react'
+import { Download, SlidersHorizontal, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import BulkStockDrawer from '../components/BulkStockDrawer'
 import { DaysSince, MOVEMENT_LABEL, MovementBadge, MovementHistoryDrawer, MovementSelect } from '../components/Movement'
 import ProductPicker from '../components/ProductPicker'
 import { Badge, Button, Drawer, Empty, ErrorBox, Field, Input, Loading, NumberInput, PageHeader, Pager, SearchBox, Select, Stat, Toggle } from '../components/ui'
@@ -16,12 +17,16 @@ export default function Stock() {
   const { can } = useAuth()
   const [f, set] = useUrlState({ tab: 'current', lowOnly: false, categoryId: '', brandId: '', search: '', movement: '', neverDispatched: '', productId: '', type: '', from: daysAgoIso(30), to: todayIso(), page: 1 })
   const [adjusting, setAdjusting] = useState(false)
+  const [bulk, setBulk] = useState(false)
   const tabs = [['current', 'Current stock'], ['movements', 'Stock in / out'], ['statement', 'Period statement']]
 
   return (
     <>
       <PageHeader title="Stock" subtitle="Stock goes up with purchases, down on dispatch. Paid orders reserve stock until they're handed over."
-        actions={can(P.stockAdjust) && <Button variant="secondary" icon={<SlidersHorizontal className="h-4 w-4" />} onClick={() => setAdjusting(true)}>Adjust stock</Button>} />
+        actions={can(P.stockAdjust) && <>
+          <Button variant="secondary" icon={<Upload className="h-4 w-4" />} onClick={() => setBulk(true)}>Bulk update stock</Button>
+          <Button variant="secondary" icon={<SlidersHorizontal className="h-4 w-4" />} onClick={() => setAdjusting(true)}>Adjust stock</Button>
+        </>} />
       <div className="mb-4 flex gap-1 border-b border-line">
         {tabs.map(([k, l]) => (
           <button key={k} onClick={() => set({ tab: k })} className={`border-b-2 px-3 py-2 text-sm font-semibold ${f.tab === k ? 'border-pipe-600 text-pipe-700' : 'border-transparent text-ink-soft'}`}>{l}</button>
@@ -31,6 +36,7 @@ export default function Stock() {
       {f.tab === 'movements' && <Movements f={f} set={set} />}
       {f.tab === 'statement' && <Statement f={f} set={set} />}
       {adjusting && <AdjustDrawer onClose={() => setAdjusting(false)} />}
+      {bulk && <BulkStockDrawer onClose={() => setBulk(false)} />}
     </>
   )
 }

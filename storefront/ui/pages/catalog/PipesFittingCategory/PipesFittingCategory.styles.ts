@@ -632,13 +632,6 @@ export const TypeCircle = styled(TypeThumb)`
     align-items: center;
     justify-content: center;
   }
-
-  /* Desktop keeps its existing blank thumb when a Type has no image. */
-  ${({ theme }) => theme.media.md} {
-    .category-image-placeholder {
-      display: none;
-    }
-  }
 `;
 
 export const TypeLabel = styled(RowLabel)`

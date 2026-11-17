@@ -136,6 +136,32 @@ public class StockController : AdminControllerBase
 
     [HttpPost("adjust"), Authorize(Policy = Permissions.StockAdjust)]
     public Task<StockMovementDto> Adjust(StockAdjustRequest req, CancellationToken ct) => _stock.AdjustAsync(req, ct);
+
+    // ---- Bulk update stock (store admins: same permission as manual stock adjustment) ----
+
+    [HttpGet("bulk/template"), Authorize(Policy = Permissions.StockAdjust)]
+    public async Task<FileContentResult> BulkTemplate([FromQuery] string? format, [FromServices] IBulkStockService bulk, CancellationToken ct)
+    {
+        var (content, type, name) = await bulk.TemplateAsync(format ?? "xlsx", ct);
+        return File(content, type, name);
+    }
+
+    /// <summary>Step 1: validates the file and returns the preview. Nothing is changed.</summary>
+    [HttpPost("bulk/preview"), Authorize(Policy = Permissions.StockAdjust), RequestSizeLimit(BulkStockFile.MaxBytes + 64 * 1024)]
+    public async Task<BulkStockPreview> BulkPreview(IFormFile file, [FromForm] string? defaultMode, [FromServices] IBulkStockService bulk, CancellationToken ct)
+    {
+        await using var s = file.OpenReadStream();
+        return await bulk.PreviewAsync(s, file.FileName, defaultMode, ct);
+    }
+
+    /// <summary>Step 2: applies the same file in one transaction. skipInvalid=false cancels everything when any row has an error.</summary>
+    [HttpPost("bulk/apply"), Authorize(Policy = Permissions.StockAdjust), RequestSizeLimit(BulkStockFile.MaxBytes + 64 * 1024)]
+    public async Task<BulkStockApplyResult> BulkApply(IFormFile file, [FromForm] string? defaultMode, [FromForm] bool skipInvalid,
+        [FromServices] IBulkStockService bulk, CancellationToken ct)
+    {
+        await using var s = file.OpenReadStream();
+        return await bulk.ApplyAsync(s, file.FileName, defaultMode, skipInvalid, ct);
+    }
 }
 
 /// <summary>Retail customers: KYC review, reward points and referrals (partners stay on /api/admin/partners).</summary>

@@ -263,8 +263,8 @@ export function CategoryBrowse({ categoryId, categoryName }: { categoryId: numbe
                 return (
                   <SidebarTypeItem key={t.id} type="button" $selected={on} aria-pressed={on} onClick={() => set({ ...reset, typeId: String(t.id) })}>
                     <TypeCircle $selected={on}>
-                      {/* Only the Type's own image from the server; otherwise a neutral placeholder (never a product image). */}
-                      <CategoryImage imageAsset={t.imageUrl ?? ''} placeholder fallbackIcon="pi-image" fallbackIconColor={theme.colors.outline} fallbackBackground={theme.colors.surface} fit="cover" iconSize={16} />
+                      {/* The Type's own image set in the dashboard; otherwise a neutral placeholder icon (never a product image). */}
+                      <CategoryImage imageAsset={t.imageUrl ?? ''} placeholder lazy fallbackIcon="pi-image" fallbackIconColor={theme.colors.outline} fallbackBackground={theme.colors.surface} fit="contain" iconSize={16} />
                     </TypeCircle>
                     <TypeLabel $selected={on}>{t.name}</TypeLabel>
                     <CountPill $selected={on}>{typeCount(t.id)}</CountPill>

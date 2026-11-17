@@ -11,6 +11,7 @@ public class ProductTypeConfig : IEntityTypeConfiguration<ProductType>
         e.Property(x => x.Name).HasMaxLength(120);
         e.Property(x => x.Key).HasMaxLength(120);
         e.Property(x => x.ClassLabel).HasMaxLength(40);
+        e.Property(x => x.ImageUrl).HasMaxLength(2048);
         e.HasIndex(x => new { x.CategoryId, x.Key }).IsUnique();
         e.HasOne(x => x.Category).WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
     }

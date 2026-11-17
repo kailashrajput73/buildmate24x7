@@ -41,7 +41,8 @@ public record ProductAdminDto(
 public record ProductAdminQuery(
     string? Search, long? CategoryId, long? SubCategoryId, long? BrandId, long? GroupId,
     bool? IsActive, bool? LowStockOnly, string? Sort, int Page = 1, int PageSize = 25,
-    MovementCategory? Movement = null, bool? NeverDispatched = null, long? TypeId = null, string? Class = null, long? FamilyId = null, string? Size = null, string? Length = null, string? Ids = null);
+    MovementCategory? Movement = null, bool? NeverDispatched = null, long? TypeId = null, string? Class = null, long? FamilyId = null, string? Size = null, string? Length = null, string? Ids = null,
+    string? Module = null, string? Color = null, string? Series = null, string? CurrentRating = null);
 
 public record ProductLookupDto(long Id, string Code, string Name, string BrandName, string Unit, decimal ListPrice,
     decimal PartnerDiscountPercent, decimal RetailDiscountPercent, decimal GstRate, decimal AvailableQty, decimal StockQty,
@@ -56,7 +57,8 @@ public record CatalogQuery(
     string? Q, long? CategoryId, long? SubCategoryId, long? BrandId, long? GroupId,
     bool? InStock, bool? Discounted, string? Sort, int Page = 1, int PageSize = 24,
     // Collapse: one card per size family instead of one per size.
-    bool? Collapse = null, long? TypeId = null, string? Class = null, long? FamilyId = null, string? Size = null, string? Length = null);
+    bool? Collapse = null, long? TypeId = null, string? Class = null, long? FamilyId = null, string? Size = null, string? Length = null,
+    string? Module = null, string? Color = null, string? Series = null, string? CurrentRating = null);
 
 public record ProductCardDto(
     long Id, string Code, string Name, string BrandName, long CategoryId, string Unit, string? ImageUrl,

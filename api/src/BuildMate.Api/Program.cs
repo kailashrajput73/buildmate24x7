@@ -136,6 +136,8 @@ using (var scope = app.Services.CreateScope())
     }
     // Sub category image: the one column it needs on databases created before the feature (no-op once added).
     await SubCategoryImageColumn.EnsureAsync(db);
+    // Product Module/Color/Series/Current rating and Product Type image (2026-11-17), same kind of no-op-once-added step.
+    await CatalogColumns20261117.EnsureAsync(db);
     await scope.ServiceProvider.GetRequiredService<DbSeeder>().SeedAsync();
 }
 

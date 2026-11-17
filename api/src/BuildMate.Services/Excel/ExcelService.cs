@@ -138,7 +138,11 @@ public class ExcelService : IExcelService
             new ExcelColumn<ProductAdminDto>("MRP Pkg", p => p.Catalog?.PackMrp),
             new ExcelColumn<ProductAdminDto>("Box Discount Type", p => p.Catalog?.BoxDiscountType),
             new ExcelColumn<ProductAdminDto>("Box Discount Value", p => p.Catalog?.BoxDiscountValue),
-            new ExcelColumn<ProductAdminDto>("Family Image URL", p => p.Catalog?.FamilyImageUrl)
+            new ExcelColumn<ProductAdminDto>("Family Image URL", p => p.Catalog?.FamilyImageUrl),
+            new ExcelColumn<ProductAdminDto>("Module", p => p.Catalog?.Module),
+            new ExcelColumn<ProductAdminDto>("Color", p => p.Catalog?.Color),
+            new ExcelColumn<ProductAdminDto>("Series", p => p.Catalog?.Series),
+            new ExcelColumn<ProductAdminDto>("Current Rating", p => p.Catalog?.CurrentRating)
     };
 
     public byte[] Template(string kind)
@@ -427,7 +431,12 @@ public class ExcelService : IExcelService
                     sheet.Has("Length") ? sheet.Str(r, "Length") : p.Length, pack,
                     sheet.Has("MRP Pkg") ? sheet.Dec(r, "MRP Pkg", errors) : p.PackMrp,
                     sheet.Has("Box Discount Type") ? sheet.Str(r, "Box Discount Type") ?? "None" : p.BoxDiscountType,
-                    sheet.Has("Box Discount Value") ? sheet.Dec(r, "Box Discount Value", errors) ?? 0 : p.BoxDiscountValue, familyId);
+                    sheet.Has("Box Discount Value") ? sheet.Dec(r, "Box Discount Value", errors) ?? 0 : p.BoxDiscountValue, familyId,
+                    // Older files without these columns keep the product's current values.
+                    sheet.Has("Module") ? sheet.Str(r, "Module") : p.Module,
+                    sheet.Has("Color") ? sheet.Str(r, "Color") : p.Color,
+                    sheet.Has("Series") ? sheet.Str(r, "Series") : p.Series,
+                    sheet.Has("Current Rating") ? sheet.Str(r, "Current Rating") : p.CurrentRating);
                 await CatalogStructure.ApplyAsync(_db, p, data, ct);
                 p.ImageUrls = p.ImageUrls.Select(u => CatalogStructure.ImageUrl(u)!).ToList();
                 if (sheet.Has("Family Image URL") && p.CatalogFamily != null)
