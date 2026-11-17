@@ -1,0 +1,17 @@
+CHANGED: admin\src\lib\types.ts
+CHANGED: admin\src\pages\Categories.tsx
+CHANGED: api\src\BuildMate.Api\Program.cs
+CHANGED: api\src\BuildMate.Services\Catalog\CatalogAdminService.cs
+CHANGED: api\src\BuildMate.Services\Catalog\CatalogDtos.cs
+CHANGED: api\src\BuildMate.Services\Catalog\CatalogService.cs
+NEW: mobile\.flutter-plugins-dependencies
+NEW: mobile\android\local.properties
+NEW: mobile\android\app\src\main\java\io\flutter\plugins\GeneratedPluginRegistrant.java
+NEW: storefront\app\account\orders\[id]\page.tsx
+NEW: storefront\app\account\orders\[id]\invoice\page.tsx
+NEW: storefront\app\c\[id]\page.tsx
+NEW: storefront\app\p\[id]\page.tsx
+NEW: storefront\app\quotations\[id]\page.tsx
+CHANGED: storefront\lib\types.ts
+CHANGED: storefront\ui\pages\catalog\CategoryBrowse\CategoryBrowse.tsx
+CHANGED: storefront\ui\pages\catalog\PipesFittingCategory\PipesFittingCategory.styles.ts
