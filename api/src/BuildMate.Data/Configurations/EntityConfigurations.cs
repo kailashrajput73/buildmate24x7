@@ -25,6 +25,7 @@ public class SubCategoryConfig : IEntityTypeConfiguration<SubCategory>
     public void Configure(EntityTypeBuilder<SubCategory> e)
     {
         e.Property(x => x.Name).HasMaxLength(120).IsRequired();
+        e.Property(x => x.ImageUrl).HasColumnName("image_url");
         e.HasIndex(x => new { x.CategoryId, x.Name }).IsUnique();
         e.HasOne(x => x.Category).WithMany(c => c.SubCategories).HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
     }

@@ -19,6 +19,7 @@ public class SubCategory : AuditableEntity
     public long CategoryId { get; set; }
     public Category Category { get; set; } = default!;
     public string Name { get; set; } = default!;
+    public string? ImageUrl { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
 

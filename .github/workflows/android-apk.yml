@@ -8,10 +8,6 @@ on:
       api_url:
         description: "API address a phone can reach, e.g. https://api.buildmate24x7.in or a tunnel URL (not localhost / 10.0.2.2)"
         required: true
-      auth_mode:
-        description: "firebase (real SMS, needs GOOGLE_SERVICES_JSON secret) or otp (API's own OTP / mock)"
-        required: true
-        default: "otp"
   # Automatic builds use the repository variable API_URL (Settings → Secrets and variables → Actions → Variables).
   push:
     paths: ["mobile/**", ".github/workflows/android-apk.yml"]
@@ -36,13 +32,6 @@ jobs:
           flutter-version: "3.29.3"
           cache: true
 
-      # Optional: Firebase config for real SMS login. Add the file's contents as a repository secret.
-      - name: Firebase config
-        env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-        if: ${{ env.GOOGLE_SERVICES_JSON != '' }}
-        run: echo "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
-
       # A phone can't reach the emulator / PC-only addresses, so refuse to build an APK that can't connect.
       - name: Check API address
         env:
@@ -63,7 +52,6 @@ jobs:
         run: >
           flutter build apk --release
           --dart-define=API_URL=${{ github.event.inputs.api_url || vars.API_URL }}
-          --dart-define=AUTH_MODE=${{ github.event.inputs.auth_mode || 'otp' }}
 
       - uses: actions/upload-artifact@v4
         with:
