@@ -33,13 +33,17 @@ export type CatalogFields = {
   typeId?: number; typeName?: string; class?: string; familyId?: number; productFamily?: string; familyImageUrl?: string
   size?: string; length?: string; packSize?: number; packMrp?: number; boxPrice?: number
   boxDiscountType: 'None' | 'Percentage' | 'Fixed'; boxDiscountValue: number
+  module?: string | null; color?: string | null; series?: string | null; currentRating?: CurrentRating | null
 }
+export type CurrentRating = 'volt' | 'watt' | 'amp'
 export type ProductType = {
   id: number; categoryId: number; name: string; sortOrder: number; isActive: boolean; subCategoryIds: number[]
   /** What the shop uses: one card for all brands, and the name of the Class option ("Color" for cables). */
   allBrands?: boolean; classLabel?: string
   /** Saved settings; null = automatic. */
   groupAcrossBrandsSetting?: boolean | null; classLabelSetting?: string | null
+  /** Type image shown next to the type name in the shop's category sidebar. */
+  imageUrl?: string | null
 }
 /** A family shown once for all brands of a Type ("CPVC PIPE"), with its card photo. */
 export type FamilyCard = { categoryId: number; typeId: number; typeName: string; key: string; name: string; title: string; brandCount: number; imageUrl?: string | null }

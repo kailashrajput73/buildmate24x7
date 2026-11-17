@@ -51,6 +51,11 @@ public class ProductConfig : IEntityTypeConfiguration<Product>
         e.Property(x => x.ProductClass).HasMaxLength(120);
         e.Property(x => x.Size).HasMaxLength(120);
         e.Property(x => x.Length).HasMaxLength(120);
+        e.Property(x => x.Module).HasMaxLength(60);
+        e.Property(x => x.Color).HasMaxLength(60);
+        e.Property(x => x.Series).HasMaxLength(120);
+        e.Property(x => x.CurrentRating).HasMaxLength(10);
+        // Allowed values (volt / watt / amp) are also enforced in the database by ck_products_current_rating (CatalogColumns20261117).
         e.Property(x => x.SizeUnit).HasMaxLength(40);
         e.Property(x => x.LengthUnit).HasMaxLength(40);
         e.Property(x => x.SizeDimension).HasMaxLength(20);

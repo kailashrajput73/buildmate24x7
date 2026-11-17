@@ -7,19 +7,22 @@ namespace BuildMate.Services.Catalog;
 
 public record CatalogInput(long? TypeId = null, string? Class = null, string? ProductFamily = null,
     string? Size = null, string? Length = null, decimal? PackSize = null, decimal? PackMrp = null,
-    string BoxDiscountType = "None", decimal BoxDiscountValue = 0, long? FamilyId = null);
+    string BoxDiscountType = "None", decimal BoxDiscountValue = 0, long? FamilyId = null,
+    string? Module = null, string? Color = null, string? Series = null, string? CurrentRating = null);
 public record CatalogFields(long? TypeId, string? TypeName, string? Class, long? FamilyId, string? ProductFamily,
     string? FamilyImageUrl, string? Size, decimal? SizeValue, string? SizeUnit, string? SizeDimension,
     decimal? SizeNormalized, string? Length, decimal? LengthValue, string? LengthUnit, decimal? LengthNormalized,
-    decimal? PackSize, decimal? PackMrp, string BoxDiscountType, decimal BoxDiscountValue, decimal? BoxPrice);
+    decimal? PackSize, decimal? PackMrp, string BoxDiscountType, decimal BoxDiscountValue, decimal? BoxPrice,
+    string? Module = null, string? Color = null, string? Series = null, string? CurrentRating = null);
 public record TypeInput(long CategoryId, string Name, int SortOrder, bool IsActive, List<long> SubCategoryIds,
-    bool? GroupAcrossBrands = null, string? ClassLabel = null);
+    bool? GroupAcrossBrands = null, string? ClassLabel = null, string? ImageUrl = null);
 /// <summary>
 /// <paramref name="AllBrands"/> / <paramref name="ClassLabel"/> are what the shop uses (setting or automatic rule);
 /// <paramref name="GroupAcrossBrandsSetting"/> / <paramref name="ClassLabelSetting"/> are the saved admin settings (null = automatic).
 /// </summary>
 public record TypeDto(long Id, long CategoryId, string Name, int SortOrder, bool IsActive, List<long> SubCategoryIds,
-    bool AllBrands = false, string ClassLabel = "Class", bool? GroupAcrossBrandsSetting = null, string? ClassLabelSetting = null);
+    bool AllBrands = false, string ClassLabel = "Class", bool? GroupAcrossBrandsSetting = null, string? ClassLabelSetting = null,
+    string? ImageUrl = null);
 public record FamilyCardInput(long CategoryId, long TypeId, string FamilyKey, string? ImageUrl);
 /// <summary>One family as shown once for all brands of a type, with its card photo.</summary>
 public record FamilyCardDto(long CategoryId, long TypeId, string TypeName, string Key, string Name, string Title, int BrandCount, string? ImageUrl);
@@ -64,13 +67,13 @@ public static class CatalogStructure
 
     public static TypeDto ToDto(ProductType t, string categoryName, List<long> subCategoryIds, bool? isActive = null) =>
         new(t.Id, t.CategoryId, t.Name, t.SortOrder, isActive ?? t.IsActive, subCategoryIds,
-            AllBrands(t, categoryName), ClassLabel(t, categoryName), t.GroupAcrossBrands, t.ClassLabel);
+            AllBrands(t, categoryName), ClassLabel(t, categoryName), t.GroupAcrossBrands, t.ClassLabel, t.ImageUrl);
     public static string? Image(Product p) => p.ImageUrls.FirstOrDefault() ?? p.CatalogFamily?.ImageUrl;
     public static CatalogFields Fields(Product p) => new(p.ProductTypeId, p.ProductType?.Name, p.ProductClass,
         p.CatalogFamilyId, p.CatalogFamily?.Name ?? p.VariantFamily, p.CatalogFamily?.ImageUrl,
         p.Size, p.SizeValue, p.SizeUnit, p.SizeDimension, p.SizeNormalized, p.Length, p.LengthValue, p.LengthUnit, p.LengthNormalized,
         p.PackSize, p.PackSize is > 0 ? Packaging.Mrp(p) : null, p.BoxDiscountType, p.BoxDiscountValue,
-        p.PackSize is > 0 ? Packaging.Price(p) : null);
+        p.PackSize is > 0 ? Packaging.Price(p) : null, p.Module, p.Color, p.Series, p.CurrentRating);
 
     public static async Task ApplyAsync(AppDbContext db, Product p, CatalogInput input, CancellationToken ct)
     {
@@ -83,6 +86,10 @@ public static class CatalogStructure
         }
         p.ProductTypeId = input.TypeId;
         p.ProductClass = Clean(input.Class, 120, "Class");
+        p.Module = Clean(input.Module, 60, "Module");
+        p.Color = Clean(input.Color, 60, "Color");
+        p.Series = Clean(input.Series, 120, "Series");
+        p.CurrentRating = ProductAttributes.CurrentRating(input.CurrentRating);
         var size = CatalogMeasure.Parse(input.Size);
         var length = CatalogMeasure.Parse(input.Length, length: true);
         p.Size = size?.Display; p.SizeValue = size?.Value; p.SizeUnit = size?.Unit; p.SizeDimension = size?.Dimension; p.SizeNormalized = size?.NormalizedValue;
@@ -127,13 +134,42 @@ public static class CatalogStructure
         return value;
     }
 
-    public static IQueryable<Product> Filter(IQueryable<Product> q, long? typeId, string? cls, long? familyId, string? size, string? length)
+    public static IQueryable<Product> Filter(IQueryable<Product> q, long? typeId, string? cls, long? familyId, string? size, string? length,
+        string? module = null, string? color = null, string? series = null, string? currentRating = null)
     {
+        if (!string.IsNullOrWhiteSpace(module)) { var v = module.Trim(); q = q.Where(p => p.Module != null && p.Module.ToLower() == v.ToLower()); }
+        if (!string.IsNullOrWhiteSpace(color)) { var v = color.Trim(); q = q.Where(p => p.Color != null && p.Color.ToLower() == v.ToLower()); }
+        if (!string.IsNullOrWhiteSpace(series)) { var v = series.Trim(); q = q.Where(p => p.Series != null && p.Series.ToLower() == v.ToLower()); }
+        if (!string.IsNullOrWhiteSpace(currentRating)) { var v = ProductAttributes.CurrentRating(currentRating); q = q.Where(p => p.CurrentRating == v); }
         if (typeId != null) q = q.Where(p => p.ProductTypeId == typeId);
         if (!string.IsNullOrWhiteSpace(cls)) q = q.Where(p => p.ProductClass == cls);
         if (familyId != null) q = q.Where(p => p.CatalogFamilyId == familyId);
         if (!string.IsNullOrWhiteSpace(size)) q = q.Where(p => p.Size == size);
         if (!string.IsNullOrWhiteSpace(length)) q = q.Where(p => p.Length == length);
         return q;
+    }
+}
+
+/// <summary>Module / Color / Series / Current rating: validation and how they are shown as specifications.</summary>
+public static class ProductAttributes
+{
+    public static readonly string[] CurrentRatings = { "volt", "watt", "amp" };
+
+    /// <summary>Blank → null; "Volt"/"VOLT" → "volt"; anything other than volt, watt or amp is rejected.</summary>
+    public static string? CurrentRating(string? input)
+    {
+        var value = input?.Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(value) || value is "none") return null;
+        if (!CurrentRatings.Contains(value)) throw new AppException($"Current rating must be volt, watt or amp (got '{input!.Trim()}').");
+        return value;
+    }
+
+    /// <summary>The non-empty fields as name/value pairs for the product page, in a fixed order.</summary>
+    public static IEnumerable<(string Name, string Value)> Specs(Product p)
+    {
+        if (!string.IsNullOrWhiteSpace(p.Module)) yield return ("Module", p.Module);
+        if (!string.IsNullOrWhiteSpace(p.Color)) yield return ("Color", p.Color);
+        if (!string.IsNullOrWhiteSpace(p.Series)) yield return ("Series", p.Series);
+        if (!string.IsNullOrWhiteSpace(p.CurrentRating)) yield return ("Current rating", char.ToUpperInvariant(p.CurrentRating[0]) + p.CurrentRating[1..]);
     }
 }

@@ -19,6 +19,8 @@ interface CategoryImageProps {
    * Used for categories and types. Without it the frame stays blank (product images, unchanged).
    */
   placeholder?: boolean;
+  /** Load the image only when it scrolls into view (type sidebar). */
+  lazy?: boolean;
 }
 
 /**
@@ -36,6 +38,7 @@ export function CategoryImage({
   radius = 0,
   fit = 'cover',
   placeholder = false,
+  lazy = false,
 }: CategoryImageProps) {
   const usable = !!imageAsset && !imageAsset.includes('/files/mock/');
   const [failed, setFailed] = useState(false);
@@ -43,7 +46,7 @@ export function CategoryImage({
   const showImage = usable && !failed;
   return (
     <Frame $width={width} $height={height} $radius={radius} style={placeholder && !showImage ? { background: fallbackBackground } : undefined}>
-      {showImage && <Img src={imageAsset} alt="" $fit={fit} onError={() => setFailed(true)} />}
+      {showImage && <Img src={imageAsset} alt="" loading={lazy ? 'lazy' : undefined} $fit={fit} onError={() => setFailed(true)} />}
       {placeholder && !showImage && (
         <Placeholder className="category-image-placeholder" aria-hidden="true">
           <i className={`pi ${fallbackIcon}`} style={{ color: fallbackIconColor, fontSize: iconSize ?? 20 }} />

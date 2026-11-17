@@ -17,7 +17,7 @@ export default function Products() {
   const { can } = useAuth()
   const [importing, setImporting] = useState(false)
   const [createMasters, setCreateMasters] = useState(false)
-  const [f, set] = useUrlState({ search: '', categoryId: '', typeId: '', subCategoryId: '', class: '', familyId: '', size: '', length: '', brandId: '', groupId: '', isActive: '', lowStockOnly: false, movement: '', sort: '', page: 1 })
+  const [f, set] = useUrlState({ search: '', categoryId: '', typeId: '', subCategoryId: '', class: '', familyId: '', size: '', length: '', module: '', color: '', series: '', currentRating: '', brandId: '', groupId: '', isActive: '', lowStockOnly: false, movement: '', sort: '', page: 1 })
   const [selected, select] = useState<number[]>([])
   const types = useProductTypes(Number(f.categoryId) || undefined).data ?? []
   const families = useFamilies(Number(f.categoryId) || undefined, Number(f.brandId) || undefined).data ?? []
@@ -66,6 +66,8 @@ export default function Products() {
         <Select aria-label="Sub-Category" value={f.subCategoryId} onChange={e => set({ subCategoryId: e.target.value, page: 1 })}><option value="">All Sub-Categories</option>{subs.filter(s => !f.typeId || types.find(t => t.id === Number(f.typeId))?.subCategoryIds.includes(s.id)).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</Select>
         <Select aria-label="Family" value={f.familyId} onChange={e => set({ familyId: e.target.value, page: 1 })}><option value="">All families</option>{families.map(x => <option key={x.id} value={x.id}>{brands.find(b => b.id === x.brandId)?.name} — {x.name}</option>)}</Select>
         {(['class', 'size', 'length'] as const).map(key => <Input key={key} aria-label={key} placeholder={`Filter ${key}`} value={f[key]} onChange={e => set({ [key]: e.target.value, page: 1 })} />)}
+        {(['module', 'color', 'series'] as const).map(key => <Input key={key} aria-label={key} placeholder={`Filter ${key}`} value={f[key]} onChange={e => set({ [key]: e.target.value, page: 1 })} />)}
+        <Select aria-label="Current rating" value={f.currentRating} onChange={e => set({ currentRating: e.target.value, page: 1 })}><option value="">All current ratings</option><option value="volt">Volt</option><option value="watt">Watt</option><option value="amp">Amp</option></Select>
       </div>
       <div className="mb-3 flex flex-wrap items-center gap-4">
         <MovementSelect value={f.movement} onChange={(v) => set({ movement: v, page: 1 })} />

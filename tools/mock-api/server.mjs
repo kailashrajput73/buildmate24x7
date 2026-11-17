@@ -428,7 +428,7 @@ const classLabelOf = (t) => (t ? t.classLabel ?? (/electric/i.test(catName(t.cat
 const sharedFamily = (p) => !!p.familyKey && allBrandsType(typeOf(p))
 const cardTitle = (typeName, family) => (!typeName || family.split(/[\s\-/]+/).some((w) => w.toLowerCase() === typeName.toLowerCase()) ? family : `${typeName} ${family}`)
 const MATERIAL_RANK = { UPVC: 0, CPVC: 1, PVC: 2 }
-const typeDto = (t) => ({ id: t.id, categoryId: t.categoryId, name: t.name, sortOrder: t.sortOrder, isActive: t.isActive, subCategoryIds: t.subCategoryIds, allBrands: allBrandsType(t), classLabel: classLabelOf(t), groupAcrossBrandsSetting: t.groupAcrossBrands, classLabelSetting: t.classLabel })
+const typeDto = (t) => ({ id: t.id, categoryId: t.categoryId, name: t.name, sortOrder: t.sortOrder, isActive: t.isActive, subCategoryIds: t.subCategoryIds, allBrands: allBrandsType(t), classLabel: classLabelOf(t), groupAcrossBrandsSetting: t.groupAcrossBrands, classLabelSetting: t.classLabel, imageUrl: t.imageUrl ?? null })
 const typesInOrder = (list) => [...list].sort((a, b) => a.sortOrder - b.sortOrder || (MATERIAL_RANK[a.key] ?? 100) - (MATERIAL_RANK[b.key] ?? 100) || a.name.localeCompare(b.name))
 const racksFor = (p) => p.locations.filter((l) => l.quantity > 0).map((l) => rackLocations.find((r) => r.id === l.rackLocationId).label).sort()
 const adminProduct = (p) => ({
@@ -652,11 +652,11 @@ const detail = (p, v) => {
     related: withFamilyInfo(related.map((x) => card(x, v)), v),
     variants: members.length > 1 ? members.map((x) => ({ id: x.id, code: x.code, label: x.variantLabel ? displayLabel(x.variantLabel) : x.name, mrp: x.mrp, price: price(x, d(x)), inStock: avail(x) > 0 })) : [],
     variantAxes: shared ? narrowAxes(p, members, classLabelOf(typeOf(p))) : members.length > 1 ? variantAxes(p.id, members) : [],
-    specs: p.specs.map((x) => { const i = x.indexOf(':'); return { name: x.slice(0, i).trim(), value: x.slice(i + 1).trim() } }).filter((x) => x.name && x.value),
+    specs: withAttrs(p.specs.map((x) => { const i = x.indexOf(':'); return { name: x.slice(0, i).trim(), value: x.slice(i + 1).trim() } }).filter((x) => x.name && x.value), p),
   }
 }
 const storeInfo = () => ({ storeName: settings.storeName, supportPhone: settings.supportPhone, whatsAppNumber: settings.whatsAppNumber, supportEmail: settings.supportEmail, address: [settings.addressLine, settings.city, settings.state, settings.pincode].filter(Boolean).join(', '), openingHours: settings.openingHours, minOrderValue: settings.minOrderValue, deliveryFee: settings.deliveryFee, freeDeliveryAbove: settings.freeDeliveryAbove, homeDeliveryEnabled: settings.homeDeliveryEnabled, storePickupEnabled: settings.storePickupEnabled, supportedLanguages: settings.supportedLanguages, androidAppUrl: settings.androidAppUrl, iosAppUrl: settings.iosAppUrl, minAppVersion: settings.minAppVersion })
-const catTree = (v) => categories.filter((c) => c.isActive).map((c) => ({ id: c.id, name: c.name, imageUrl: c.imageUrl, productCount: visible(v).filter((p) => p.categoryId === c.id).length, subCategories: subcategories.filter((s) => s.categoryId === c.id && s.isActive).map((s) => ({ id: s.id, name: s.name })) }))
+const catTree = (v) => categories.filter((c) => c.isActive).map((c) => ({ id: c.id, name: c.name, imageUrl: c.imageUrl, productCount: visible(v).filter((p) => p.categoryId === c.id).length, subCategories: subcategories.filter((s) => s.categoryId === c.id && s.isActive).map((s) => ({ id: s.id, name: s.name, imageUrl: s.imageUrl ?? null })) }))
 on('GET', '/api/catalog/home', ({ req, uid }) => {
   const v = viewer(req, uid); const place = v.channel
   return {
@@ -699,7 +699,7 @@ on('GET', '/api/catalog/facets', ({ req, uid, q }) => {
 on('GET', '/api/admin/catalog-structure/types', ({ q }) => typesInOrder(productTypes.filter((t) => !q.categoryId || t.categoryId == q.categoryId)).map(typeDto))
 on('PUT', '/api/admin/catalog-structure/types/:id', ({ p, body }) => {
   const t = productTypes.find((x) => x.id == p.id); if (!t) fail(404, 'Type not found.')
-  Object.assign(t, { name: body.name, key: body.name.trim().toUpperCase(), sortOrder: body.sortOrder ?? 0, isActive: body.isActive, subCategoryIds: body.subCategoryIds ?? t.subCategoryIds, groupAcrossBrands: body.groupAcrossBrands ?? null, classLabel: body.classLabel?.trim() || null })
+  Object.assign(t, { imageUrl: body.imageUrl || null, name: body.name, key: body.name.trim().toUpperCase(), sortOrder: body.sortOrder ?? 0, isActive: body.isActive, subCategoryIds: body.subCategoryIds ?? t.subCategoryIds, groupAcrossBrands: body.groupAcrossBrands ?? null, classLabel: body.classLabel?.trim() || null })
   return typeDto(t)
 })
 on('GET', '/api/admin/catalog-structure/families', ({ q }) => {
@@ -1127,6 +1127,20 @@ on('GET', '/api/admin/orders/:id/invoice', ({ p }) => invoice(findOrder(p.id)))
 
 // catalogue admin
 on('GET', '/api/admin/categories', ({ q }) => page(categories.filter((c) => like(c.name, q.search)).map((c) => ({ ...c, productCount: products.filter((p) => p.categoryId === c.id).length, subCategoryCount: subcategories.filter((s) => s.categoryId === c.id).length })), q))
+// Module / Color / Series / Current rating (same rules as the API's ProductAttributes).
+const checkAttrs = (body) => {
+  const c = body.catalog; if (!c) return body
+  const r = (c.currentRating ?? '').trim().toLowerCase()
+  if (r && r !== 'none' && !['volt', 'watt', 'amp'].includes(r)) fail(400, `Current rating must be volt, watt or amp (got '${c.currentRating}').`)
+  const t = (v) => (v ?? '').trim() || null
+  return { ...body, catalog: { ...c, module: t(c.module), color: t(c.color), series: t(c.series), currentRating: r && r !== 'none' ? r : null } }
+}
+const withAttrs = (specs, p) => {
+  const c = p.catalog ?? {}
+  for (const [name, value] of [['Module', c.module], ['Color', c.color], ['Series', c.series], ['Current rating', c.currentRating && c.currentRating[0].toUpperCase() + c.currentRating.slice(1)]])
+    if (value && !specs.some((s) => s.name.toLowerCase() === name.toLowerCase())) specs.push({ name, value })
+  return specs
+}
 const upsert = (arr, id, body) => { if (id) { const x = arr.find((y) => y.id == id); Object.assign(x, body); return x } const x = { id: Math.max(0, ...arr.map((y) => y.id)) + 1, ...body }; arr.push(x); return x }
 on('POST', '/api/admin/categories', ({ body }) => upsert(categories, null, body))
 on('PUT', '/api/admin/categories/:id', ({ p, body }) => upsert(categories, p.id, body))
@@ -1142,13 +1156,14 @@ on('GET', '/api/admin/products', ({ q }) => {
   if (q.categoryId) rows = rows.filter((p) => p.categoryId == q.categoryId); if (q.brandId) rows = rows.filter((p) => p.brandId == q.brandId)
   if (q.groupId) rows = rows.filter((p) => p.groupIds.includes(Number(q.groupId))); if (q.isActive) rows = rows.filter((p) => String(p.isActive) === q.isActive)
   if (q.lowStockOnly === 'true') rows = rows.filter((p) => p.stockQty <= p.reorderLevel)
+  for (const k of ['module', 'color', 'series', 'currentRating']) if (q[k]) rows = rows.filter((p) => (p.catalog?.[k] ?? '').toLowerCase() === q[k].trim().toLowerCase())
   return page(rows.map(adminProduct).filter(movementFilter(q)), q)
 })
 on('GET', '/api/admin/products/lookup', ({ q }) => products.filter((p) => p.isActive && (like(p.name, q.q) || like(p.code, q.q) || p.aliases.some((a) => like(a, q.q)))).slice(0, Number(q.take ?? 15)).map(lookup))
 on('GET', '/api/admin/products/scan/:code', ({ p }) => { const c = decodeURIComponent(p.code).trim(); return lookup(products.find((x) => x.code === c.toUpperCase() || (x.barcode && x.barcode === c)) ?? fail(404, `Product for code ${c} not found.`)) })
 on('GET', '/api/admin/products/:id', ({ p }) => adminProduct(products.find((x) => x.id == p.id) ?? fail(404, 'Product not found.')))
-on('POST', '/api/admin/products', ({ body }) => { const x = upsert(products, null, { ...body, code: `BM${String(products.length + 1).padStart(6, '0')}`, stockQty: 0, reservedQty: 0, averageCost: 0, locations: [], createdAt: iso(now()), updatedAt: iso(now()) }); return adminProduct(x) })
-on('PUT', '/api/admin/products/:id', ({ p, body }) => adminProduct(upsert(products, p.id, { ...body, updatedAt: iso(now()) })))
+on('POST', '/api/admin/products', ({ body }) => { const x = upsert(products, null, { ...checkAttrs(body), code: `BM${String(products.length + 1).padStart(6, '0')}`, stockQty: 0, reservedQty: 0, averageCost: 0, locations: [], createdAt: iso(now()), updatedAt: iso(now()) }); return adminProduct(x) })
+on('PUT', '/api/admin/products/:id', ({ p, body }) => adminProduct(upsert(products, p.id, { ...checkAttrs(body), updatedAt: iso(now()) })))
 on('POST', '/api/admin/products/:id/active', ({ p, q }) => { products.find((x) => x.id == p.id).isActive = q.value === 'true'; return null })
 on('GET', '/api/admin/product-groups', () => groups.map((g) => ({ ...g, productCount: g.productIds.length })))
 on('POST', '/api/admin/product-groups', ({ body }) => upsert(groups, null, body))
@@ -1194,6 +1209,72 @@ on('GET', '/api/admin/stock/statement', ({ q }) => products.filter((p) => !q.pro
   return { productId: p.id, code: p.code, name: p.name, opening, in: i, out: o, closing: r2(opening + i - o) }
 }))
 on('POST', '/api/admin/stock/adjust', ({ body }) => { const p = products[body.productId - 1]; const s = body.isIncrease ? body.quantity : -body.quantity; p.stockQty = r2(p.stockQty + s); const m = { id: mvId++, createdAt: iso(now()), productId: p.id, type: body.isIncrease ? 'AdjustmentIn' : 'AdjustmentOut', quantity: s, balanceAfter: p.stockQty, unitCost: p.averageCost, referenceType: 'Adjustment', referenceNo: null, note: body.reason }; stockMoves.push(m); return { ...m, productCode: p.code, productName: p.name } })
+// Bulk update stock (same rules as the API's BulkStockService).
+const bulkRead = (files) => {
+  const f = files?.file; if (!f) fail(400, 'Choose a .csv or .xlsx file.')
+  if (f.data.length > 5 * 1024 * 1024) fail(400, 'The file is larger than 5 MB. Split it into smaller files.')
+  let table
+  if (/\.csv$/i.test(f.filename)) {
+    const text = f.data.toString('utf8').replace(/^\uFEFF/, ''); table = []; let row = [], cell = '', q = false
+    for (let i = 0; i < text.length; i++) { const ch = text[i]
+      if (q) { if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++ } else if (ch === '"') q = false; else cell += ch }
+      else if (ch === '"') q = true; else if (ch === ',') { row.push(cell); cell = '' } else if (ch === '\n') { row.push(cell); table.push(row); row = []; cell = '' } else if (ch !== '\r') cell += ch }
+    if (cell || row.length) { row.push(cell); table.push(row) }
+  } else if (/\.xlsx$/i.test(f.filename)) { try { table = readXlsx(f.data) } catch { fail(400, "Couldn't read this file.") } }
+  else fail(400, 'Upload a .csv or .xlsx file.')
+  const norm = (h) => String(h ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
+  const head = (table[0] ?? []).map(norm), col = (...n) => n.map(norm).map((x) => head.indexOf(x)).find((i) => i >= 0) ?? -1
+  const c = { code: col('product_code', 'code'), barcode: col('barcode'), qty: col('quantity', 'qty'), mode: col('mode'), rack: col('rack'), note: col('note') }
+  if (c.qty < 0 || (c.code < 0 && c.barcode < 0)) fail(400, 'The file needs a quantity column and a product_code (or barcode) column. Download the template.')
+  const v = (r, i) => (i < 0 ? '' : String(r[i] ?? '').trim()) || null
+  const rows = table.slice(1).map((r, i) => ({ row: i + 2, code: v(r, c.code), barcode: v(r, c.barcode), qty: v(r, c.qty), mode: v(r, c.mode), rack: v(r, c.rack), note: v(r, c.note) })).filter((r) => r.code || r.barcode || r.qty || r.mode || r.rack || r.note)
+  if (!rows.length) fail(400, 'The file has no rows.')
+  return { rows, fileName: f.filename }
+}
+const bulkCheck = (input, defMode) => {
+  const modeOf = (m) => ({ set: 'set', replace: 'set', add: 'add', increase: 'add' })[String(m ?? '').trim().toLowerCase()] ?? null
+  const out = input.map((r) => {
+    const errors = []; let p = null
+    if (r.code) { p = products.find((x) => x.code.toUpperCase() === r.code.toUpperCase()); if (!p) errors.push(`Unknown product code '${r.code}'.`) }
+    else if (r.barcode) { const m = products.filter((x) => x.barcode === r.barcode); if (!m.length) errors.push(`Unknown barcode '${r.barcode}'.`); else if (m.length > 1) errors.push(`Barcode '${r.barcode}' belongs to more than one product. Use product_code.`); else p = m[0] }
+    else errors.push('Product code or barcode is required.')
+    const mode = r.mode ? modeOf(r.mode) : defMode; if (!mode) errors.push(`Invalid mode '${r.mode}'. Use set or add.`)
+    let qty = null
+    if (!r.qty) errors.push('Quantity is required.'); else if (!/^-?\d+(\.\d+)?$/.test(r.qty)) errors.push(`Quantity '${r.qty}' is not a number.`); else if (Number(r.qty) < 0) errors.push("Quantity can't be negative."); else qty = Number(r.qty)
+    if (r.rack && !rackLocations.some((l) => l.label.toUpperCase() === r.rack.toUpperCase())) errors.push(`Unknown rack location '${r.rack}'.`)
+    let newStock = null
+    if (p && qty != null && mode) { newStock = r2(mode === 'set' ? qty : p.stockQty + qty); if (newStock < (p.reservedQty ?? 0)) errors.push(`New stock ${newStock} is less than the ${p.reservedQty} reserved for paid orders.`) }
+    return { row: r.row, productCode: p?.code ?? r.code ?? r.barcode, productId: p?.id ?? null, productName: p?.name ?? null, mode: mode ?? r.mode, quantity: qty, currentStock: p?.stockQty ?? null, newStock, rack: r.rack, note: r.note,
+      status: errors.length ? 'Error' : newStock === p.stockQty ? 'No change' : 'OK', errors }
+  })
+  const seen = new Map(); for (const r of out) if (r.productId) seen.set(r.productId, [...(seen.get(r.productId) ?? []), r])
+  for (const rs of seen.values()) if (rs.length > 1) for (const r of rs) { r.status = 'Error'; r.errors.push(`Duplicate product: ${r.productCode} appears on rows ${rs.map((x) => x.row).join(', ')}.`) }
+  return out
+}
+const bulkMode = (m) => { const x = String(m ?? '').trim().toLowerCase(); if (!x) return 'set'; if (!['set', 'add'].includes(x)) fail(400, 'Default mode must be set or add.'); return x }
+on('GET', '/api/admin/stock/bulk/template', ({ q }) => {
+  const rows = [['product_code', 'barcode', 'product_name', 'current_stock', 'quantity', 'mode', 'rack', 'note'], ...products.map((p) => [p.code, p.barcode ?? '', p.name, p.stockQty, p.stockQty, 'set', '', ''])]
+  if (q.format === 'csv') return { __csv: '\uFEFF' + rows.map((r) => r.map((v) => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v).join(',')).join('\r\n'), name: 'bulk-stock-template.csv' }
+  return { __xlsx: writeXlsx('Stock', rows), name: 'bulk-stock-template.xlsx' }
+})
+on('POST', '/api/admin/stock/bulk/preview', ({ body, files }) => {
+  const { rows, fileName } = bulkRead(files); const mode = bulkMode(body.defaultMode); const out = bulkCheck(rows, mode)
+  return { fileName, defaultMode: mode, totalRows: out.length, changeRows: out.filter((r) => r.status === 'OK').length, unchangedRows: out.filter((r) => r.status === 'No change').length, errorRows: out.filter((r) => r.status === 'Error').length, rows: out }
+})
+on('POST', '/api/admin/stock/bulk/apply', ({ body, files, uid }) => {
+  const { rows, fileName } = bulkRead(files); const out = bulkCheck(rows, bulkMode(body.defaultMode))
+  const failed = out.filter((r) => r.status === 'Error').length
+  if (failed && body.skipInvalid !== 'true') return { applied: false, fileName, updated: 0, skipped: 0, failed, rows: out }
+  let updated = 0
+  for (const r of out) {
+    if (r.status !== 'OK') { r.status = r.status === 'Error' ? 'Failed' : 'Skipped'; continue }
+    const p = products.find((x) => x.id === r.productId); const old = p.stockQty, delta = r2(r.newStock - old); p.stockQty = r.newStock
+    if (r.rack) { const l = rackLocations.find((x) => x.label.toUpperCase() === r.rack.toUpperCase()); const pl = p.locations.find((x) => x.rackLocationId === l.id); if (pl) pl.quantity = Math.max(0, pl.quantity + delta); else p.locations.push({ rackLocationId: l.id, quantity: Math.max(0, delta) }) }
+    stockMoves.push({ id: mvId++, createdAt: iso(now()), productId: p.id, type: delta > 0 ? 'AdjustmentIn' : 'AdjustmentOut', quantity: delta, balanceAfter: p.stockQty, unitCost: p.averageCost, referenceType: 'BulkUpload', referenceNo: fileName, note: `Bulk upload: ${old} → ${p.stockQty}${r.note ? ` — ${r.note}` : ''}`, userId: uid })
+    r.status = 'Updated'; updated++
+  }
+  return { applied: true, fileName, updated, skipped: out.filter((r) => r.status === 'Skipped').length, failed, rows: out }
+})
 on('GET', '/api/admin/racks', () => racks.map((r) => { const locs = rackLocations.filter((l) => l.rackId === r.id); return { ...r, locationCount: locs.length, occupiedCount: locs.filter((l) => products.some((p) => p.locations.some((x) => x.rackLocationId === l.id && x.quantity > 0))).length } }))
 on('GET', '/api/admin/racks/locations', () => rackLocations.map((l) => ({ id: l.id, label: l.label })))
 const locDto = (l) => ({ ...l, products: products.flatMap((p) => p.locations.filter((x) => x.rackLocationId === l.id && x.quantity > 0).map((x) => ({ productId: p.id, code: p.code, name: p.name, quantity: Math.min(x.quantity, p.stockQty) }))) })
@@ -1504,6 +1585,7 @@ http.createServer(async (req, res) => {
       let result = await r.fn({ req, q, p: m.groups ?? {}, body, files, uid, me: () => user(uid) })
       // report screens: ?export=true returns the same rows as an Excel file
       if (q.export === 'true' && req.method === 'GET' && result && !result.__xlsx) result = xlsxFile(url.pathname.split('/').pop(), humanKey(url.pathname.split('/').pop()), tableRows(result))
+      if (result?.__csv != null) { res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${result.name}"`, 'Access-Control-Expose-Headers': 'Content-Disposition' }); return res.end(result.__csv) }
       if (result?.__xlsx) { res.writeHead(200, { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="${result.name}"`, 'Access-Control-Expose-Headers': 'Content-Disposition' }); return res.end(result.__xlsx) }
       if (result?.__png) { res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Disposition': `inline; filename="${result.name}"`, 'Access-Control-Expose-Headers': 'Content-Disposition' }); return res.end(result.__png) }
       if (result?.__svg) { res.writeHead(200, { 'Content-Type': 'image/svg+xml' }); return res.end(result.__svg) }

@@ -19,6 +19,8 @@ public class SubCategory : AuditableEntity
     public long CategoryId { get; set; }
     public Category Category { get; set; } = default!;
     public string Name { get; set; } = default!;
+    /// <summary>Image uploaded in the dashboard; null = no image is shown for this sub category.</summary>
+    public string? ImageUrl { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
 
@@ -58,6 +60,13 @@ public class Product : AuditableEntity
     public string? SizeDimension { get; set; }
     public decimal? SizeNormalized { get; set; }
     public string? Length { get; set; }
+    /// <summary>Module size, free text (e.g. "1M", "2M", "4M"). Null = not set.</summary>
+    public string? Module { get; set; }
+    public string? Color { get; set; }
+    /// <summary>Product series (e.g. "Piano", "Stylo", "Nexy").</summary>
+    public string? Series { get; set; }
+    /// <summary>Current rating unit: "volt", "watt" or "amp" only (see <c>ProductAttributes.CurrentRatings</c>). Null = not set.</summary>
+    public string? CurrentRating { get; set; }
     public decimal? LengthValue { get; set; }
     public string? LengthUnit { get; set; }
     public decimal? LengthNormalized { get; set; }

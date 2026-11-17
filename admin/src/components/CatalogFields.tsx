@@ -11,6 +11,10 @@ export default function CatalogFields({ value, categoryId, onChange }: { value?:
     <Field label="Class"><Input value={f.class ?? ''} onChange={e => set({ class: e.target.value })} /></Field>
     <Field label="Size" hint="Original unit is retained, e.g. 20 mm or 4 sqmm"><Input value={f.size ?? ''} onChange={e => set({ size: e.target.value })} /></Field>
     <Field label="Length" hint="e.g. 3 m, 10 feet"><Input value={f.length ?? ''} onChange={e => set({ length: e.target.value })} /></Field>
+    <Field label="Module" hint="e.g. 1M, 2M, 4M"><Input value={f.module ?? ''} maxLength={60} onChange={e => set({ module: e.target.value })} /></Field>
+    <Field label="Color"><Input value={f.color ?? ''} maxLength={60} onChange={e => set({ color: e.target.value })} /></Field>
+    <Field label="Series" hint="e.g. Piano, Stylo, Nexy"><Input value={f.series ?? ''} maxLength={120} onChange={e => set({ series: e.target.value })} /></Field>
+    <Field label="Current rating"><Select value={f.currentRating ?? ''} onChange={e => set({ currentRating: (e.target.value || null) as Fields['currentRating'] })}><option value="">None</option><option value="volt">Volt</option><option value="watt">Watt</option><option value="amp">Amp</option></Select></Field>
     <Field label="Pack Size" hint="Base units in one full package"><Input type="number" min="0.001" step="0.001" value={f.packSize ?? ''} onChange={e => set({ packSize: e.target.value ? Number(e.target.value) : undefined })} /></Field>
     <Field label="MRP Pkg" hint="Leave empty to calculate piece MRP × Pack Size"><Input type="number" min="0.01" step="0.01" value={f.packMrp ?? ''} onChange={e => set({ packMrp: e.target.value ? Number(e.target.value) : undefined })} /></Field>
     <Field label="Box discount type"><Select value={f.boxDiscountType} onChange={e => set({ boxDiscountType: e.target.value as Fields['boxDiscountType'], boxDiscountValue: 0 })}><option>None</option><option>Percentage</option><option>Fixed</option></Select></Field>

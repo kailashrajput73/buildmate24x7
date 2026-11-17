@@ -127,7 +127,7 @@ public class CatalogService : ICatalogService
 
     public async Task<PagedResult<ProductCardDto>> SearchAsync(CatalogQuery q, Viewer v, CancellationToken ct = default)
     {
-        var query = CatalogStructure.Filter(Visible(v), q.TypeId, q.Class, q.FamilyId, q.Size, q.Length);
+        var query = CatalogStructure.Filter(Visible(v), q.TypeId, q.Class, q.FamilyId, q.Size, q.Length, q.Module, q.Color, q.Series, q.CurrentRating);
         if (q.CategoryId != null) query = query.Where(p => p.CategoryId == q.CategoryId);
         if (q.SubCategoryId != null) query = query.Where(p => p.SubCategoryId == q.SubCategoryId);
         if (q.BrandId != null) query = query.Where(p => p.BrandId == q.BrandId);
@@ -299,7 +299,16 @@ public class CatalogService : ICatalogService
             p.AvailableQty > 0, Math.Max(0, p.AvailableQty),
             v.Kind == CustomerKind.Partner ? p.RewardPointsPerUnit : null,
             otherNames, relatedCards,
-            p.CatalogFamily?.Name ?? p.VariantFamily, p.VariantLabel == null ? null : Variants.Display(p.VariantLabel), variants, SpecDto.Parse(p.Specs), axes, CatalogStructure.Fields(p));
+            p.CatalogFamily?.Name ?? p.VariantFamily, p.VariantLabel == null ? null : Variants.Display(p.VariantLabel), variants, WithAttributes(SpecDto.Parse(p.Specs), p), axes, CatalogStructure.Fields(p));
+    }
+
+    /// <summary>Adds Module / Color / Series / Current rating to the specifications when they are set (empty ones are left out;
+    /// a spec line with the same name already written by the store wins).</summary>
+    private static List<SpecDto> WithAttributes(List<SpecDto> specs, Product p)
+    {
+        foreach (var (name, value) in ProductAttributes.Specs(p))
+            if (!specs.Any(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase))) specs.Add(new SpecDto(name, value));
+        return specs;
     }
 
     private static string LocalName(Product p, string lang) =>
