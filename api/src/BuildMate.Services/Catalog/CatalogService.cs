@@ -1,6 +1,7 @@
 using BuildMate.Data;
 using BuildMate.Domain.Entities;
 using BuildMate.Domain.Enums;
+using System.Text.RegularExpressions;
 using BuildMate.Services.Common;
 using Microsoft.EntityFrameworkCore;
 
@@ -105,14 +106,53 @@ public class CatalogService : ICatalogService
 
     private static string Like(string word) => $"%{word.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_")}%";
 
-    /// <summary>Search tiers for one word, tried in order until one finds something: 0 = what the product is (its name,
-    /// code, size family, catalogue family, sub-category, class, size); 1 = also its type and brand; 2 = also its other
-    /// names (aliases, translations); 3 = also the category name and specs. "pipe" therefore finds pipes only, not every
-    /// fitting of the "Pipe &amp; Fitting" category, of a "… Pipes" brand or with a "garam pani pipe" alias.</summary>
-    private const int LastSearchTier = 3;
+    /// <summary>Search tiers for one word, tried in order until one finds something:
+    /// 0 = the word as a WHOLE word (singular or plural) in what the product is — its name, code, size family,
+    ///     catalogue family, type, class, size — or a brand whose name starts with it ("Havells").
+    ///     "pipe" finds "CPVC Pipe" / "Pipes" but not "Pipeline", and "switch" not "Switchboard Cable";
+    /// 1 = the whole word in its sub-category name ("Switches &amp; Sockets" only when no product is called a switch);
+    /// 2 = the word anywhere inside its own fields and sub-category (partly typed words: "swi");
+    /// 3 = also its type and brand; 4 = also its other names (aliases, translations); 5 = also the category name and
+    /// specs. "pipe" therefore finds pipes only, not every fitting of the "Pipe &amp; Fitting" category, of a "… Pipes"
+    /// brand or with a "garam pani pipe" alias.</summary>
+    private const int LastSearchTier = 5;
 
-    private static IQueryable<Product> Matches(IQueryable<Product> q, string like, int tier) =>
-        q.Where(p => EF.Functions.ILike(p.Name, like) || EF.Functions.ILike(p.Code, like)
+    /// <summary>PostgreSQL regular expression for one search word as a whole word, singular or plural:
+    /// "pipe"/"pipes" → \m(pipes|pipe|pip)(e?s)?\M (matches pipe, pipes).</summary>
+    private static string WholeWord(string word)
+    {
+        var w = word.ToLowerInvariant();
+        var stems = new List<string> { w };
+        if (w.Length > 3 && w.EndsWith("es")) stems.Add(w[..^2]);
+        if (w.Length > 3 && w.EndsWith('s')) stems.Add(w[..^1]);
+        return @"\m(" + string.Join("|", stems.Distinct().Select(Regex.Escape)) + @")(e?s)?\M";
+    }
+
+    /// <summary>Products where <paramref name="word"/> is a whole word of their own fields (search tier 0).</summary>
+    private static IQueryable<Product> WholeWordMatches(IQueryable<Product> q, string word)
+    {
+        var pattern = WholeWord(word);
+        var brandStart = "^" + pattern[2..];
+        return q.Where(p => Regex.IsMatch(p.Name, pattern, RegexOptions.IgnoreCase) || Regex.IsMatch(p.Code, pattern, RegexOptions.IgnoreCase)
+                            || (p.VariantFamily != null && Regex.IsMatch(p.VariantFamily, pattern, RegexOptions.IgnoreCase))
+                            || (p.CatalogFamily != null && Regex.IsMatch(p.CatalogFamily.Name, pattern, RegexOptions.IgnoreCase))
+                            || (p.ProductType != null && Regex.IsMatch(p.ProductType.Name, pattern, RegexOptions.IgnoreCase))
+                            || (p.ProductClass != null && Regex.IsMatch(p.ProductClass, pattern, RegexOptions.IgnoreCase))
+                            || (p.Size != null && Regex.IsMatch(p.Size, pattern, RegexOptions.IgnoreCase))
+                            || Regex.IsMatch(p.Brand.Name, brandStart, RegexOptions.IgnoreCase));
+    }
+
+    private static IQueryable<Product> Matches(IQueryable<Product> q, string word, int tier)
+    {
+        if (tier == 0) return WholeWordMatches(q, word);
+        if (tier == 1)
+        {
+            var pattern = WholeWord(word);
+            return q.Where(p => p.SubCategory != null && Regex.IsMatch(p.SubCategory.Name, pattern, RegexOptions.IgnoreCase));
+        }
+        var like = Like(word);
+        tier -= 2;
+        return q.Where(p => EF.Functions.ILike(p.Name, like) || EF.Functions.ILike(p.Code, like)
                      || (p.VariantFamily != null && EF.Functions.ILike(p.VariantFamily, like))
                      || (p.CatalogFamily != null && EF.Functions.ILike(p.CatalogFamily.Name, like))
                      || (p.SubCategory != null && EF.Functions.ILike(p.SubCategory.Name, like))
@@ -124,6 +164,7 @@ public class CatalogService : ICatalogService
                                        || p.Translations.Any(t => EF.Functions.ILike(t.Name, like))))
                      || (tier >= 3 && (EF.Functions.ILike(p.Category.Name, like)
                                        || p.Specs.Any(s => EF.Functions.ILike(s, like)))));
+    }
 
     public async Task<PagedResult<ProductCardDto>> SearchAsync(CatalogQuery q, Viewer v, CancellationToken ct = default)
     {
@@ -147,11 +188,11 @@ public class CatalogService : ICatalogService
             {
                 // Each word narrows the list in turn, using the closest fields that match it: "astral pipe" = Astral
                 // products (brand) whose own name or sub-category says pipe.
-                var words = PipeOptions.NormalizeSearch(full).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(6).Select(Like).ToList();
-                foreach (var like in words)
+                var words = PipeOptions.NormalizeSearch(full).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(6).ToList();
+                foreach (var word in words)
                     for (var tier = 0; tier <= LastSearchTier; tier++)
                     {
-                        var found = Matches(query, like, tier);
+                        var found = Matches(query, word, tier);
                         if (tier == LastSearchTier || await found.AnyAsync(ct)) { query = found; break; }
                     }
             }
