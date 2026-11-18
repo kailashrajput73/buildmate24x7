@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -23,6 +25,14 @@ class _SearchScreenState extends State<SearchScreen> {
   late final TextEditingController _controller;
   var _query = '';
 
+  // Server search results (product IDs, most relevant first) for [_resultsFor].
+  List<String> _resultIds = const [];
+  String _resultsFor = '';
+  bool _searching = false;
+  String? _searchError;
+  Timer? _debounce;
+  int _searchSeq = 0;
+
   @override
   void initState() {
     super.initState();
@@ -37,13 +47,62 @@ class _SearchScreenState extends State<SearchScreen> {
           showLoading: catalog.pipeVariants.isEmpty,
         );
       }
+      _search(_query, immediate: true);
     });
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _onQueryChanged(String value) {
+    setState(() => _query = value);
+    _search(value);
+  }
+
+  /// Asks the server for products matching [value] (after a short pause while
+  /// typing). Only the latest search's answer is shown.
+  void _search(String value, {bool immediate = false}) {
+    _debounce?.cancel();
+    final term = value.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final seq = ++_searchSeq;
+    if (term.isEmpty) {
+      setState(() {
+        _resultIds = const [];
+        _resultsFor = '';
+        _searching = false;
+        _searchError = null;
+      });
+      return;
+    }
+    setState(() {
+      _searching = true;
+      _searchError = null;
+    });
+    _debounce = Timer(Duration(milliseconds: immediate ? 0 : 300), () async {
+      if (!mounted) return;
+      final catalog = context.read<CatalogController>();
+      try {
+        final ids = await catalog.searchProductIds(term);
+        if (!mounted || seq != _searchSeq) return;
+        setState(() {
+          _resultIds = ids;
+          _resultsFor = term;
+          _searching = false;
+        });
+      } catch (_) {
+        if (!mounted || seq != _searchSeq) return;
+        setState(() {
+          _resultIds = const [];
+          _resultsFor = term;
+          _searching = false;
+          _searchError = 'Could not search right now. Check your internet connection and try again.';
+        });
+      }
+    });
   }
 
   void _openVariant(ProductVariant variant) {
@@ -70,11 +129,19 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogController>();
     final theme = Theme.of(context);
-    final variants = catalog.searchVariants(_query);
+    // Only results for exactly what is typed now (never the previous search's).
+    final current = _query.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final variants = catalog.variantsByIds(
+      _resultsFor == current ? _resultIds : const [],
+    );
     final categories = catalog.searchCategories(_query);
     final hasQuery = _query.trim().isNotEmpty;
+    final waiting = hasQuery &&
+        (_searching || _resultsFor != current || catalog.isHomeLoading || catalog.isLoading) &&
+        variants.isEmpty &&
+        _searchError == null;
     final isEmptyResults =
-        hasQuery && variants.isEmpty && categories.isEmpty;
+        hasQuery && !waiting && variants.isEmpty && categories.isEmpty;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -92,8 +159,8 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
             border: InputBorder.none,
           ),
-          onChanged: (v) => setState(() => _query = v),
-          onSubmitted: (v) => setState(() => _query = v),
+          onChanged: _onQueryChanged,
+          onSubmitted: (v) => _search(v, immediate: true),
         ),
         actions: [
           if (_query.isNotEmpty)
@@ -101,7 +168,7 @@ class _SearchScreenState extends State<SearchScreen> {
               tooltip: 'Clear',
               onPressed: () {
                 _controller.clear();
-                setState(() => _query = '');
+                _onQueryChanged('');
               },
               icon: const Icon(Icons.close_rounded),
             ),
@@ -122,6 +189,19 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
               ),
             )
+          : waiting || (_searchError != null && categories.isEmpty)
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.space6),
+                    child: Text(
+                      _searchError ?? 'Searching…',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: AppColors.outline,
+                      ),
+                    ),
+                  ),
+                )
           : isEmptyResults
               ? Center(
                   child: Text(

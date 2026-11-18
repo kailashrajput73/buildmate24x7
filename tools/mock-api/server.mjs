@@ -540,11 +540,24 @@ function search(q, v) {
       (p) => [catName(p.categoryId), ...(p.specs ?? [])],
     ]
     const hay = (p, tier) => tiers.slice(0, tier + 1).flatMap((f) => f(p)).filter(Boolean).join(' ').toLowerCase()
+    // Tier "whole word" first (singular or plural; or a brand starting with the word), like CatalogService.WholeWordMatches:
+    // "pipe" finds "CPVC Pipe" but not "Pipeline", "switch" not "Switchboard Cable".
+    const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const wordRe = (t) => { const stems = [t]; if (t.length > 3 && t.endsWith('es')) stems.push(t.slice(0, -2)); if (t.length > 3 && t.endsWith('s')) stems.push(t.slice(0, -1)); return `(${[...new Set(stems)].map(esc).join('|')})(e?s)?(?![\\p{L}\\p{N}_])` }
+    const whole = (p, t) => {
+      const re = new RegExp(`(?<![\\p{L}\\p{N}_])${wordRe(t)}`, 'iu')
+      return [p.name, p.code, p.variantFamily, p.familyName, p.productClass, p.size, typeName(p)].filter(Boolean).some((f) => re.test(f)) || new RegExp(`^${wordRe(t)}`, 'iu').test(brName(p.brandId) ?? '')
+    }
+    const wholeSub = (p, t) => new RegExp(`(?<![\\p{L}\\p{N}_])${wordRe(t)}`, 'iu').test(subName(p.subCategoryId) ?? '')
     const exact = rows.filter((p) => p.code.toLowerCase() === full || (p.barcode ?? '') === q.q.trim())
     let found = exact
     if (!found.length) {
       found = rows
       for (const t of terms) {
+        const w = found.filter((p) => whole(p, t))
+        if (w.length) { found = w; continue }
+        const ws = found.filter((p) => wholeSub(p, t))
+        if (ws.length) { found = ws; continue }
         for (let tier = 0; tier < tiers.length; tier++) {
           const hit = found.filter((p) => hay(p, tier).includes(t))
           if (hit.length || tier === tiers.length - 1) { found = hit; break }

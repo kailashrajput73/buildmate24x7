@@ -95,11 +95,14 @@ export function Search({ initialQuery = '', initialCategory = null }: { initialQ
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  // The search the shown results belong to; a late "Load more" answer for an older search is dropped.
+  const current = useRef('');
 
   useEffect(() => { input.current?.focus(); }, []);
 
   useEffect(() => {
-    const term = q.trim();
+    const term = q.trim().replace(/\s+/g, ' ');
+    current.current = `${term}|${categoryId ?? ''}`;
     let live = true;
     const t = setTimeout(async () => {
       if (!term && categoryId == null) { setItems([]); setTotal(0); return; }
@@ -120,14 +123,17 @@ export function Search({ initialQuery = '', initialCategory = null }: { initialQ
   }, [q, categoryId]);
 
   const loadMore = async () => {
+    const term = q.trim().replace(/\s+/g, ' ');
+    const key = `${term}|${categoryId ?? ''}`;
     const qs = new URLSearchParams({ collapse: 'true', pageSize: String(PAGE), page: String(page + 1) });
-    if (q.trim()) qs.set('q', q.trim());
+    if (term) qs.set('q', term);
     if (categoryId != null) qs.set('categoryId', String(categoryId));
     setLoading(true);
     try {
       const r = await api<Paged<ProductCard>>(`/api/catalog/products?${qs}`);
+      if (current.current !== key) return; // the search changed meanwhile
       setItems((x) => [...x, ...r.items]); setPage((p) => p + 1);
-    } finally { setLoading(false); }
+    } finally { if (current.current === key) setLoading(false); }
   };
 
   const catName = (id: number) => raw.find((c) => c.id === id)?.name ?? '';

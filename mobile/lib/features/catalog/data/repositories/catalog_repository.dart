@@ -154,6 +154,32 @@ class CatalogRepository {
     return products;
   }
 
+  /// Product search on the server — the same search the website uses
+  /// (`GET /catalog/products?q=…`): the matching product IDs, most relevant
+  /// first. Upper/lower case and extra spaces don't matter.
+  Future<List<String>> searchProductIds(String query, {int maxResults = 400}) async {
+    final term = query.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (term.isEmpty) return const [];
+    const pageSize = 200; // ASP.NET PageRequest accepts at most 200.
+    final ids = <String>[];
+    var page = 1;
+    while (ids.length < maxResults) {
+      final response = await _apiClient.getJson(
+        '/catalog/products',
+        queryParameters: {'q': term, 'page': '$page', 'pageSize': '$pageSize'},
+      );
+      final rows = _asList(response);
+      final total = _int(_asMap(response)?['total']) ?? rows.length;
+      for (final row in rows) {
+        final id = _string(row['id']);
+        if (id.isNotEmpty) ids.add(id);
+      }
+      if (rows.length < pageSize || ids.length >= total) break;
+      page++;
+    }
+    return ids;
+  }
+
   Future<List<Map<String, dynamic>>> _fetchCategoryItems(
     String categoryId,
   ) async {

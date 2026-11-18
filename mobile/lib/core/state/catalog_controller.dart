@@ -122,20 +122,20 @@ class CatalogController extends ChangeNotifier {
     return null;
   }
 
-  /// Live product/brand/SKU search for the global Search screen.
-  List<ProductVariant> searchVariants(String query) {
-    final q = query.trim().toLowerCase();
-    if (q.isEmpty) return const [];
-    return _apiVariants.where((v) {
-      return v.productName.toLowerCase().contains(q) ||
-          v.displayName.toLowerCase().contains(q) ||
-          v.brandName.toLowerCase().contains(q) ||
-          v.sku.toLowerCase().contains(q) ||
-          v.categoryName.toLowerCase().contains(q) ||
-          v.subCategoryName.toLowerCase().contains(q) ||
-          (v.pipeType?.toLowerCase().contains(q) ?? false) ||
-          v.specSummary.toLowerCase().contains(q);
-    }).toList();
+  /// Product search for the global Search screen, done by the server with the
+  /// same rules as the website (name, code/SKU, brand, type, sub-category,
+  /// category …). Returns the matching product IDs, most relevant first.
+  Future<List<String>> searchProductIds(String query) =>
+      _repository.searchProductIds(query);
+
+  /// The loaded products for [ids], in that order (products the app can open).
+  List<ProductVariant> variantsByIds(List<String> ids) {
+    if (ids.isEmpty) return const [];
+    final byId = {for (final v in _apiVariants) v.id: v};
+    return [
+      for (final id in ids)
+        if (byId[id] != null) byId[id]!,
+    ];
   }
 
   /// Category name matches for search results.
