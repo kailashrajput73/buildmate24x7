@@ -37,7 +37,35 @@ public class ProductAttributeRulesTests
     {
         Assert.Empty(ProductAttributes.Specs(new Product { Code = "X", Name = "X" }));
         var specs = ProductAttributes.Specs(new Product { Code = "X", Name = "X", Module = "2M", Series = "Piano", CurrentRating = "amp" }).ToList();
-        Assert.Equal("Module=2M; Series=Piano; Current rating=Amp", string.Join("; ", specs.Select(x => $"{x.Name}={x.Value}")));
+        Assert.Equal("Module=2M; Series=Piano; Current Rating=Amp", string.Join("; ", specs.Select(x => $"{x.Name}={x.Value}")));
+    }
+
+    [Fact]
+    public void Blank_and_whitespace_values_are_never_shown()
+    {
+        Assert.Empty(ProductAttributes.Specs(new Product { Code = "X", Name = "X", Module = "  ", Color = "", Series = "\t" }));
+        var onlyColor = ProductAttributes.Specs(new Product { Code = "X", Name = "X", Module = " ", Color = " Red " }).ToList();
+        Assert.Equal("Color=Red", string.Join("; ", onlyColor.Select(x => $"{x.Name}={x.Value}")));
+    }
+
+    [Fact]
+    public void One_central_attribute_list_drives_labels_and_filter_keys()
+    {
+        Assert.Equal("Module, Color, Series, Current Rating", string.Join(", ", ProductAttributes.Names));
+        Assert.Equal("module, color, series, currentRating", string.Join(", ", ProductAttributes.All.Select(a => a.Key)));
+    }
+
+    [Fact]
+    public void Attribute_with_one_value_in_the_family_is_not_an_option_row()
+    {
+        Product P(long id, string brand, string? color, string? rating) => new() { Id = id, Code = $"P{id}", Name = "P", Sequence = (int)id, StockQty = 5,
+            Brand = new Brand { Name = brand }, Color = color, CurrentRating = rating };
+        var family = new List<Product> { P(1, "Anchor", "White", "amp"), P(2, "Anchor", "Grey", "amp"), P(3, "Anchor", "White", null) };
+        var axes = FamilyAxes.Build(family[0], family, narrow: true);
+        Assert.Contains(axes, a => a.Name == "Color");           // White / Grey: option row
+        Assert.DoesNotContain(axes, a => a.Name == "Current Rating"); // Amp / (none): one value only → specification row
+        var none = new List<Product> { P(4, "Anchor", null, null), P(5, "Anchor", null, null) };
+        Assert.Equal("Brand", string.Join(" | ", FamilyAxes.Build(none[0], none, narrow: true).Select(a => a.Name))); // as before
     }
 
     // ---- Task 3: bulk stock rows ----

@@ -37,65 +37,113 @@ public class CatalogService : ICatalogService
     private IQueryable<Product> WithCardData(IQueryable<Product> q) =>
         q.Include(p => p.Brand).Include(p => p.Translations).Include(p => p.ProductType).Include(p => p.CatalogFamily);
 
+    // ---- Product families (one reusable rule for every module) -----------------------------------------------------
+    // Module (category) → product family → brand → variants. A family is identified by, in this order:
+    //   1. the product's catalogue family (catalog_families row) — its stable Key, the family name in capitals;
+    //   2. together with its category and Type, so different types ("UPVC" / "CPVC" PIPE) stay different families;
+    //   3. older products without a family row: their legacy Variant Family name, trimmed and in capitals.
+    // The brand is not part of the identity, so every brand of a family shares one card and one product page.
+    // Types set to "One card per brand" (perBrandTypes) keep the per-brand families they had before.
+    // Products with no family at all stay one card each — nothing is grouped by similar names.
+
     /// <summary>
-    /// Keeps one product per size family (the first by Sequence) among the rows <paramref name="q"/> matches.
-    /// For types in <paramref name="allBrandTypes"/> a family is the same family name across every brand
-    /// (one "CPVC PIPE" card for Astral, King, Finolex and Supreme); otherwise it stays per brand.
+    /// Keeps one product per family (the first by Sequence) among the rows <paramref name="q"/> matches.
     /// </summary>
-    private static IQueryable<Product> FirstOfEachFamily(IQueryable<Product> q, List<long> allBrandTypes) =>
+    private static IQueryable<Product> FirstOfEachFamily(IQueryable<Product> q, List<long> perBrandTypes) =>
         q.Where(p => (p.CatalogFamilyId == null && p.VariantFamily == null) ||
             !q.Any(o => o.CategoryId == p.CategoryId &&
-                ((p.CatalogFamilyId != null && p.ProductTypeId != null && allBrandTypes.Contains(p.ProductTypeId.Value) &&
-                  o.ProductTypeId == p.ProductTypeId && o.CatalogFamilyId != null && o.CatalogFamily!.Key == p.CatalogFamily!.Key) ||
-                 (!(p.CatalogFamilyId != null && p.ProductTypeId != null && allBrandTypes.Contains(p.ProductTypeId.Value)) && o.BrandId == p.BrandId &&
-                  ((p.CatalogFamilyId != null && o.CatalogFamilyId == p.CatalogFamilyId) ||
-                   (p.CatalogFamilyId == null && o.CatalogFamilyId == null && o.VariantFamily == p.VariantFamily)))) &&
-                (o.Sequence < p.Sequence || (o.Sequence == p.Sequence && o.Id < p.Id))));
+                (o.Sequence < p.Sequence || (o.Sequence == p.Sequence && o.Id < p.Id)) &&
+                ((p.ProductTypeId == null || !perBrandTypes.Contains(p.ProductTypeId.Value))
+                    // All brands: same category + Type + family key.
+                    ? o.ProductTypeId == p.ProductTypeId && (o.CatalogFamilyId != null || o.VariantFamily != null) &&
+                      (o.CatalogFamilyId != null ? o.CatalogFamily!.Key : o.VariantFamily!.Trim().ToUpper()) ==
+                      (p.CatalogFamilyId != null ? p.CatalogFamily!.Key : p.VariantFamily!.Trim().ToUpper())
+                    // One card per brand (admin setting): the brand's own family, as before.
+                    : o.BrandId == p.BrandId &&
+                      ((p.CatalogFamilyId != null && o.CatalogFamilyId == p.CatalogFamilyId) ||
+                       (p.CatalogFamilyId == null && o.CatalogFamilyId == null && o.VariantFamily == p.VariantFamily)))));
 
-    private async Task<List<ProductCardDto>> WithFamilyInfoAsync(List<ProductCardDto> cards, Viewer v, CancellationToken ct, IQueryable<Product>? pool = null, List<long>? allBrandTypes = null)
+    /// <summary>Products of the same family as <paramref name="p"/> (all brands), see <see cref="FirstOfEachFamily"/>.</summary>
+    private static IQueryable<Product> SameFamily(IQueryable<Product> q, Product p, bool shared, string? key)
     {
-        allBrandTypes ??= await CatalogStructure.AllBrandTypeIdsAsync(_db, ct);
-        bool Shared(ProductCardDto c) => c.Catalog is { FamilyId: not null, TypeId: { } t } && allBrandTypes.Contains(t);
-        var ids = cards.Where(c => c.Catalog?.FamilyId != null && !Shared(c)).Select(c => c.Catalog!.FamilyId!.Value).Distinct().ToList();
-        var legacy = cards.Where(c => c.Catalog?.FamilyId == null && c.Family != null).Select(c => c.Family!).Distinct().ToList();
-        var sharedFamilyIds = cards.Where(Shared).Select(c => c.Catalog!.FamilyId!.Value).Distinct().ToList();
-        if (ids.Count == 0 && legacy.Count == 0 && sharedFamilyIds.Count == 0) return cards;
-        // Aggregate in PostgreSQL: one result per family, not one row per variant.
-        var members = await (pool ?? Visible(v)).Where(p => (p.CatalogFamilyId != null && ids.Contains(p.CatalogFamilyId.Value)) || (p.CatalogFamilyId == null && legacy.Contains(p.VariantFamily!)))
+        if (shared)
+            return q.Where(x => x.CategoryId == p.CategoryId && x.ProductTypeId == p.ProductTypeId && (x.CatalogFamilyId != null || x.VariantFamily != null) &&
+                                (x.CatalogFamilyId != null ? x.CatalogFamily!.Key : x.VariantFamily!.Trim().ToUpper()) == key);
+        q = q.Where(x => x.BrandId == p.BrandId && x.CategoryId == p.CategoryId);
+        return p.CatalogFamilyId != null ? q.Where(x => x.CatalogFamilyId == p.CatalogFamilyId)
+            : p.VariantFamily != null ? q.Where(x => x.CatalogFamilyId == null && x.VariantFamily == p.VariantFamily) : q.Where(x => x.Id == p.Id);
+    }
+
+    /// <summary>Family key of a loaded product (see the identity rules above); null = no family.</summary>
+    private static string? FamilyKey(Product p) =>
+        p.CatalogFamilyId != null ? p.CatalogFamily?.Key : p.VariantFamily?.Trim().ToUpperInvariant();
+
+    private static bool Shared(Product p, List<long> perBrandTypes) =>
+        (p.CatalogFamilyId != null || p.VariantFamily != null) && (p.ProductTypeId == null || !perBrandTypes.Contains(p.ProductTypeId.Value));
+
+    private async Task<List<ProductCardDto>> WithFamilyInfoAsync(List<ProductCardDto> cards, Viewer v, CancellationToken ct, IQueryable<Product>? pool = null, List<long>? perBrandTypes = null)
+    {
+        perBrandTypes ??= await CatalogStructure.PerBrandTypeIdsAsync(_db, ct);
+        var cardIds = cards.Select(c => c.Id).ToList();
+        if (cardIds.Count == 0) return cards;
+        // Family identity of each card's product (read from the database: a family's Key stays when its name is edited).
+        var self = (await _db.Products.AsNoTracking().Where(p => cardIds.Contains(p.Id))
+                .Select(p => new { p.Id, p.CategoryId, p.BrandId, p.ProductTypeId, p.CatalogFamilyId, p.VariantFamily,
+                    Key = p.CatalogFamilyId != null ? p.CatalogFamily!.Key : p.VariantFamily!.Trim().ToUpper() })
+                .ToListAsync(ct)).ToDictionary(p => p.Id);
+        bool IsShared(long id) => self.TryGetValue(id, out var s) && (s.CatalogFamilyId != null || s.VariantFamily != null) &&
+                                  (s.ProductTypeId == null || !perBrandTypes.Contains(s.ProductTypeId.Value));
+        var sharedCards = cards.Where(c => IsShared(c.Id)).ToList();
+        var ids = cards.Where(c => !IsShared(c.Id) && self.ContainsKey(c.Id) && self[c.Id].CatalogFamilyId != null).Select(c => self[c.Id].CatalogFamilyId!.Value).Distinct().ToList();
+        var legacy = cards.Where(c => !IsShared(c.Id) && self.ContainsKey(c.Id) && self[c.Id].CatalogFamilyId == null && self[c.Id].VariantFamily != null).Select(c => self[c.Id].VariantFamily!).Distinct().ToList();
+        if (ids.Count == 0 && legacy.Count == 0 && sharedCards.Count == 0) return cards;
+
+        // Per-brand families (types set to "One card per brand"): aggregated in PostgreSQL, one result per family.
+        var members = ids.Count == 0 && legacy.Count == 0 ? new() : await (pool ?? Visible(v))
+            .Where(p => (p.CatalogFamilyId != null && ids.Contains(p.CatalogFamilyId.Value)) || (p.CatalogFamilyId == null && legacy.Contains(p.VariantFamily!)))
             .GroupBy(p => new { p.CatalogFamilyId, p.CategoryId, p.BrandId, VariantFamily = p.CatalogFamilyId == null ? p.VariantFamily : null })
             .Select(g => new { g.Key, Count = g.Count(),
                 Price = g.Min(p => p.ListPrice * (1 - (v.Kind == CustomerKind.Partner ? p.PartnerDiscountPercent : p.RetailDiscountPercent) / 100m)),
                 InStock = g.Any(p => p.StockQty > p.ReservedQty) }).ToListAsync(ct);
-        // Families shown once for all brands: grouped by category + type + family key.
-        var familyKeys = await _db.CatalogFamilies.AsNoTracking().Where(f => sharedFamilyIds.Contains(f.Id)).ToDictionaryAsync(f => f.Id, f => f.Key, ct);
-        var keys = familyKeys.Values.Distinct().ToList();
-        var sharedTypes = cards.Where(Shared).Select(c => c.Catalog!.TypeId!.Value).Distinct().ToList();
-        var shared = await (pool ?? Visible(v)).Where(p => p.CatalogFamilyId != null && p.ProductTypeId != null && sharedTypes.Contains(p.ProductTypeId.Value) && keys.Contains(p.CatalogFamily!.Key))
-            .Select(p => new { p.CategoryId, TypeId = p.ProductTypeId!.Value, p.CatalogFamily!.Key,
+
+        // Families shown once for all brands: category + Type + family key, one result per family and brand.
+        var keys = sharedCards.Select(c => self[c.Id].Key).Distinct().ToList();
+        var categories = sharedCards.Select(c => self[c.Id].CategoryId).Distinct().ToList();
+        var shared = keys.Count == 0 ? new() : await (pool ?? Visible(v))
+            .Where(p => categories.Contains(p.CategoryId) && (p.CatalogFamilyId != null || p.VariantFamily != null) &&
+                        (p.ProductTypeId == null || !perBrandTypes.Contains(p.ProductTypeId.Value)) &&
+                        keys.Contains(p.CatalogFamilyId != null ? p.CatalogFamily!.Key : p.VariantFamily!.Trim().ToUpper()))
+            .Select(p => new { p.CategoryId, p.ProductTypeId, Key = p.CatalogFamilyId != null ? p.CatalogFamily!.Key : p.VariantFamily!.Trim().ToUpper(),
+                Brand = p.Brand.Name, BrandOrder = p.Brand.SortOrder,
                 Price = p.ListPrice * (1 - (v.Kind == CustomerKind.Partner ? p.PartnerDiscountPercent : p.RetailDiscountPercent) / 100m),
                 InStock = p.StockQty > p.ReservedQty })
-            .GroupBy(p => new { p.CategoryId, p.TypeId, p.Key })
+            .GroupBy(p => new { p.CategoryId, p.ProductTypeId, p.Key, p.Brand, p.BrandOrder })
             .Select(g => new { g.Key, Count = g.Count(), Price = g.Min(p => p.Price), InStock = g.Any(p => p.InStock) }).ToListAsync(ct);
-        var cardPhotos = await _db.CatalogFamilyCards.AsNoTracking()
+        var sharedTypes = sharedCards.Where(c => self[c.Id].ProductTypeId != null).Select(c => self[c.Id].ProductTypeId!.Value).Distinct().ToList();
+        var cardPhotos = sharedTypes.Count == 0 ? new() : await _db.CatalogFamilyCards.AsNoTracking()
             .Where(c => sharedTypes.Contains(c.ProductTypeId) && keys.Contains(c.Key) && c.ImageUrl != null).ToListAsync(ct);
-        var cardIds = cards.Select(c => c.Id).ToList();
-        var brands = await Visible(v).Where(p => cardIds.Contains(p.Id)).Select(p => new { p.Id, p.BrandId }).ToDictionaryAsync(p => p.Id, p => p.BrandId, ct);
+
         return cards.Select(card => {
-            if (Shared(card))
+            if (!self.TryGetValue(card.Id, out var me)) return card;
+            if (IsShared(card.Id))
             {
-                var key = familyKeys.GetValueOrDefault(card.Catalog!.FamilyId!.Value);
-                var all = shared.FirstOrDefault(m => m.Key.CategoryId == card.CategoryId && m.Key.TypeId == card.Catalog.TypeId && m.Key.Key == key);
-                if (all == null || all.Count < 2) return card;
-                var photo = cardPhotos.FirstOrDefault(c => c.CategoryId == card.CategoryId && c.ProductTypeId == card.Catalog.TypeId && c.Key == key)?.ImageUrl;
+                var all = shared.Where(m => m.Key.CategoryId == me.CategoryId && m.Key.ProductTypeId == me.ProductTypeId && m.Key.Key == me.Key).ToList();
+                var count = all.Sum(m => m.Count);
+                if (count < 2) return card;
+                var photo = me.ProductTypeId == null ? null
+                    : cardPhotos.FirstOrDefault(c => c.CategoryId == me.CategoryId && c.ProductTypeId == me.ProductTypeId && c.Key == me.Key)?.ImageUrl;
+                var brands = all.OrderBy(m => m.Key.BrandOrder).ThenBy(m => m.Key.Brand).Select(m => m.Key.Brand).Distinct().ToList();
                 return card with {
-                    Name = CatalogStructure.CardTitle(card.Catalog.TypeName, card.Catalog.ProductFamily ?? card.Name),
+                    Name = CatalogStructure.CardTitle(card.Catalog?.TypeName, card.Catalog?.ProductFamily ?? card.Family ?? card.Name),
                     ImageUrl = photo ?? card.ImageUrl,
-                    VariantCount = all.Count, FromPrice = Pricing.Round(all.Price),
-                    InStock = all.InStock, VariantSummary = $"{all.Count} variants", AllBrands = true
+                    VariantCount = count, FromPrice = Pricing.Round(all.Min(m => m.Price)),
+                    // Out of stock only when no variant of any brand is in stock.
+                    InStock = all.Any(m => m.InStock), VariantSummary = $"{count} variants", AllBrands = true,
+                    Brands = brands
                 };
             }
-            var family = members.FirstOrDefault(m => m.Key.CategoryId == card.CategoryId && m.Key.BrandId == brands[card.Id] &&
-                (card.Catalog?.FamilyId != null ? m.Key.CatalogFamilyId == card.Catalog.FamilyId : m.Key.CatalogFamilyId == null && m.Key.VariantFamily == card.Family));
+            var family = members.FirstOrDefault(m => m.Key.CategoryId == me.CategoryId && m.Key.BrandId == me.BrandId &&
+                (me.CatalogFamilyId != null ? m.Key.CatalogFamilyId == me.CatalogFamilyId : m.Key.CatalogFamilyId == null && m.Key.VariantFamily == me.VariantFamily));
             return family == null || family.Count < 2 ? card : card with {
                 Name = card.Catalog?.ProductFamily ?? card.Family ?? card.Name,
                 VariantCount = family.Count, FromPrice = Pricing.Round(family.Price),
@@ -198,8 +246,8 @@ public class CatalogService : ICatalogService
             }
         }
         var familyPool = query;
-        var allBrandTypes = q.Collapse == true ? await CatalogStructure.AllBrandTypeIdsAsync(_db, ct) : new List<long>();
-        if (q.Collapse == true) query = FirstOfEachFamily(query, allBrandTypes);
+        var perBrandTypes = q.Collapse == true ? await CatalogStructure.PerBrandTypeIdsAsync(_db, ct) : new List<long>();
+        if (q.Collapse == true) query = FirstOfEachFamily(query, perBrandTypes);
 
         var partner = v.Kind == CustomerKind.Partner;
         query = q.Sort switch
@@ -221,7 +269,7 @@ public class CatalogService : ICatalogService
         var total = await query.CountAsync(ct);
         var rows = await WithCardData(query).Page(page).AsSplitQuery().ToListAsync(ct);
         var cards = rows.Select(p => ToCard(p, v)).ToList();
-        if (q.Collapse == true) cards = await WithFamilyInfoAsync(cards, v, ct, familyPool, allBrandTypes);
+        if (q.Collapse == true) cards = await WithFamilyInfoAsync(cards, v, ct, familyPool, perBrandTypes);
         return new PagedResult<ProductCardDto>(cards, total, page.SafePage, page.SafeSize);
     }
 
@@ -303,26 +351,20 @@ public class CatalogService : ICatalogService
 
     private async Task<ProductDetailDto> ToDetailAsync(Product p, Viewer v, CancellationToken ct)
     {
-        // Pipe & Fitting / Electrical › Cable: the family is shared by every brand ("CPVC PIPE"), so the product page offers
-        // each brand, then the classes of that brand, then only the sizes made in that brand + class.
-        var allBrandTypes = await CatalogStructure.AllBrandTypeIdsAsync(_db, ct);
-        var shared = p.CatalogFamilyId != null && p.ProductTypeId != null && allBrandTypes.Contains(p.ProductTypeId.Value);
-        var familyKey = p.CatalogFamily?.Key;
-        var relatedPool = Visible(v).Where(x => x.Id != p.Id &&
-                                                (shared ? !(x.ProductTypeId == p.ProductTypeId && x.CatalogFamilyId != null && x.CatalogFamily!.Key == familyKey)
-                                                 : p.CatalogFamilyId != null ? x.CatalogFamilyId != p.CatalogFamilyId : p.VariantFamily == null || x.VariantFamily == null || x.VariantFamily != p.VariantFamily || x.BrandId != p.BrandId) &&
+        // The family is shared by every brand ("CPVC PIPE", "Switches"), so the product page offers each brand, then the
+        // classes of that brand, then only the sizes made in that brand + class. Each choice opens that variant's own page.
+        var perBrandTypes = await CatalogStructure.PerBrandTypeIdsAsync(_db, ct);
+        var shared = Shared(p, perBrandTypes);
+        var familyKey = FamilyKey(p);
+        var family = SameFamily(Visible(v), p, shared, familyKey);
+        var relatedPool = Visible(v).Where(x => x.Id != p.Id && !family.Any(f => f.Id == x.Id) &&
                                                 (p.SubCategoryId != null ? x.SubCategoryId == p.SubCategoryId : x.CategoryId == p.CategoryId));
-        var related = await WithCardData(FirstOfEachFamily(relatedPool, allBrandTypes))
+        var related = await WithCardData(FirstOfEachFamily(relatedPool, perBrandTypes))
             .OrderBy(x => x.Sequence).Take(8).AsSplitQuery().ToListAsync(ct);
-        var relatedCards = await WithFamilyInfoAsync(related.Select(r => ToCard(r, v)).ToList(), v, ct, null, allBrandTypes);
+        var relatedCards = await WithFamilyInfoAsync(related.Select(r => ToCard(r, v)).ToList(), v, ct, null, perBrandTypes);
 
-        var memberQuery = shared
-            ? Visible(v).Where(x => x.CategoryId == p.CategoryId && x.ProductTypeId == p.ProductTypeId && x.CatalogFamilyId != null && x.CatalogFamily!.Key == familyKey)
-            : Visible(v).Where(x => x.BrandId == p.BrandId && x.CategoryId == p.CategoryId);
-        if (!shared)
-            memberQuery = p.CatalogFamilyId != null ? memberQuery.Where(x => x.CatalogFamilyId == p.CatalogFamilyId)
-                : p.VariantFamily != null ? memberQuery.Where(x => x.CatalogFamilyId == null && x.VariantFamily == p.VariantFamily) : memberQuery.Where(x => x.Id == p.Id);
-        var members = await memberQuery.Include(x => x.Brand).OrderBy(x => x.Sequence).ThenBy(x => x.Id).ToListAsync(ct);
+        var members = await family.Include(x => x.Brand).OrderBy(x => x.Sequence).ThenBy(x => x.Id).ToListAsync(ct);
+        if (members.All(x => x.Id != p.Id)) members.Insert(0, p);
         var axes = FamilyAxes.Build(p, members, narrow: shared, classLabel: CatalogStructure.ClassLabel(p.ProductType, p.Category.Name));
         var variants = members.Select(x => new VariantOptionDto(x.Id, x.Code, x.VariantLabel == null ? x.Name : Variants.Display(x.VariantLabel), x.Mrp,
             Pricing.UnitPrice(x, v.Kind), x.AvailableQty > 0)).ToList();
@@ -340,15 +382,18 @@ public class CatalogService : ICatalogService
             p.AvailableQty > 0, Math.Max(0, p.AvailableQty),
             v.Kind == CustomerKind.Partner ? p.RewardPointsPerUnit : null,
             otherNames, relatedCards,
-            p.CatalogFamily?.Name ?? p.VariantFamily, p.VariantLabel == null ? null : Variants.Display(p.VariantLabel), variants, WithAttributes(SpecDto.Parse(p.Specs), p), axes, CatalogStructure.Fields(p));
+            p.CatalogFamily?.Name ?? p.VariantFamily, p.VariantLabel == null ? null : Variants.Display(p.VariantLabel), variants, WithAttributes(SpecDto.Parse(p.Specs), p, axes), axes, CatalogStructure.Fields(p));
     }
 
-    /// <summary>Adds Module / Color / Series / Current rating to the specifications when they are set (empty ones are left out;
-    /// a spec line with the same name already written by the store wins).</summary>
-    private static List<SpecDto> WithAttributes(List<SpecDto> specs, Product p)
+    /// <summary>Adds Module / Color / Series / Current Rating to the specifications when they are set (empty ones are left out;
+    /// a spec line with the same name already written by the store wins). An attribute that is an option row on this page
+    /// (its variants differ in it) is chosen there, so it is not repeated as a specification.</summary>
+    private static List<SpecDto> WithAttributes(List<SpecDto> specs, Product p, List<VariantAxisDto> axes)
     {
         foreach (var (name, value) in ProductAttributes.Specs(p))
-            if (!specs.Any(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase))) specs.Add(new SpecDto(name, value));
+            if (!specs.Any(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase)) &&
+                !axes.Any(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase)))
+                specs.Add(new SpecDto(name, value));
         return specs;
     }
 

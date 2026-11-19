@@ -93,7 +93,7 @@ export default function Products() {
                     <Link to={`/products/${p.id}`} className="font-semibold text-ink hover:text-pipe-700 hover:underline">{p.name}</Link>
                     <div className="text-2xs text-ink-faint">{p.code} · {p.brandName}{!p.showOnWeb && ' · hidden on web'}{!p.showOnApp && ' · hidden in app'}</div>
                   </td>
-                  <td className="text-ink-soft">{p.categoryName}<div className="text-2xs">{[p.catalog?.typeName, p.catalog?.class, p.catalog?.productFamily, p.catalog?.size, p.catalog?.length].filter(Boolean).join(" · ")}</div>{p.subCategoryName && <div className="text-2xs">{p.subCategoryName}</div>}</td>
+                  <td className="text-ink-soft">{p.categoryName}<div className="text-2xs">{[p.catalog?.typeName, p.catalog?.class, p.catalog?.productFamily, p.catalog?.size, p.catalog?.length, p.catalog?.module, p.catalog?.color, p.catalog?.series, p.catalog?.currentRating ? `${p.catalog.currentRating[0].toUpperCase()}${p.catalog.currentRating.slice(1)}` : null].map((v) => v?.trim()).filter(Boolean).join(" · ")}</div>{p.subCategoryName && <div className="text-2xs">{p.subCategoryName}</div>}</td>
                   <td className="num text-right">{money(p.listPrice)}</td>
                   <td className="num text-right">{money(p.partnerPrice)}<div className="text-2xs text-ink-faint">−{p.partnerDiscountPercent}%</div></td>
                   <td className="num text-right">{money(p.retailPrice)}<div className="text-2xs text-ink-faint">−{p.retailDiscountPercent}%</div></td>

@@ -24,11 +24,18 @@ public static class FamilyAxes
             if (string.IsNullOrEmpty(size) && !string.IsNullOrEmpty(p.VariantLabel) && !p.VariantLabel.Contains(':')) size = p.VariantLabel;
             if (!string.IsNullOrWhiteSpace(size)) values["Size"] = size;
             if (!string.IsNullOrWhiteSpace(p.Length)) values["Length"] = p.Length;
+            // Product attributes (Module / Color / Series / Current rating) — only when set; a "Colour" option written in
+            // the variant label wins over the Color field.
+            foreach (var (name, value) in ProductAttributes.Specs(p))
+                if (!values.ContainsKey(name) && !(name == "Color" && values.ContainsKey("Colour"))) values[name] = value;
             return values;
         }
         var mine = Options(current);
         var rows = products.Select(p => (Product: p, Values: Options(p))).ToList();
-        var names = new[] { "Brand", "Class", "Size", "Length" }.Concat(rows.SelectMany(r => r.Values.Keys)).Distinct().Where(n => rows.Any(r => r.Values.ContainsKey(n))).ToList();
+        // Attribute rows only where the family's variants differ in them (a family where every switch is "White" gets no Color row).
+        var attributes = ProductAttributes.Names.ToArray();
+        var names = new[] { "Brand", "Class", "Size", "Length" }.Concat(rows.SelectMany(r => r.Values.Keys)).Distinct().Where(n => rows.Any(r => r.Values.ContainsKey(n)))
+            .Where(n => !attributes.Contains(n) || rows.Where(r => r.Values.ContainsKey(n)).Select(r => r.Values[n].ToLowerInvariant()).Distinct().Count() > 1).ToList();
         // Rows that agree with the current product on every option above this one (narrow mode only).
         List<(Product Product, Dictionary<string, string> Values)> Pool(string axis) => !narrow ? rows : rows.Where(r =>
             names.TakeWhile(n => n != axis).Where(mine.ContainsKey).All(n => r.Values.GetValueOrDefault(n) == mine[n])).ToList();
