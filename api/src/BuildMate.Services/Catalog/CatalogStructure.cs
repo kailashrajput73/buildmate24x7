@@ -30,19 +30,25 @@ public record FamilyInput(long CategoryId, long BrandId, string Name, string? Im
 public record FamilyDto(long Id, long CategoryId, long BrandId, string Key, string Name, string? ImageUrl);
 public record Facet(string Value, int Count);
 public record IdFacet(long Id, string Name, int Count);
+/// <summary>Filter values of one product attribute (Module, Color, …); <paramref name="Key"/> is its query parameter.</summary>
+public record AttributeFacet(string Key, string Name, List<Facet> Values);
 public record CatalogFacets(List<IdFacet> Types, List<IdFacet> SubCategories, List<IdFacet> Brands,
-    List<Facet> Classes, List<Facet> Sizes, List<Facet> Lengths);
+    List<Facet> Classes, List<Facet> Sizes, List<Facet> Lengths, List<AttributeFacet>? Attributes = null);
 
 public static class CatalogStructure
 {
     public static string Key(string name) => name.Trim().ToUpperInvariant();
 
-    // ---- One card for all brands (PDF "UI flow for Pipe & Fitting / Electrical cable") --------------------------------
-    private static bool IsPipeCategory(string category) => category.Contains("pipe", StringComparison.OrdinalIgnoreCase);
+    // ---- One card per product family for all brands (every module) ------------------------------------------------------
+    // Family identity = category + Type + family key (the family name in capitals). The brand is NOT part of it, so
+    // "Switches" of WIT and of Anchor is one card and the product page offers both brands — the same way as "CPVC PIPE".
     private static bool IsElectricalCable(string category, string typeKey) =>
         category.Contains("electric", StringComparison.OrdinalIgnoreCase) && typeKey.Trim().ToUpperInvariant() is "CABLE" or "CABLES";
-    /// <summary>Automatic rule when the admin hasn't chosen: Pipe &amp; Fitting (every type) and Electrical › Cable.</summary>
-    public static bool AllBrands(ProductType t, string categoryName) => t.GroupAcrossBrands ?? (IsPipeCategory(categoryName) || IsElectricalCable(categoryName, t.Key));
+    /// <summary>
+    /// One card for all brands unless the admin set "One card per brand" for this Type (Dashboard › Types &amp; families).
+    /// The automatic rule is the same for every module — no category, brand or family names are coded here.
+    /// </summary>
+    public static bool AllBrands(ProductType t, string categoryName) => t.GroupAcrossBrands ?? true;
     public static string ClassLabel(ProductType? t, string categoryName) =>
         t == null ? "Class" : t.ClassLabel ?? (IsElectricalCable(categoryName, t.Key) ? "Color" : "Class");
 
@@ -53,12 +59,31 @@ public static class CatalogStructure
         return types.Where(t => AllBrands(t.Type, t.Category)).Select(t => t.Type.Id).ToList();
     }
 
-    /// <summary>"CPVC" + "PIPE" → "CPVC PIPE"; a family that already names its type ("CPVC Pipe") is kept as is.</summary>
+    /// <summary>Ids of the types the admin set to "One card per brand" (their families stay per brand, as before).</summary>
+    public static async Task<List<long>> PerBrandTypeIdsAsync(AppDbContext db, CancellationToken ct)
+    {
+        var types = await db.ProductTypes.AsNoTracking().Select(t => new { Type = t, Category = t.Category.Name }).ToListAsync(ct);
+        return types.Where(t => !AllBrands(t.Type, t.Category)).Select(t => t.Type.Id).ToList();
+    }
+
+    /// <summary>
+    /// "CPVC" + "PIPE" → "CPVC PIPE". A family that already names its type is kept as is ("CPVC Pipe", or "Switches"
+    /// for the type "Switch" / "Modular Switches" — singular and plural count as the same word).
+    /// </summary>
     public static string CardTitle(string? typeName, string familyName)
     {
         if (string.IsNullOrWhiteSpace(typeName)) return familyName;
-        var words = familyName.Split(new[] { ' ', '-', '/' }, StringSplitOptions.RemoveEmptyEntries);
-        return words.Any(w => string.Equals(w, typeName.Trim(), StringComparison.OrdinalIgnoreCase)) ? familyName : $"{typeName.Trim()} {familyName}";
+        static string[] Words(string x) => x.Split(new[] { ' ', '-', '/', '&', ',' }, StringSplitOptions.RemoveEmptyEntries);
+        static bool Same(string a, string b)
+        {
+            a = a.ToLowerInvariant(); b = b.ToLowerInvariant();
+            return a == b || a + "s" == b || b + "s" == a || a + "es" == b || b + "es" == a;
+        }
+        var family = Words(familyName);
+        var type = typeName.Trim();
+        var named = family.Any(w => string.Equals(w, type, StringComparison.OrdinalIgnoreCase))
+                    || Words(type).Any(t => t.Length > 2 && family.Any(w => Same(w, t)));
+        return named ? familyName : $"{type} {familyName}";
     }
 
     /// <summary>Store order of pipe materials when Sort order is equal: UPVC, CPVC, PVC, then A–Z.</summary>
@@ -164,12 +189,28 @@ public static class ProductAttributes
         return value;
     }
 
-    /// <summary>The non-empty fields as name/value pairs for the product page, in a fixed order.</summary>
-    public static IEnumerable<(string Name, string Value)> Specs(Product p)
+    /// <summary>One product attribute shown on the shop: label, query parameter (filters) and the product's display value.</summary>
+    public record Definition(string Name, string Key, Func<Product, string?> Value);
+
+    /// <summary>
+    /// THE list of product attributes the shop shows (specification row, option row on the product page, listing filter).
+    /// To add an attribute later: add its column and one line here. Order = order on the product page.
+    /// </summary>
+    public static readonly IReadOnlyList<Definition> All = new Definition[]
     {
-        if (!string.IsNullOrWhiteSpace(p.Module)) yield return ("Module", p.Module);
-        if (!string.IsNullOrWhiteSpace(p.Color)) yield return ("Color", p.Color);
-        if (!string.IsNullOrWhiteSpace(p.Series)) yield return ("Series", p.Series);
-        if (!string.IsNullOrWhiteSpace(p.CurrentRating)) yield return ("Current rating", char.ToUpperInvariant(p.CurrentRating[0]) + p.CurrentRating[1..]);
-    }
+        new("Module", "module", p => Text(p.Module)),
+        new("Color", "color", p => Text(p.Color)),
+        new("Series", "series", p => Text(p.Series)),
+        // Stored as volt / watt / amp; shown as Volt / Watt / Amp (no number or unit is added).
+        new("Current Rating", "currentRating", p => Text(p.CurrentRating) is { } r ? char.ToUpperInvariant(r[0]) + r[1..] : null),
+    };
+
+    public static IEnumerable<string> Names => All.Select(a => a.Name);
+
+    /// <summary>Trimmed value; empty / whitespace-only = no value (never shown).</summary>
+    private static string? Text(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>The non-empty fields as name/value pairs for the product page, in a fixed order.</summary>
+    public static IEnumerable<(string Name, string Value)> Specs(Product p) =>
+        All.Select(a => (a.Name, Value: a.Value(p))).Where(x => x.Value != null).Select(x => (x.Name, x.Value!));
 }

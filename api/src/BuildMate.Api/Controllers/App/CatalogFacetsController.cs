@@ -36,6 +36,24 @@ public class CatalogFacetsController : ControllerBase
         var sizes = await q.Where(p => p.Size != null).GroupBy(p => p.Size!).Select(g => new Facet(g.Key, g.Count())).ToListAsync(ct);
         var lengths = await q.Where(p => p.Length != null).GroupBy(p => p.Length!).Select(g => new Facet(g.Key, g.Count())).ToListAsync(ct);
         static List<Facet> Sort(List<Facet> items) => items.OrderBy(x => CatalogMeasure.Parse(x.Value)?.Dimension).ThenBy(x => CatalogMeasure.Parse(x.Value)?.NormalizedValue ?? decimal.MaxValue).ThenBy(x => x.Value).ToList();
-        return new(types, subs, brands, classes.OrderBy(x => x.Value).ToList(), Sort(sizes), Sort(lengths));
+        // Module / Color / Series / Current Rating: one list per attribute that at least one product has (others are left out,
+        // so the shop shows no empty filter). Same value in other letter case = one entry.
+        var combos = await q.Where(p => p.Module != null || p.Color != null || p.Series != null || p.CurrentRating != null)
+            .GroupBy(p => new { p.Module, p.Color, p.Series, p.CurrentRating })
+            .Select(g => new { g.Key.Module, g.Key.Color, g.Key.Series, g.Key.CurrentRating, Count = g.Count() }).ToListAsync(ct);
+        var rows = combos.Select(c => (Product: new Domain.Entities.Product { Module = c.Module, Color = c.Color, Series = c.Series, CurrentRating = c.CurrentRating }, c.Count)).ToList();
+        var attributes = ProductAttributes.All
+            .Select(a => new AttributeFacet(a.Key, a.Name, rows.Select(r => (Value: a.Value(r.Product), r.Count)).Where(r => r.Value != null)
+                .GroupBy(r => r.Value!.ToLowerInvariant()).Select(g => new Facet(g.Min(x => x.Value)!, g.Sum(x => x.Count)))
+                .OrderBy(f => LeadingNumber(f.Value)).ThenBy(f => f.Value, StringComparer.OrdinalIgnoreCase).ToList()))
+            .Where(a => a.Values.Count > 0).ToList();
+        return new(types, subs, brands, classes.OrderBy(x => x.Value).ToList(), Sort(sizes), Sort(lengths), attributes);
+    }
+
+    /// <summary>"2M" before "12M"; values without a leading number after them, A–Z.</summary>
+    private static decimal LeadingNumber(string value)
+    {
+        var digits = new string(value.TakeWhile(c => char.IsDigit(c) || c == '.').ToArray());
+        return decimal.TryParse(digits, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var n) ? n : decimal.MaxValue;
     }
 }

@@ -41,7 +41,7 @@ export default function CatalogStructure() {
           <Field label="Type name"><Input required value={type.name ?? ''} onChange={e => setType({ ...type, name: e.target.value })} /></Field>
           <Toggle label="Active Type" checked={type.isActive ?? true} onChange={isActive => setType({ ...type, isActive })} />
           <Field label="Sort order" hint="Lower comes first in the shop. With equal numbers: UPVC, CPVC, PVC, then A–Z."><Input type="number" value={type.sortOrder ?? 0} onChange={e => setType({ ...type, sortOrder: Number(e.target.value) || 0 })} /></Field>
-          <Field label="Product cards" hint={`Automatic: ${type.id ? (type.allBrands ? 'one card for all brands' : 'one card per brand') : 'all brands for Pipe & Fitting and Electrical › Cable'}.`}>
+          <Field label="Product cards" hint={`Automatic: ${type.id ? (type.allBrands ? 'one card for all brands' : 'one card per brand') : 'one card for all brands'}.`}>
             <Select value={type.groupAcrossBrandsSetting == null ? '' : String(type.groupAcrossBrandsSetting)} onChange={e => setType({ ...type, groupAcrossBrandsSetting: e.target.value === '' ? null : e.target.value === 'true' })}>
               <option value="">Automatic</option><option value="true">One card for all brands (e.g. "CPVC PIPE")</option><option value="false">One card per brand</option>
             </Select>

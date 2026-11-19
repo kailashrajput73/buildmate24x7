@@ -394,8 +394,16 @@ const brName = (id) => brands.find((b) => b.id === id)?.name
 const avail = (p) => r2(p.stockQty - p.reservedQty)
 const price = (p, d) => r2(p.listPrice * (1 - d / 100))
 // Catalogue structure as the API has it (Type, Class, Size, Length, family) — derived from the demo sheets' specs.
-// Same rules as CatalogStructure.cs: Pipe & Fitting types and Electrical › Cable show one card per family for all brands.
+// Same rules as CatalogStructure.cs: every Type shows one card per family for all brands unless set to "One card per brand".
 const productTypes = []
+// THE list of product attributes the shop shows (same as ProductAttributes.All in the API).
+const attrText = (x) => (typeof x === 'string' && x.trim() ? x.trim() : null)
+const ATTRIBUTES = [
+  { name: 'Module', key: 'module', value: (p) => attrText(p.catalog?.module) },
+  { name: 'Color', key: 'color', value: (p) => attrText(p.catalog?.color) },
+  { name: 'Series', key: 'series', value: (p) => attrText(p.catalog?.series) },
+  { name: 'Current Rating', key: 'currentRating', value: (p) => { const r = attrText(p.catalog?.currentRating); return r ? r[0].toUpperCase() + r.slice(1) : null } },
+]
 const familyCards = [] // { categoryId, productTypeId, key, imageUrl }
 const specOf = (p, ...names) => { for (const n of names) { const v = p.specs.find((x) => x.toLowerCase().startsWith(n.toLowerCase() + ':')); if (v) return v.slice(v.indexOf(':') + 1).trim() } return null }
 const typeFor = (categoryId, name, subCategoryId) => {
@@ -419,14 +427,21 @@ for (const p of products) {
     p.productTypeId = t.id; p.productClass = specOf(p, 'Colour', 'Color'); p.size = specOf(p, 'Size'); p.length = specOf(p, 'Length')
     p.familyName = p.variantFamily.replace(new RegExp(`^${esc(brand)}\\s+`, 'i'), '').trim()
   }
-  p.productTypeId ??= null; p.productClass ??= null; p.size ??= null; p.length ??= null; p.familyName ??= null
-  p.familyKey = p.familyName?.toUpperCase() ?? null
+  p.productTypeId ??= null; p.productClass ??= null; p.size ??= null; p.length ??= null
+  // No catalogue family: the legacy Variant Family name is the family (trimmed, in capitals), as in CatalogService.
+  p.familyName ??= p.variantFamily ?? null
+  p.familyKey = p.familyName?.trim().toUpperCase() ?? null
 }
 const typeOf = (p) => productTypes.find((t) => t.id === p.productTypeId)
-const allBrandsType = (t) => !!t && (t.groupAcrossBrands ?? (/pipe/i.test(catName(t.categoryId)) || (/electric/i.test(catName(t.categoryId)) && t.key === 'CABLE')))
+const allBrandsType = (t) => !!t && (t.groupAcrossBrands ?? true)
 const classLabelOf = (t) => (t ? t.classLabel ?? (/electric/i.test(catName(t.categoryId)) && t.key === 'CABLE' ? 'Color' : 'Class') : 'Class')
-const sharedFamily = (p) => !!p.familyKey && allBrandsType(typeOf(p))
-const cardTitle = (typeName, family) => (!typeName || family.split(/[\s\-/]+/).some((w) => w.toLowerCase() === typeName.toLowerCase()) ? family : `${typeName} ${family}`)
+const sharedFamily = (p) => !!p.familyKey && (p.productTypeId == null || allBrandsType(typeOf(p)))
+const sameWord = (a, b) => { a = a.toLowerCase(); b = b.toLowerCase(); return a === b || a + 's' === b || b + 's' === a || a + 'es' === b || b + 'es' === a }
+const cardTitle = (typeName, family) => {
+  if (!typeName?.trim()) return family
+  const words = (x) => x.split(/[\s\-/&,]+/).filter(Boolean), f = words(family), t = typeName.trim()
+  return f.some((w) => w.toLowerCase() === t.toLowerCase()) || words(t).some((tw) => tw.length > 2 && f.some((w) => sameWord(w, tw))) ? family : `${t} ${family}`
+}
 const MATERIAL_RANK = { UPVC: 0, CPVC: 1, PVC: 2 }
 const typeDto = (t) => ({ id: t.id, categoryId: t.categoryId, name: t.name, sortOrder: t.sortOrder, isActive: t.isActive, subCategoryIds: t.subCategoryIds, allBrands: allBrandsType(t), classLabel: classLabelOf(t), groupAcrossBrandsSetting: t.groupAcrossBrands, classLabelSetting: t.classLabel, imageUrl: t.imageUrl ?? null })
 const typesInOrder = (list) => [...list].sort((a, b) => a.sortOrder - b.sortOrder || (MATERIAL_RANK[a.key] ?? 100) - (MATERIAL_RANK[b.key] ?? 100) || a.name.localeCompare(b.name))
@@ -440,7 +455,8 @@ const localName = (p, lang) => (lang && lang !== 'en' && p.translations[lang]) |
 const card = (p, v) => {
   const d = v.kind === 'Partner' ? p.partnerDiscountPercent : p.retailDiscountPercent
   return { id: p.id, code: p.code, name: localName(p, v.lang), brandName: brName(p.brandId), categoryId: p.categoryId, unit: p.unit, imageUrl: p.imageUrls[0] ?? null, mrp: p.mrp, listPrice: p.listPrice, discountPercent: d, price: price(p, d), inStock: avail(p) > 0, rewardPoints: v.kind === 'Partner' ? p.rewardPointsPerUnit : null, family: p.variantFamily, variantLabel: p.variantLabel ? displayLabel(p.variantLabel) : null, variantCount: 1, fromPrice: null, variantSummary: null,
-    catalog: { typeId: p.productTypeId, typeName: typeOf(p)?.name ?? null, class: p.productClass, productFamily: p.familyName ?? p.variantFamily, size: p.size, length: p.length } }
+    catalog: { typeId: p.productTypeId, typeName: typeOf(p)?.name ?? null, class: p.productClass, productFamily: p.familyName ?? p.variantFamily, size: p.size, length: p.length,
+      module: attrText(p.catalog?.module), color: attrText(p.catalog?.color), series: attrText(p.catalog?.series), currentRating: attrText(p.catalog?.currentRating) } }
 }
 const orderList = (o) => ({ id: o.id, orderNo: o.orderNo, createdAt: o.createdAt, channel: o.channel, customerKind: o.customerKind, status: o.status, paymentStatus: o.paymentStatus, fulfilmentType: o.fulfilmentType, scheduledAt: o.scheduledAt, customerName: o.customerName, customerPhone: o.customerPhone, itemCount: o.items.length, grandTotal: o.grandTotal, balanceDue: r2(o.grandTotal - o.amountPaid), rewardPointsEarned: o.rewardPointsEarned, invoiceNo: o.dispatch?.invoiceNo ?? null })
 const editable = (o) => !o.dispatch && ['Paid', 'Processing', 'ReadyForPickup'].includes(o.status)
@@ -573,6 +589,7 @@ function search(q, v) {
   if (q.class) rows = rows.filter((p) => p.productClass === q.class)
   if (q.size) rows = rows.filter((p) => p.size === q.size)
   if (q.length) rows = rows.filter((p) => p.length === q.length)
+  for (const a of ATTRIBUTES) if (q[a.key]?.trim()) rows = rows.filter((p) => (a.value(p) ?? '').toLowerCase() === q[a.key].trim().toLowerCase())
   if (q.groupId) rows = rows.filter((p) => p.groupIds.includes(Number(q.groupId)))
   if (q.inStock === 'true') rows = rows.filter((p) => avail(p) > 0)
   if (q.discounted === 'true' || q.discounted === true) rows = rows.filter((p) => (v.kind === 'Partner' ? p.partnerDiscountPercent : p.retailDiscountPercent) >= 10)
@@ -584,7 +601,7 @@ function search(q, v) {
   if (q.collapse === 'true') res.items = withFamilyInfo(res.items, v, pool)
   return res
 }
-const familyKeyOf = (p) => (sharedFamily(p) ? `t:${p.productTypeId}:${p.familyKey}` : p.variantFamily)
+const familyKeyOf = (p) => (sharedFamily(p) ? `c:${p.categoryId}:t:${p.productTypeId}:${p.familyKey}` : p.variantFamily)
 const firstOfEachFamily = (rows) => { const seen = new Set(); return rows.filter((p) => { const k = familyKeyOf(p); return !k || (!seen.has(k) && seen.add(k)) }) }
 const familyMembers = (fam, v) => visible(v).filter((p) => p.variantFamily === fam).sort((a, b) => a.sequence - b.sequence || a.id - b.id)
 // Option families: a label like "Size: 1.5 sq.mm; Colour: Red; Length: 90 m" (same rules as Catalog/Variants.cs).
@@ -622,9 +639,15 @@ const variantAxes = (currentId, members) => {
 // FamilyAxes.Build(narrow: true): Brand, then Class of that brand, then only Sizes of brand + class, then Lengths.
 const sizeNum = (x) => { const m = /(\d+(?:\.\d+)?)/.exec(x ?? ''); return m ? parseFloat(m[1]) : Infinity }
 function narrowAxes(cur, members, classLabel) {
-  const opts = (p) => Object.fromEntries([['Brand', brName(p.brandId)], ['Class', p.productClass], ['Size', p.size], ['Length', p.length]].filter(([, x]) => x))
+  const ATTRS = ATTRIBUTES.map((a) => a.name)
+  const opts = (p) => {
+    const o = { ...Object.fromEntries(parseOpts(p.variantLabel)), ...Object.fromEntries([['Brand', brName(p.brandId)], ['Class', p.productClass], ['Size', p.size], ['Length', p.length]].filter(([, x]) => x)) }
+    for (const a of ATTRIBUTES) { const x = a.value(p); if (x && o[a.name] == null && !(a.name === 'Color' && o.Colour != null)) o[a.name] = x }
+    return o
+  }
   const rows = members.map((p) => ({ p, o: opts(p) })), mine = opts(cur)
-  const names = ['Brand', 'Class', 'Size', 'Length'].filter((n) => rows.some((r) => r.o[n]))
+  const names = [...new Set(['Brand', 'Class', 'Size', 'Length', ...rows.flatMap((r) => Object.keys(r.o))])].filter((n) => rows.some((r) => r.o[n]))
+    .filter((n) => !ATTRS.includes(n) || new Set(rows.filter((r) => r.o[n] != null).map((r) => r.o[n].toLowerCase())).size > 1)
   const w = (n) => 2 ** (names.length - names.indexOf(n))
   return names.map((axis) => {
     const before = names.slice(0, names.indexOf(axis)).filter((n) => mine[n] != null)
@@ -641,11 +664,12 @@ function narrowAxes(cur, members, classLabel) {
 const withFamilyInfo = (cards, v, pool = visible(v)) => cards.map((c) => {
   const self = products.find((p) => p.id === c.id)
   if (sharedFamily(self)) {
-    const m = pool.filter((p) => p.categoryId === self.categoryId && p.productTypeId === self.productTypeId && p.familyKey === self.familyKey)
+    const m = pool.filter((p) => p.categoryId === self.categoryId && p.productTypeId === self.productTypeId && p.familyKey === self.familyKey && sharedFamily(p))
     if (m.length < 2) return c
+    const brandList = [...new Set(m.map((p) => brands.find((b) => b.id === p.brandId)))].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)).map((b) => b.name)
     const d = (p) => (v.kind === 'Partner' ? p.partnerDiscountPercent : p.retailDiscountPercent)
     const photo = familyCards.find((f) => f.productTypeId === self.productTypeId && f.key === self.familyKey)?.imageUrl
-    return { ...c, name: cardTitle(typeOf(self).name, self.familyName), imageUrl: photo ?? c.imageUrl, variantCount: m.length, fromPrice: Math.min(...m.map((p) => price(p, d(p)))), inStock: m.some((p) => avail(p) > 0), variantSummary: `${m.length} variants`, allBrands: true }
+    return { ...c, name: cardTitle(typeOf(self)?.name, self.familyName), imageUrl: photo ?? c.imageUrl, variantCount: m.length, fromPrice: Math.min(...m.map((p) => price(p, d(p)))), inStock: m.some((p) => avail(p) > 0), variantSummary: `${m.length} variants`, allBrands: true, brands: brandList }
   }
   if (!c.family) return c
   const m = familyMembers(c.family, v)
@@ -656,16 +680,17 @@ const withFamilyInfo = (cards, v, pool = visible(v)) => cards.map((c) => {
 const detail = (p, v) => {
   const c = card(p, v)
   const shared = sharedFamily(p)
-  const members = shared ? visible(v).filter((x) => x.categoryId === p.categoryId && x.productTypeId === p.productTypeId && x.familyKey === p.familyKey).sort((a, b) => a.sequence - b.sequence || a.id - b.id)
+  const members = shared ? visible(v).filter((x) => x.categoryId === p.categoryId && x.productTypeId === p.productTypeId && x.familyKey === p.familyKey && sharedFamily(x)).sort((a, b) => a.sequence - b.sequence || a.id - b.id)
     : p.variantFamily ? familyMembers(p.variantFamily, v) : []
   const d = (x) => (v.kind === 'Partner' ? x.partnerDiscountPercent : x.retailDiscountPercent)
+  const axes = shared ? narrowAxes(p, members, classLabelOf(typeOf(p))) : members.length > 1 ? variantAxes(p.id, members) : []
   const related = firstOfEachFamily(visible(v).filter((x) => x.id !== p.id && x.subCategoryId === p.subCategoryId && (shared ? familyKeyOf(x) !== familyKeyOf(p) : !p.variantFamily || x.variantFamily !== p.variantFamily)).sort((a, b) => a.sequence - b.sequence)).slice(0, 8)
   return {
     ...c, description: p.description, brandId: p.brandId, categoryName: catName(p.categoryId), subCategoryId: p.subCategoryId, subCategoryName: subName(p.subCategoryId), hsnCode: p.hsnCode, gstRate: p.gstRate, imageUrls: p.imageUrls, maxOrderQty: Math.max(0, avail(p)), otherNames: [...Object.values(p.translations), ...p.aliases],
     related: withFamilyInfo(related.map((x) => card(x, v)), v),
     variants: members.length > 1 ? members.map((x) => ({ id: x.id, code: x.code, label: x.variantLabel ? displayLabel(x.variantLabel) : x.name, mrp: x.mrp, price: price(x, d(x)), inStock: avail(x) > 0 })) : [],
-    variantAxes: shared ? narrowAxes(p, members, classLabelOf(typeOf(p))) : members.length > 1 ? variantAxes(p.id, members) : [],
-    specs: withAttrs(p.specs.map((x) => { const i = x.indexOf(':'); return { name: x.slice(0, i).trim(), value: x.slice(i + 1).trim() } }).filter((x) => x.name && x.value), p),
+    variantAxes: axes,
+    specs: withAttrs(p.specs.map((x) => { const i = x.indexOf(':'); return { name: x.slice(0, i).trim(), value: x.slice(i + 1).trim() } }).filter((x) => x.name && x.value), p, axes),
   }
 }
 const storeInfo = () => ({ storeName: settings.storeName, supportPhone: settings.supportPhone, whatsAppNumber: settings.whatsAppNumber, supportEmail: settings.supportEmail, address: [settings.addressLine, settings.city, settings.state, settings.pincode].filter(Boolean).join(', '), openingHours: settings.openingHours, minOrderValue: settings.minOrderValue, deliveryFee: settings.deliveryFee, freeDeliveryAbove: settings.freeDeliveryAbove, homeDeliveryEnabled: settings.homeDeliveryEnabled, storePickupEnabled: settings.storePickupEnabled, supportedLanguages: settings.supportedLanguages, androidAppUrl: settings.androidAppUrl, iosAppUrl: settings.iosAppUrl, minAppVersion: settings.minAppVersion })
@@ -707,7 +732,11 @@ on('GET', '/api/catalog/facets', ({ req, uid, q }) => {
   const brandsF = count(rows, (p) => p.brandId, (p) => ({ id: p.brandId, name: brName(p.brandId) }))
   if (q.brandId) rows = rows.filter((p) => p.brandId == q.brandId)
   const vals = (key) => count(rows, (p) => p[key], (p) => ({ value: p[key] })).sort((a, b) => sizeNum(a.value) - sizeNum(b.value) || a.value.localeCompare(b.value))
-  return { types, subCategories: subs, brands: brandsF, classes: vals('productClass').sort((a, b) => a.value.localeCompare(b.value)), sizes: vals('size'), lengths: vals('length') }
+  const attributes = ATTRIBUTES.map((a) => {
+    const m = new Map(); for (const p of rows) { const x = a.value(p); if (!x) continue; const k = x.toLowerCase(); const e = m.get(k) ?? { value: x, count: 0 }; e.count++; m.set(k, e) }
+    return { key: a.key, name: a.name, values: [...m.values()].sort((x, y) => (parseFloat(x.value) || Infinity) - (parseFloat(y.value) || Infinity) || x.value.localeCompare(y.value)) }
+  }).filter((a) => a.values.length)
+  return { types, subCategories: subs, brands: brandsF, classes: vals('productClass').sort((a, b) => a.value.localeCompare(b.value)), sizes: vals('size'), lengths: vals('length'), attributes }
 })
 on('GET', '/api/admin/catalog-structure/types', ({ q }) => typesInOrder(productTypes.filter((t) => !q.categoryId || t.categoryId == q.categoryId)).map(typeDto))
 on('PUT', '/api/admin/catalog-structure/types/:id', ({ p, body }) => {
@@ -1148,10 +1177,11 @@ const checkAttrs = (body) => {
   const t = (v) => (v ?? '').trim() || null
   return { ...body, catalog: { ...c, module: t(c.module), color: t(c.color), series: t(c.series), currentRating: r && r !== 'none' ? r : null } }
 }
-const withAttrs = (specs, p) => {
-  const c = p.catalog ?? {}
-  for (const [name, value] of [['Module', c.module], ['Color', c.color], ['Series', c.series], ['Current rating', c.currentRating && c.currentRating[0].toUpperCase() + c.currentRating.slice(1)]])
-    if (value && !specs.some((s) => s.name.toLowerCase() === name.toLowerCase())) specs.push({ name, value })
+const withAttrs = (specs, p, axes = []) => {
+  for (const a of ATTRIBUTES) {
+    const value = a.value(p)
+    if (value && !specs.some((s) => s.name.toLowerCase() === a.name.toLowerCase()) && !axes.some((x) => x.name.toLowerCase() === a.name.toLowerCase())) specs.push({ name: a.name, value })
+  }
   return specs
 }
 const upsert = (arr, id, body) => { if (id) { const x = arr.find((y) => y.id == id); Object.assign(x, body); return x } const x = { id: Math.max(0, ...arr.map((y) => y.id)) + 1, ...body }; arr.push(x); return x }

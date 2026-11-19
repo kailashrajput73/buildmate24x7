@@ -66,7 +66,9 @@ public record ProductCardDto(
     string? Family = null, string? VariantLabel = null, int VariantCount = 1, decimal? FromPrice = null,
     string? VariantSummary = null, CatalogFields? Catalog = null,
     // One card for every brand of a family ("CPVC PIPE"): the shop shows Name without a brand.
-    bool AllBrands = false);
+    bool AllBrands = false,
+    // AllBrands cards: the family's brands (store brand order), e.g. ["Anchor", "WIT"]. Null on other cards.
+    List<string>? Brands = null);
 
 public record ProductDetailDto(
     long Id, string Code, string Name, string? Description, long BrandId, string BrandName,

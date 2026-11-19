@@ -36,9 +36,11 @@ const sortOptions: { sort: string; label: string }[] = [
   { sort: 'newest', label: 'What’s New' },
   { sort: 'price_desc', label: 'Price (highest first)' },
 ];
-type OpenMenu = 'sort' | 'size' | 'brand' | 'class' | 'length' | null;
+type OpenMenu = 'sort' | 'size' | 'brand' | 'class' | 'length' | `attr:${string}` | null;
 type TypeRef = { id: number; name: string; subCategoryIds: number[]; classLabel?: string; imageUrl?: string | null };
-type Facets = { types: { id: number; name: string; count: number }[]; brands: { id: number; name: string }[]; classes: { value: string }[]; sizes: { value: string }[]; lengths: { value: string }[] };
+type Facets = { types: { id: number; name: string; count: number }[]; brands: { id: number; name: string }[]; classes: { value: string }[]; sizes: { value: string }[]; lengths: { value: string }[];
+  /** Module, Color, Series, Current Rating … — only attributes some product has (from the API's central list). */
+  attributes?: { key: string; name: string; values: { value: string }[] }[] };
 
 const Pagination = styled.nav`
   display: flex; align-items: center; justify-content: center; gap: 16px; margin: 20px 0;
@@ -139,7 +141,7 @@ export function CategoryBrowse({ categoryId, categoryName }: { categoryId: numbe
   const navigate = useNavigate();
   const maybePop = useMaybePop();
   const { raw: tree } = useCatalog();
-  const reset = { typeId: '', subCategoryId: '', brandId: '', class: '', size: '', length: '', sort: '', page: 1 };
+  const reset = { typeId: '', subCategoryId: '', brandId: '', class: '', size: '', length: '', attrs: {} as Record<string, string>, sort: '', page: 1 };
   const [filters, setFilters] = useState(reset);
   const [types, setTypes] = useState<TypeRef[]>([]);
   const [facets, setFacets] = useState<Facets>({ types: [], brands: [], classes: [], sizes: [], lengths: [] });
@@ -149,13 +151,15 @@ export function CategoryBrowse({ categoryId, categoryName }: { categoryId: numbe
   const [retry, setRetry] = useState(0);
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
+  const attrRefs = useRef<Record<string, RefObject<HTMLButtonElement>>>({});
+  const attrRef = (key: string) => (attrRefs.current[key] ??= { current: null });
   const refs = { sort: useRef<HTMLButtonElement>(null), size: useRef<HTMLButtonElement>(null), brand: useRef<HTMLButtonElement>(null), class: useRef<HTMLButtonElement>(null), length: useRef<HTMLButtonElement>(null) };
 
   useEffect(() => { setFilters(reset); }, [categoryId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     let alive = true;
     setLoading(true); setError('');
-    const params = new URLSearchParams({ categoryId: String(categoryId), collapse: 'true', pageSize: String(PAGE_SIZE), ...Object.fromEntries(Object.entries(filters).map(([k, v]) => [k, String(v)])) });
+    const params = new URLSearchParams({ categoryId: String(categoryId), collapse: 'true', pageSize: String(PAGE_SIZE), ...Object.fromEntries(Object.entries(filters).filter(([k]) => k !== 'attrs').map(([k, v]) => [k, String(v)])), ...Object.fromEntries(Object.entries(filters.attrs).filter(([, v]) => v)) });
     Promise.all([
       api<Paged<Card_>>(`/api/catalog/products?${params}`),
       api<TypeRef[]>(`/api/catalog/types?categoryId=${categoryId}`),
@@ -183,7 +187,8 @@ export function CategoryBrowse({ categoryId, categoryName }: { categoryId: numbe
 
   const toggleMenu = (menu: Exclude<OpenMenu, null>, width: number) => {
     if (openMenu === menu) { setOpenMenu(null); return; }
-    const pos = menuPositionFor(refs[menu].current, width, theme.spacing.space3, theme.spacing.space1);
+    const el = menu.startsWith('attr:') ? attrRef(menu.slice(5)).current : refs[menu as keyof typeof refs].current;
+    const pos = menuPositionFor(el, width, theme.spacing.space3, theme.spacing.space1);
     if (!pos) return;
     setMenuPosition(pos);
     setOpenMenu(menu);
@@ -191,16 +196,25 @@ export function CategoryBrowse({ categoryId, categoryName }: { categoryId: numbe
   const close = () => setOpenMenu(null);
   const pick = (patch: Partial<typeof filters>) => () => { set(patch); close(); };
   const listTiles = (values: { key: string; label: string }[], current: string, key: 'brandId' | 'class' | 'size' | 'length', allLabel: string) => (q: string): Tile[] => [
-    ...(q === '' ? [{ key: '__all', label: allLabel, selected: current === '', onSelect: pick({ [key]: '', ...(key === 'brandId' ? { class: '', size: '', length: '' } : {}) }) }] : []),
+    ...(q === '' ? [{ key: '__all', label: allLabel, selected: current === '', onSelect: pick({ [key]: '', ...(key === 'brandId' ? { class: '', size: '', length: '', attrs: {} } : {}) }) }] : []),
     ...values.filter((v) => v.label.toLowerCase().includes(q.toLowerCase())).map((v) => ({
-      key: v.key, label: v.label, selected: current === v.key, onSelect: pick({ [key]: v.key, ...(key === 'brandId' ? { class: '', size: '', length: '' } : {}) }),
+      key: v.key, label: v.label, selected: current === v.key, onSelect: pick({ [key]: v.key, ...(key === 'brandId' ? { class: '', size: '', length: '', attrs: {} } : {}) }),
     })),
   ];
   const values = (list: { value: string }[]) => list.map((v) => ({ key: v.value, label: v.value }));
+  const setAttr = (key: string, value: string) => set({ attrs: { ...filters.attrs, [key]: value } });
+  const attrTiles = (a: NonNullable<Facets['attributes']>[number]) => (q: string): Tile[] => [
+    ...(q === '' ? [{ key: '__all', label: `All ${a.name}`, selected: !filters.attrs[a.key], onSelect: () => { setAttr(a.key, ''); close(); } }] : []),
+    ...a.values.filter((v) => v.value.toLowerCase().includes(q.toLowerCase())).map((v) => ({
+      key: v.value, label: v.value, selected: filters.attrs[a.key] === v.value, onSelect: () => { setAttr(a.key, v.value); close(); },
+    })),
+  ];
+  const openAttr = openMenu?.startsWith('attr:') ? facets.attributes?.find((a) => `attr:${a.key}` === openMenu) : undefined;
 
   let menu: ReactNode = null;
   if (openMenu && menuPosition) {
-    menu = openMenu === 'sort'
+    menu = openAttr ? <DropdownMenu position={menuPosition} searchHint={`Search ${openAttr.name.toLowerCase()}...`} onClose={close} tiles={attrTiles(openAttr)} />
+      : openMenu === 'sort'
       ? <DropdownMenu position={menuPosition} searchHint="Search sort options..." onClose={close}
           tiles={(q) => sortOptions.filter((o) => o.label.toLowerCase().includes(q.toLowerCase())).map((o) => ({ key: o.sort || 'all', label: o.label, selected: filters.sort === o.sort, onSelect: pick({ sort: o.sort }) }))} />
       : openMenu === 'size' ? <DropdownMenu position={menuPosition} searchHint="Search size..." onClose={close} tiles={listTiles(values(facets.sizes), filters.size, 'size', 'All Sizes')} />
@@ -232,6 +246,8 @@ export function CategoryBrowse({ categoryId, categoryName }: { categoryId: numbe
             {(facets.brands.length > 1 || filters.brandId) && <FilterDropdownButton buttonRef={refs.brand} label={brandName ?? 'Brand'} onClick={() => toggleMenu('brand', 220)} />}
             {facets.classes.length > 0 && <FilterDropdownButton buttonRef={refs.class} label={filters.class || classLabel} onClick={() => toggleMenu('class', 200)} />}
             {facets.lengths.length > 0 && <FilterDropdownButton buttonRef={refs.length} label={filters.length || 'Length'} onClick={() => toggleMenu('length', 200)} />}
+            {/* Module / Color / Series / Current Rating: one button per attribute that products here have values for. */}
+            {(facets.attributes ?? []).map((a) => <FilterDropdownButton key={a.key} buttonRef={attrRef(a.key)} label={filters.attrs[a.key] || a.name} onClick={() => toggleMenu(`attr:${a.key}`, 200)} />)}
           </FilterRow>
           <SearchSlot>
             <HeaderIconButton type="button" aria-label="Search" onClick={() => navigate(AppRoutes.search)}><i className="pi pi-search" aria-hidden="true" /></HeaderIconButton>
@@ -277,14 +293,14 @@ export function CategoryBrowse({ categoryId, categoryName }: { categoryId: numbe
             <>
               <SidebarGap $size={theme.spacing.space3} />
               <SidebarSectionLabel>Sub-category</SidebarSectionLabel>
-              <SidebarSubRow type="button" $selected={!filters.subCategoryId} aria-pressed={!filters.subCategoryId} onClick={() => set({ subCategoryId: '', brandId: '', class: '', size: '', length: '' })}>
+              <SidebarSubRow type="button" $selected={!filters.subCategoryId} aria-pressed={!filters.subCategoryId} onClick={() => set({ subCategoryId: '', brandId: '', class: '', size: '', length: '', attrs: {} })}>
                 <RowLabel $selected={!filters.subCategoryId} $sub>All</RowLabel>
               </SidebarSubRow>
               {subs.map((s) => {
                 const on = filters.subCategoryId === String(s.id);
                 const Row = s.imageUrl ? SidebarSubImageRow : SidebarSubRow;
                 return (
-                  <Row key={s.id} type="button" $selected={on} aria-pressed={on} onClick={() => set({ subCategoryId: String(s.id), brandId: '', class: '', size: '', length: '' })}>
+                  <Row key={s.id} type="button" $selected={on} aria-pressed={on} onClick={() => set({ subCategoryId: String(s.id), brandId: '', class: '', size: '', length: '', attrs: {} })}>
                     {/* Only the image uploaded for this sub category in the dashboard; none (or failed) = nothing shown. */}
                     {s.imageUrl && <SubThumb src={s.imageUrl} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
                     <RowLabel $selected={on} $sub>{subLabel(s.name)}</RowLabel>
@@ -316,9 +332,10 @@ export function CategoryBrowse({ categoryId, categoryName }: { categoryId: numbe
             <ResultsBar>
               <ResultsCount><strong>{total}</strong> {total === 1 ? 'result' : 'results'}</ResultsCount>
               {filters.size && <FilterChip type="button" aria-label={`Clear size ${filters.size}`} onClick={() => set({ size: '' })}>{filters.size}<i className="pi pi-times" aria-hidden="true" /></FilterChip>}
-              {brandName && <FilterChip type="button" aria-label={`Clear brand ${brandName}`} onClick={() => set({ brandId: '', class: '', size: '', length: '' })}>{brandName}<i className="pi pi-times" aria-hidden="true" /></FilterChip>}
+              {brandName && <FilterChip type="button" aria-label={`Clear brand ${brandName}`} onClick={() => set({ brandId: '', class: '', size: '', length: '', attrs: {} })}>{brandName}<i className="pi pi-times" aria-hidden="true" /></FilterChip>}
               {filters.class && <FilterChip type="button" aria-label={`Clear ${classLabel.toLowerCase()} ${filters.class}`} onClick={() => set({ class: '' })}>{filters.class}<i className="pi pi-times" aria-hidden="true" /></FilterChip>}
               {filters.length && <FilterChip type="button" aria-label={`Clear length ${filters.length}`} onClick={() => set({ length: '' })}>{filters.length}<i className="pi pi-times" aria-hidden="true" /></FilterChip>}
+              {Object.entries(filters.attrs).filter(([, v]) => v).map(([k, v]) => <FilterChip key={k} type="button" aria-label={`Clear ${v}`} onClick={() => setAttr(k, '')}>{v}<i className="pi pi-times" aria-hidden="true" /></FilterChip>)}
             </ResultsBar>
             {!data?.items.length ? (
               <StateMsg icon="pi-box" title={category?.productCount === 0 ? 'Coming soon' : 'No products match'} subtitle={category?.productCount === 0 ? 'Products in this category are being added.' : 'Try another type or clear a filter.'} />

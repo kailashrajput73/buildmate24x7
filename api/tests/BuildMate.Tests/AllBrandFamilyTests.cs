@@ -63,12 +63,14 @@ public class AllBrandFamilyTests
         Assert.Equal("90 m | 180 m", Values(axes, "Length"));
     }
 
+    // Global family grouping: every module shows one card per family for all brands unless the admin chose "One card per brand".
     [Theory]
     [InlineData("Pipe & Fitting", "CPVC", true, "Class")]
     [InlineData("Pipes & Fittings", "UPVC", true, "Class")]
     [InlineData("Electrical", "CABLE", true, "Color")]
-    [InlineData("Electrical", "SWITCH", false, "Class")]
-    [InlineData("Paints", "EMULSION", false, "Class")]
+    [InlineData("Electrical", "SWITCH", true, "Class")]
+    [InlineData("Paints", "EMULSION", true, "Class")]
+    [InlineData("Sanitary", "FAUCETS", true, "Class")]
     public void Automatic_rules(string category, string typeKey, bool allBrands, string label)
     {
         var t = new ProductType { Key = typeKey, Name = typeKey };
@@ -83,6 +85,7 @@ public class AllBrandFamilyTests
         Assert.True(CatalogStructure.AllBrands(t, "Electrical"));
         Assert.Equal("Finish", CatalogStructure.ClassLabel(t, "Electrical"));
         Assert.False(CatalogStructure.AllBrands(new ProductType { Key = "CPVC", GroupAcrossBrands = false }, "Pipe & Fitting"));
+        Assert.False(CatalogStructure.AllBrands(new ProductType { Key = "SWITCH", GroupAcrossBrands = false }, "Electrical"));
     }
 
     [Theory]
@@ -90,5 +93,37 @@ public class AllBrandFamilyTests
     [InlineData("CPVC", "CPVC Pipe", "CPVC Pipe")]
     [InlineData("Cable", "CCTV", "Cable CCTV")]
     [InlineData("Cable", "CCTV Cable", "CCTV Cable")]
-    public void Card_title_has_no_brand(string type, string family, string title) => Assert.Equal(title, CatalogStructure.CardTitle(type, family));
+    [InlineData("Switches", "Switches", "Switches")]
+    [InlineData("Switch", "Switches", "Switches")]            // singular / plural is the same word
+    [InlineData("Modular Switches", "Flat Switches", "Flat Switches")]
+    [InlineData("Faucets", "Pillar Cock", "Faucets Pillar Cock")]
+    [InlineData(null, "Switches", "Switches")]                // no Type
+    public void Card_title_has_no_brand(string? type, string family, string title) => Assert.Equal(title, CatalogStructure.CardTitle(type, family));
+
+    // ---- Product attributes as options (switches: one family for WIT and Anchor) ----
+
+    private static Product S(long id, string brand, string? module, string? color, int seq, decimal stock = 10) => new()
+    {
+        Id = id, Sequence = seq, Brand = new Brand { Name = brand }, Module = module, Color = color, StockQty = stock,
+    };
+
+    [Fact]
+    public void Attributes_that_differ_in_the_family_become_options_others_do_not()
+    {
+        var switches = new List<Product> { S(1, "Anchor", "1M", "White", 1), S(2, "Anchor", "2M", "White", 2), S(3, "WIT", "1M", "White", 3, stock: 0) };
+        var axes = FamilyAxes.Build(switches[0], switches, narrow: true);
+        Assert.Equal("Brand | Module", string.Join(" | ", axes.Select(a => a.Name))); // every switch is White: no Color row
+        Assert.Equal("Anchor | WIT", Values(axes, "Brand"));
+        Assert.Equal("1M | 2M", Values(axes, "Module"));
+        var wit = axes.Single(a => a.Name == "Brand").Choices.Single(c => c.Value == "WIT");
+        Assert.Equal(3, wit.ProductId);   // opens the WIT variant itself
+        Assert.False(wit.InStock);        // shown with "Out of stock", not hidden
+    }
+
+    [Fact]
+    public void Families_without_attributes_get_the_same_options_as_before()
+    {
+        var axes = FamilyAxes.Build(Pipes[0], Pipes, narrow: true);
+        Assert.Equal("Brand | Class | Size", string.Join(" | ", axes.Select(a => a.Name)));
+    }
 }
