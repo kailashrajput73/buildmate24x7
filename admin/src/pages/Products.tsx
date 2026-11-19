@@ -11,6 +11,7 @@ import { money, qty } from '../lib/format'
 import { useAction, useUrlState } from '../lib/hooks'
 import { useBrands, useCategories, useGroups, useProductTypes, useFamilies, useSubCategories } from '../lib/masters'
 import type { Paged, Product } from '../lib/types'
+import AdministratorCatalogDelete from '../components/AdministratorCatalogDelete'
 
 export default function Products() {
   const nav = useNavigate()
@@ -24,6 +25,7 @@ export default function Products() {
   const subs = useSubCategories(Number(f.categoryId) || undefined).data ?? []
   const params = { ...f, lowStockOnly: f.lowStockOnly || undefined, movement: f.movement || undefined, pageSize: 25 }
   const [historyOf, setHistoryOf] = useState<number | null>(null)
+  const [adminDelete, setAdminDelete] = useState<{ kind: string; id: number; label: string } | null>(null)
   const { data, isLoading, error } = useQuery({ queryKey: ['products', params], queryFn: () => api.get<Paged<Product>>('/api/admin/products', params), placeholderData: keepPreviousData })
   const cats = useCategories().data ?? []
   const brands = useBrands().data ?? []
@@ -82,7 +84,7 @@ export default function Products() {
           </Empty>
         ) : (
           <table className="tbl">
-            <thead><tr><th><input type="checkbox" aria-label="Select current page" checked={!!data.items.length && data.items.every(p => selected.includes(p.id))} onChange={e => select(e.target.checked ? [...new Set([...selected, ...data.items.map(p => p.id)])] : selected.filter(id => !data.items.some(p => p.id === id)))} /></th><th /><th>Product</th><th>Category</th><th className="text-right">List</th><th className="text-right">Partner</th><th className="text-right">Retail</th><th className="text-right">Stock</th><th>Movement</th><th>Rack</th><th>Active</th></tr></thead>
+            <thead><tr><th><input type="checkbox" aria-label="Select current page" checked={!!data.items.length && data.items.every(p => selected.includes(p.id))} onChange={e => select(e.target.checked ? [...new Set([...selected, ...data.items.map(p => p.id)])] : selected.filter(id => !data.items.some(p => p.id === id)))} /></th><th /><th>Product</th><th>Category</th><th className="text-right">List</th><th className="text-right">Partner</th><th className="text-right">Retail</th><th className="text-right">Stock</th><th>Movement</th><th>Rack</th><th>Active</th>{can(P.administratorDelete) && <th />}</tr></thead>
             <tbody>
               {data.items.map((p) => (
                 <tr key={p.id}><td><input type="checkbox" aria-label={`Select ${p.code}`} checked={selected.includes(p.id)} onChange={e => select(e.target.checked ? [...selected, p.id] : selected.filter(id => id !== p.id))} /></td>
@@ -110,6 +112,7 @@ export default function Products() {
                   </td>
                   <td className="text-xs">{p.rackLocations.join(', ') || '—'}</td>
                   <td><Toggle checked={p.isActive} disabled={!can(P.catalogManage)} onChange={(v) => toggle.mutate({ id: p.id, value: v })} /></td>
+                  {can(P.administratorDelete) && <td><Button size="sm" variant="danger" onClick={() => setAdminDelete({ kind: 'product', id: p.id, label: `product “${p.name}”` })}>Delete</Button></td>}
                 </tr>
               ))}
             </tbody>
@@ -119,6 +122,7 @@ export default function Products() {
       </div>
 
       <MovementHistoryDrawer productId={historyOf} onClose={() => setHistoryOf(null)} />
+      {adminDelete && <AdministratorCatalogDelete {...adminDelete} onClose={() => setAdminDelete(null)} />}
       <ImportDialog open={importing} onClose={() => setImporting(false)} title="Import products from Excel"
         templatePath="/api/admin/products/template" uploadPath="/api/admin/products/import" params={{ createMissingMasters: createMasters }}
         invalidate={['products', 'categories', 'brands', 'subcategories']}>

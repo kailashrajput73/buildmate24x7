@@ -73,6 +73,12 @@ public class ProblemExceptionHandler : IExceptionHandler
             case DbUpdateException db when db.InnerException?.Message.Contains("23505") == true || db.InnerException?.Message.Contains("duplicate key") == true:
                 problem = new ProblemDetails { Status = 409, Title = "This record already exists.", Type = "duplicate" };
                 break;
+            case DbUpdateException db when db.InnerException?.Message.Contains("Only one staff user can hold the Administrator role.", StringComparison.Ordinal) == true:
+                problem = new ProblemDetails { Status = 409, Title = "Only one staff user can hold the Administrator role.", Type = "administrator_exists" };
+                break;
+            case DbUpdateException db when db.InnerException?.Message.Contains("The last Administrator cannot be removed.", StringComparison.Ordinal) == true:
+                problem = new ProblemDetails { Status = 409, Title = "The last Administrator cannot be removed.", Type = "last_administrator" };
+                break;
             case OperationCanceledException when ctx.RequestAborted.IsCancellationRequested:
                 return true;
             default:

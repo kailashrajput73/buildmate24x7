@@ -7,11 +7,14 @@ import { api } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
 import { useAction } from '../lib/hooks'
 import type { Brand, Paged } from '../lib/types'
+import DeleteEmptyCatalogMaster from '../components/DeleteEmptyCatalogMaster'
+import AdministratorCatalogDelete from '../components/AdministratorCatalogDelete'
 
 export default function Brands() {
   const { can } = useAuth()
   const [search, setSearch] = useState('')
   const [edit, setEdit] = useState<Partial<Brand> | null>(null)
+  const [adminDelete, setAdminDelete] = useState<{ kind: string; id: number; label: string } | null>(null)
   const { data, isLoading, error } = useQuery({ queryKey: ['brands', search], queryFn: () => api.get<Paged<Brand>>('/api/admin/brands', { search, pageSize: 200 }) })
   const save = useAction((b: Partial<Brand>) => {
     const body = { name: b.name, logoUrl: b.logoUrl, sortOrder: b.sortOrder ?? 0, isActive: b.isActive ?? true }
@@ -37,6 +40,8 @@ export default function Brands() {
                 {can(P.catalogManage) && <Toggle checked={b.isActive} onChange={(v) => toggle.mutate({ id: b.id, value: v })} />}
               </div>
               {can(P.catalogManage) && <Button size="sm" variant="ghost" className="mt-1 self-start" onClick={() => setEdit(b)}>Edit</Button>}
+              {can(P.catalogManage) && b.productCount === 0 && <DeleteEmptyCatalogMaster kind="brand" id={b.id} label={`brand “${b.name}”`} />}
+              {can(P.administratorDelete) && <Button size="sm" variant="danger" className="mt-1 self-start" onClick={() => setAdminDelete({ kind: 'brand', id: b.id, label: `brand “${b.name}”` })}>Delete connected data</Button>}
             </div>
           ))}
         </div>
@@ -52,6 +57,7 @@ export default function Brands() {
           </div>
         </Drawer>
       )}
+      {adminDelete && <AdministratorCatalogDelete {...adminDelete} onClose={() => setAdminDelete(null)} />}
     </>
   )
 }

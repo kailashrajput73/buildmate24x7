@@ -38,4 +38,5 @@ export const P = {
   ordersManage: 'orders.manage', specialDiscount: 'orders.special_discount', dispatch: 'dispatch.manage',
   counter: 'billing.counter', services: 'service_requests.manage', content: 'content.manage', reports: 'reports.view',
   users: 'users.manage', settings: 'settings.manage',
+  administratorDelete: 'catalog.administrator_delete',
 } as const

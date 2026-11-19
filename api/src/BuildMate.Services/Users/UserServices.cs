@@ -54,6 +54,7 @@ public class StaffService : IStaffService
         var valid = Domain.Common.Permissions.AllKeys.ToHashSet();
         var perms = (dto.Permissions ?? new()).Distinct().ToList();
         if (perms.Any(p => p != Domain.Common.Permissions.All && !valid.Contains(p))) throw new AppException("Unknown permission in list.");
+        if (perms.Contains(Domain.Common.Permissions.AdministratorCatalogDelete)) throw new AppException("Only the built-in Administrator role can receive Administrator delete access.");
         if (await _db.Roles.AnyAsync(r => r.Name.ToLower() == dto.Name.Trim().ToLower() && r.Id != (id ?? 0), ct))
             throw new AppException("A role with this name exists.", 409, "duplicate");
 
@@ -97,11 +98,18 @@ public class StaffService : IStaffService
         if (!email.Contains('@')) throw new AppException("Enter a valid email.");
         if (await _db.Users.AnyAsync(u => u.Email == email && u.Id != (id ?? 0), ct)) throw new AppException("This email is already used.", 409, "duplicate");
         if (!await _db.Roles.AnyAsync(r => r.Id == dto.RoleId, ct)) throw new NotFoundException("Role");
+        var isAdminRole = await _db.Roles.AnyAsync(r => r.Id == dto.RoleId && r.Name == "Administrator" && r.IsSystem, ct);
+        var currentIsAdmin = id != null && await _db.Users.AnyAsync(x => x.Id == id && x.Role != null && x.Role.Name == "Administrator" && x.Role.IsSystem, ct);
+        if (isAdminRole && !currentIsAdmin && await _db.Users.AnyAsync(x => x.UserType == UserType.Staff && x.Role != null && x.Role.Name == "Administrator" && x.Role.IsSystem && x.Id != (id ?? 0), ct))
+            throw new AppException("Only one staff user can hold the Administrator role. Reassign the existing Administrator first.", 409, "administrator_exists");
+        if (currentIsAdmin && !isAdminRole && !await _db.Users.AnyAsync(x => x.UserType == UserType.Staff && x.Role != null && x.Role.Name == "Administrator" && x.Role.IsSystem && x.Id != id, ct))
+            throw new AppException("The last Administrator cannot be removed.", 409, "last_administrator");
         if (id == _me.Id && !dto.IsActive) throw new AppException("You can't deactivate your own account.");
 
         var u = id == null ? new AppUser { UserType = UserType.Staff }
             : await _db.Users.FirstOrDefaultAsync(x => x.Id == id && x.UserType == UserType.Staff, ct) ?? throw new NotFoundException("Staff user");
         if (id == null && string.IsNullOrWhiteSpace(dto.Password)) throw new AppException("Set a password for the new user.");
+        var roleChanged = id != null && u.RoleId != dto.RoleId;
 
         u.Name = dto.Name.Trim();
         u.Email = email;
@@ -111,7 +119,7 @@ public class StaffService : IStaffService
         if (!string.IsNullOrWhiteSpace(dto.Password)) u.PasswordHash = _auth.HashPassword(u, dto.Password);
         if (id == null) _db.Users.Add(u);
 
-        if (!dto.IsActive)
+        if (!dto.IsActive || roleChanged)
         {
             var tokens = await _db.RefreshTokens.Where(t => t.UserId == u.Id && t.RevokedAt == null).ToListAsync(ct);
             foreach (var t in tokens) t.RevokedAt = DateTime.UtcNow;

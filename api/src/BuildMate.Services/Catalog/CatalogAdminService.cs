@@ -134,6 +134,8 @@ public class CatalogAdminService : ICatalogAdminService
         var s = await _db.SubCategories.FindAsync(new object[] { id }, ct) ?? throw new NotFoundException("Sub category");
         if (await _db.Products.AnyAsync(p => p.SubCategoryId == id, ct))
             throw new AppException("This sub category has products. Deactivate it instead, or move the products first.", 409, "in_use");
+        if (await _db.ProductTypeSubCategories.AnyAsync(x => x.SubCategoryId == id, ct))
+            throw new AppException("This sub category is assigned to a product type. Remove that type assignment first.", 409, "in_use");
         _db.SubCategories.Remove(s);
         await _db.SaveChangesAsync(ct);
     }

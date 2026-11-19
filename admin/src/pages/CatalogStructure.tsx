@@ -7,6 +7,8 @@ import { P, useAuth } from '../lib/auth'
 import { useAction } from '../lib/hooks'
 import { useBrands, useCategories, useFamilies, useFamilyCards, useProductTypes, useSubCategories } from '../lib/masters'
 import type { CatalogFamily, FamilyCard, ProductType } from '../lib/types'
+import DeleteEmptyCatalogMaster from '../components/DeleteEmptyCatalogMaster'
+import AdministratorCatalogDelete from '../components/AdministratorCatalogDelete'
 
 export default function CatalogStructure() {
   const { can } = useAuth()
@@ -15,6 +17,7 @@ export default function CatalogStructure() {
   const types = useProductTypes(categoryId || undefined), families = useFamilies(categoryId || undefined)
   const subs = useSubCategories(categoryId || undefined).data ?? []
   const [type, setType] = useState<Partial<ProductType>>({ name: '', isActive: true, subCategoryIds: [] })
+  const [adminDelete, setAdminDelete] = useState<{ kind: string; id: number; label: string } | null>(null)
   const [family, setFamily] = useState<Partial<CatalogFamily>>({ name: '' })
   const familyCards = useFamilyCards(categoryId || undefined)
   const [card, setCard] = useState<FamilyCard | null>(null)
@@ -52,7 +55,10 @@ export default function CatalogStructure() {
           <Field label="Type image" hint="Shown next to the type name in the shop's category sidebar. Product and family images are not affected."><ImageUploader folder="types" value={type.imageUrl ? [type.imageUrl] : []} max={1} onChange={urls => setType({ ...type, imageUrl: urls[0] ?? null })} /></Field>
           <p className="text-sm">Allowed Sub-Categories (manage the list in Categories):</p>
           {subs.filter(s => s.isActive).map(s => <label className="mr-3 inline-flex gap-2" key={s.id}><input type="checkbox" checked={type.subCategoryIds?.includes(s.id) ?? false} onChange={e => setType({ ...type, subCategoryIds: e.target.checked ? [...(type.subCategoryIds ?? []), s.id] : type.subCategoryIds?.filter(id => id !== s.id) })} />{s.name}</label>)}
-          <div className="flex gap-2"><Button type="submit" busy={saveType.isPending}>{type.id ? 'Save Type' : 'Add Type'}</Button><Button type="button" variant="secondary" onClick={() => setType({ name: '', isActive: true, subCategoryIds: [] })}>New Type</Button></div>
+          <div className="flex flex-wrap gap-2"><Button type="submit" busy={saveType.isPending}>{type.id ? 'Save Type' : 'Add Type'}</Button><Button type="button" variant="secondary" onClick={() => setType({ name: '', isActive: true, subCategoryIds: [] })}>New Type</Button>
+            {type.id && editable && <DeleteEmptyCatalogMaster kind="producttype" id={type.id} label={`type “${type.name}”`} invalidate={['products']} onDeleted={() => setType({ name: '', isActive: true, subCategoryIds: [] })} />}
+            {type.id && can(P.administratorDelete) && <Button type="button" variant="danger" onClick={() => setAdminDelete({ kind: 'producttype', id: type.id!, label: `type “${type.name}”` })}>Delete connected type data</Button>}
+          </div>
         </fieldset></form>
       </Section>
       <Section title="Brand-specific family images">
@@ -79,5 +85,6 @@ export default function CatalogStructure() {
         </fieldset></form>}
       </Section>
     </div>}
+    {adminDelete && <AdministratorCatalogDelete {...adminDelete} onClose={() => setAdminDelete(null)} onDeleted={() => { if (adminDelete.kind === 'producttype') setType({ name: '', isActive: true, subCategoryIds: [] }) }} />}
   </>
 }

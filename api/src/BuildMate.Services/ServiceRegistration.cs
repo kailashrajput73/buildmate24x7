@@ -77,6 +77,7 @@ public static class ServiceRegistration
         services.AddScoped<BuildMate.Services.Orders.IInvoiceNumbers, BuildMate.Services.Orders.InvoiceNumbers>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<ICatalogAdminService, CatalogAdminService>();
+        services.AddScoped<ICatalogDeletionService, CatalogDeletionService>();
         services.AddScoped<ICatalogService, CatalogService>();
         services.AddSingleton<IQrService, QrService>();
         services.AddScoped<IStockService, StockService>();

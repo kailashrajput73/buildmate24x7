@@ -67,6 +67,7 @@ public interface IAuthService
     Task LogoutAsync(string refreshToken, CancellationToken ct = default);
     Task<AuthUserDto> MeAsync(long userId, CancellationToken ct = default);
     string HashPassword(AppUser user, string password);
+    Task<bool> VerifyAdministratorPasswordAsync(long userId, string password, CancellationToken ct = default);
 }
 
 public class AuthService : IAuthService
@@ -255,6 +256,14 @@ public class AuthService : IAuthService
         if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
             throw new AppException("Password must be at least 8 characters.");
         return _hasher.HashPassword(user, password);
+    }
+
+    public async Task<bool> VerifyAdministratorPasswordAsync(long userId, string password, CancellationToken ct = default)
+    {
+        var user = await _db.Users.Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.Id == userId && u.UserType == UserType.Staff && u.IsActive, ct);
+        return user?.Role is { IsSystem: true, Name: "Administrator" } && user.PasswordHash is { Length: > 0 } hash &&
+            _hasher.VerifyHashedPassword(user, hash, password ?? "") != PasswordVerificationResult.Failed;
     }
 
     private async Task<AuthResult> IssueAsync(AppUser user, bool isNew, CancellationToken ct)

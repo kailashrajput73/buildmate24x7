@@ -11,6 +11,7 @@ public static class Permissions
     public const string DashboardView = "dashboard.view";
     public const string CatalogView = "catalog.view";
     public const string CatalogManage = "catalog.manage";
+    public const string AdministratorCatalogDelete = "catalog.administrator_delete";
     public const string PurchasesManage = "purchases.manage";
     public const string StockView = "stock.view";
     public const string StockAdjust = "stock.adjust";
@@ -55,5 +56,5 @@ public static class Permissions
         (SettingsManage, "Manage settings and integrations", "Admin"),
     };
 
-    public static IEnumerable<string> AllKeys => Catalogue.Select(c => c.Key);
+    public static IEnumerable<string> AllKeys => Catalogue.Select(c => c.Key).Append(AdministratorCatalogDelete);
 }

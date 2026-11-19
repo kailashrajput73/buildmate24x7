@@ -9,6 +9,8 @@ import { P, useAuth } from '../lib/auth'
 import { useAction, useUrlState } from '../lib/hooks'
 import { useCategories } from '../lib/masters'
 import type { Category, Paged, SubCategory } from '../lib/types'
+import DeleteEmptyCatalogMaster from '../components/DeleteEmptyCatalogMaster'
+import AdministratorCatalogDelete from '../components/AdministratorCatalogDelete'
 
 export default function Categories() {
   const [f, set] = useUrlState({ tab: 'categories' })
@@ -30,6 +32,7 @@ function CategoryList() {
   const { can } = useAuth()
   const [search, setSearch] = useState('')
   const [edit, setEdit] = useState<Partial<Category> | null>(null)
+  const [adminDelete, setAdminDelete] = useState<{ kind: string; id: number; label: string } | null>(null)
   const { data, isLoading, error } = useQuery({ queryKey: ['categories', search], queryFn: () => api.get<Paged<Category>>('/api/admin/categories', { search, pageSize: 200 }) })
   const save = useAction((c: Partial<Category>) => {
     const body = { name: c.name, description: c.description, imageUrl: c.imageUrl, sortOrder: c.sortOrder ?? 0, isActive: c.isActive ?? true }
@@ -56,7 +59,9 @@ function CategoryList() {
                   <td className="num text-right">{c.productCount}</td>
                   <td className="num text-right">{c.sortOrder}</td>
                   <td>{c.isActive ? <Badge tone="success">Active</Badge> : <Badge>Inactive</Badge>}</td>
-                  <td className="text-right">{can(P.catalogManage) && <Button size="sm" variant="ghost" onClick={() => setEdit(c)}>Edit</Button>}</td>
+                  <td className="text-right"><div className="flex justify-end gap-1">{can(P.catalogManage) && <Button size="sm" variant="ghost" onClick={() => setEdit(c)}>Edit</Button>}
+                    {can(P.catalogManage) && c.productCount === 0 && c.subCategoryCount === 0 && <DeleteEmptyCatalogMaster kind="category" id={c.id} label={`category “${c.name}”`} />}
+                    {can(P.administratorDelete) && <Button size="sm" variant="danger" onClick={() => setAdminDelete({ kind: 'category', id: c.id, label: `category “${c.name}”` })}>Delete connected data</Button>}</div></td>
                 </tr>
               ))}
             </tbody>
@@ -75,6 +80,7 @@ function CategoryList() {
           </div>
         </Drawer>
       )}
+      {adminDelete && <AdministratorCatalogDelete {...adminDelete} onClose={() => setAdminDelete(null)} />}
     </>
   )
 }
@@ -83,6 +89,7 @@ function SubCategoryList() {
   const { can } = useAuth()
   const [f, set] = useUrlState({ tab: '', search: '', categoryId: '', page: 1 })
   const [edit, setEdit] = useState<Partial<SubCategory> | null>(null)
+  const [adminDelete, setAdminDelete] = useState<{ kind: string; id: number; label: string } | null>(null)
   const [importing, setImporting] = useState(false)
   const cats = useCategories().data ?? []
   const params = { search: f.search, categoryId: f.categoryId, page: f.page, pageSize: 50 }
@@ -122,7 +129,9 @@ function SubCategoryList() {
                   <td className="num text-right">{s.productCount}</td>
                   <td className="num text-right">{s.sortOrder}</td>
                   <td>{s.isActive ? <Badge tone="success">Active</Badge> : <Badge>Inactive</Badge>}</td>
-                  <td className="text-right">{can(P.catalogManage) && <Button size="sm" variant="ghost" onClick={() => setEdit(s)}>Edit</Button>}</td>
+                  <td className="text-right"><div className="flex justify-end gap-1">{can(P.catalogManage) && <Button size="sm" variant="ghost" onClick={() => setEdit(s)}>Edit</Button>}
+                    {can(P.catalogManage) && s.productCount === 0 && <DeleteEmptyCatalogMaster kind="subcategory" id={s.id} label={`sub category “${s.name}”`} />}
+                    {can(P.administratorDelete) && <Button size="sm" variant="danger" onClick={() => setAdminDelete({ kind: 'subcategory', id: s.id, label: `sub category “${s.name}”` })}>Delete connected data</Button>}</div></td>
                 </tr>
               ))}
             </tbody>
@@ -154,6 +163,7 @@ function SubCategoryList() {
         templatePath="/api/admin/subcategories/template" uploadPath="/api/admin/subcategories/import" invalidate={['subcategories', 'categories']}>
         <p className="mb-3 text-sm text-ink-soft">New category names in the sheet are created automatically.</p>
       </ImportDialog>
+      {adminDelete && <AdministratorCatalogDelete {...adminDelete} onClose={() => setAdminDelete(null)} />}
     </>
   )
 }
