@@ -124,11 +124,11 @@ export default function Products() {
       <MovementHistoryDrawer productId={historyOf} onClose={() => setHistoryOf(null)} />
       {adminDelete && <AdministratorCatalogDelete {...adminDelete} onClose={() => setAdminDelete(null)} />}
       <ImportDialog open={importing} onClose={() => setImporting(false)} title="Import products from Excel"
-        templatePath="/api/admin/products/template" uploadPath="/api/admin/products/import" params={{ createMissingMasters: createMasters }}
+        templatePath="/api/admin/products/template" previewPath="/api/admin/products/import/preview" uploadPath="/api/admin/products/import" params={{ createMissingMasters: createMasters }}
         invalidate={['products', 'categories', 'brands', 'subcategories']}>
         <p className="mb-3 text-sm text-ink-soft">
-          A <b>Code</b> that already exists updates that product. A new code (e.g. the brand’s code) creates the product under it; leave Code blank to get a BM code.
-          Rows with the same <b>Variant Family</b> appear as one item with a size picker. Only the first sheet is read.
+          Review the proposed master data before importing. Existing categories, sub-categories, brands and types are reused when their names match ignoring capitalization and extra spaces. Possible singular/plural duplicates are flagged for review, never merged silently.
+          A <b>Code</b> that already exists updates that product; a new code creates it, and blank Code gets a BM code. Only the first sheet is read.
         </p>
         {can(P.catalogImportCreateMasters) && <div className="mb-3"><Toggle checked={createMasters} onChange={setCreateMasters} label="Create missing master data from this sheet" /></div>}
       </ImportDialog>
