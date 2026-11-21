@@ -54,7 +54,6 @@ public class StaffService : IStaffService
         var valid = Domain.Common.Permissions.AllKeys.ToHashSet();
         var perms = (dto.Permissions ?? new()).Distinct().ToList();
         if (perms.Any(p => p != Domain.Common.Permissions.All && !valid.Contains(p))) throw new AppException("Unknown permission in list.");
-        if (perms.Contains(Domain.Common.Permissions.AdministratorCatalogDelete)) throw new AppException("Only the built-in Administrator role can receive Administrator delete access.");
         if (await _db.Roles.AnyAsync(r => r.Name.ToLower() == dto.Name.Trim().ToLower() && r.Id != (id ?? 0), ct))
             throw new AppException("A role with this name exists.", 409, "duplicate");
 

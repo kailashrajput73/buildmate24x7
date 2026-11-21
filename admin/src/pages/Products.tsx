@@ -130,7 +130,7 @@ export default function Products() {
           A <b>Code</b> that already exists updates that product. A new code (e.g. the brand’s code) creates the product under it; leave Code blank to get a BM code.
           Rows with the same <b>Variant Family</b> appear as one item with a size picker. Only the first sheet is read.
         </p>
-        <div className="mb-3"><Toggle checked={createMasters} onChange={setCreateMasters} label="Create missing categories, sub categories and brands" /></div>
+        {can(P.catalogImportCreateMasters) && <div className="mb-3"><Toggle checked={createMasters} onChange={setCreateMasters} label="Create missing master data from this sheet" /></div>}
       </ImportDialog>
     </>
   )

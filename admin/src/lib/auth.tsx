@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export const useAuth = () => useContext(Ctx)
 
 export const P = {
-  dashboard: 'dashboard.view', catalogView: 'catalog.view', catalogManage: 'catalog.manage', purchases: 'purchases.manage',
+  dashboard: 'dashboard.view', catalogView: 'catalog.view', catalogManage: 'catalog.manage', catalogImportCreateMasters: 'catalog.import_create_masters', purchases: 'purchases.manage',
   stockView: 'stock.view', stockAdjust: 'stock.adjust', racks: 'racks.manage', partnersView: 'partners.view',
   partnersManage: 'partners.manage', kyc: 'kyc.approve', rewards: 'rewards.adjust', ordersView: 'orders.view',
   ordersManage: 'orders.manage', specialDiscount: 'orders.special_discount', dispatch: 'dispatch.manage',

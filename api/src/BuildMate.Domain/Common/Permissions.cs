@@ -11,6 +11,7 @@ public static class Permissions
     public const string DashboardView = "dashboard.view";
     public const string CatalogView = "catalog.view";
     public const string CatalogManage = "catalog.manage";
+    public const string CatalogImportCreateMasters = "catalog.import_create_masters";
     public const string AdministratorCatalogDelete = "catalog.administrator_delete";
     public const string PurchasesManage = "purchases.manage";
     public const string StockView = "stock.view";
@@ -36,6 +37,8 @@ public static class Permissions
         (DashboardView, "View dashboard", "General"),
         (CatalogView, "View catalogue", "Catalogue"),
         (CatalogManage, "Manage categories, brands, products, groups", "Catalogue"),
+        (CatalogImportCreateMasters, "Create missing master data during product import", "Catalogue"),
+        (AdministratorCatalogDelete, "Delete connected catalogue data", "Catalogue"),
         (PurchasesManage, "Enter and upload purchases", "Inventory"),
         (StockView, "View stock and inventory reports", "Inventory"),
         (StockAdjust, "Adjust stock manually", "Inventory"),
@@ -56,5 +59,5 @@ public static class Permissions
         (SettingsManage, "Manage settings and integrations", "Admin"),
     };
 
-    public static IEnumerable<string> AllKeys => Catalogue.Select(c => c.Key).Append(AdministratorCatalogDelete);
+    public static IEnumerable<string> AllKeys => Catalogue.Select(c => c.Key);
 }

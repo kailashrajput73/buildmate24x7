@@ -177,7 +177,11 @@ export type Dashboard = {
 export type NamedValue = { id: number; name: string; quantity: number; amount: number; orders: number }
 
 export type ImportError = { row: number; message: string }
-export type ImportSummary = { created: number; updated: number; skipped: number; warnings: ImportError[] }
+export type ImportSummary = { created: number; updated: number; skipped: number; warnings: ImportError[]; mastersCreated?: number; mastersReused?: number }
+export type ProductImportPreview = {
+  productRows: number; reusedMasters: number; newMasters: number; reviewItems: number; missingMasters: number
+  masters: { kind: string; name: string; rows: number; action: 'Reuse' | 'Create' | 'Review' | 'Missing'; matchedName?: string | null; note?: string | null }[]
+}
 
 // ---------------------------------------------------------------- Quotations
 export type QuotationStatus = 'Requested' | 'Quoted' | 'Accepted' | 'Declined' | 'Expired' | 'Cancelled'

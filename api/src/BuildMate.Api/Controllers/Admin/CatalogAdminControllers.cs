@@ -182,12 +182,19 @@ public class ProductsController : AdminControllerBase
     [HttpGet("template"), Authorize(Policy = Permissions.CatalogView)]
     public FileContentResult Template() => Xlsx(_excel.Template("products"), "product-template");
 
-    /// <summary>Bulk create/update. A Code already in the system updates that product; a new Code creates it under that code; blank Code gets an auto code.</summary>
-    [HttpPost("import"), Authorize(Policy = Permissions.CatalogManage), RequestSizeLimit(20 * 1024 * 1024)]
-    public async Task<ImportSummary> Import(IFormFile file, [FromQuery] bool createMissingMasters = false, CancellationToken ct = default)
+    [HttpPost("import/preview"), Authorize(Policy = Permissions.CatalogManage), RequestSizeLimit(20 * 1024 * 1024)]
+    public async Task<ProductImportPreview> PreviewImport(IFormFile file, [FromQuery] bool createMissingMasters = false, CancellationToken ct = default)
     {
         await using var s = file.OpenReadStream();
-        return await _excel.ImportProductsAsync(s, createMissingMasters, ct);
+        return await _excel.PreviewProductsAsync(s, createMissingMasters, ct);
+    }
+
+    /// <summary>Bulk create/update. A Code already in the system updates that product; a new Code creates it under that code; blank Code gets an auto code.</summary>
+    [HttpPost("import"), Authorize(Policy = Permissions.CatalogManage), RequestSizeLimit(20 * 1024 * 1024)]
+    public async Task<ImportSummary> Import(IFormFile file, [FromQuery] bool createMissingMasters = false, [FromQuery] bool allowSimilarMasterNames = false, CancellationToken ct = default)
+    {
+        await using var s = file.OpenReadStream();
+        return await _excel.ImportProductsAsync(s, createMissingMasters, allowSimilarMasterNames, ct);
     }
 }
 

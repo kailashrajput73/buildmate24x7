@@ -12,7 +12,9 @@ namespace BuildMate.Services.Excel;
 
 public record ExcelColumn<T>(string Header, Func<T, object?> Value, string? Format = null);
 
-public record ImportSummary(int Created, int Updated, int Skipped, List<ImportError> Warnings);
+public record ImportSummary(int Created, int Updated, int Skipped, List<ImportError> Warnings, int MastersCreated = 0, int MastersReused = 0);
+public record MasterImportChange(string Kind, string Name, int Rows, string Action, string? MatchedName = null, string? Note = null);
+public record ProductImportPreview(int ProductRows, int ReusedMasters, int NewMasters, int ReviewItems, int MissingMasters, List<MasterImportChange> Masters);
 
 /// <summary>Bulk Excel import/export for masters, products and purchases.</summary>
 public interface IExcelService
@@ -20,7 +22,8 @@ public interface IExcelService
     byte[] Export<T>(string sheetName, IEnumerable<T> rows, params ExcelColumn<T>[] columns);
     byte[] Template(string kind);
     Task<ImportSummary> ImportSubCategoriesAsync(Stream file, CancellationToken ct = default);
-    Task<ImportSummary> ImportProductsAsync(Stream file, bool createMissingMasters, CancellationToken ct = default);
+    Task<ProductImportPreview> PreviewProductsAsync(Stream file, bool createMissingMasters, CancellationToken ct = default);
+    Task<ImportSummary> ImportProductsAsync(Stream file, bool createMissingMasters, bool allowSimilarMasterNames, CancellationToken ct = default);
     List<PurchaseLineInput> ParsePurchaseLines(Stream file);
 }
 
@@ -288,8 +291,108 @@ public class ExcelService : IExcelService
 
     // ------------------------------------------------------------------ Products (upsert by Code)
 
-    public async Task<ImportSummary> ImportProductsAsync(Stream file, bool createMissingMasters, CancellationToken ct = default)
+    public async Task<ProductImportPreview> PreviewProductsAsync(Stream file, bool createMissingMasters, CancellationToken ct = default)
     {
+        if (createMissingMasters && !_me.HasPermission(BuildMate.Domain.Common.Permissions.CatalogImportCreateMasters))
+            throw new ForbiddenException("You don't have permission to create master data during import.");
+        var sheet = Open(file);
+        foreach (var h in new[] { "Name", "Category", "Brand", "List Price" })
+            if (!sheet.Has(h)) throw new AppException($"Missing column \"{h}\". Download the product template.");
+
+        var categories = await _db.Categories.AsNoTracking().ToListAsync(ct);
+        var brands = await _db.Brands.AsNoTracking().ToListAsync(ct);
+        var subCategories = await _db.SubCategories.AsNoTracking().ToListAsync(ct);
+        var types = await _db.ProductTypes.AsNoTracking().ToListAsync(ct);
+        var values = new Dictionary<(string Kind, string Scope, string Key), (string Name, int Rows)>();
+        int productRows = 0;
+        for (var row = 2; row <= sheet.LastRow; row++)
+        {
+            if (sheet.IsBlank(row)) continue;
+            productRows++;
+            var category = MasterNameMatching.Display(sheet.Str(row, "Category") ?? "");
+            var brand = MasterNameMatching.Display(sheet.Str(row, "Brand") ?? "");
+            Add("Category", "", category, row);
+            Add("Brand", "", brand, row);
+            var scope = MasterNameMatching.Key(category);
+            if (sheet.Str(row, "SubCategory") is { } sub) Add("Sub-Category", scope, MasterNameMatching.Display(sub), row);
+            if (sheet.Str(row, "Type") is { } type) Add("Type", scope, MasterNameMatching.Display(type), row);
+        }
+
+        var masterChanges = new List<MasterImportChange>();
+        foreach (var (identity, source) in values)
+        {
+            var existing = Existing(identity.Kind, identity.Scope, source.Name);
+            if (existing.Count == 1)
+            {
+                masterChanges.Add(new(identity.Kind, source.Name, source.Rows, "Reuse", existing[0]));
+                continue;
+            }
+            if (existing.Count > 1)
+            {
+                masterChanges.Add(new(identity.Kind, source.Name, source.Rows, "Review", null,
+                    "More than one existing master differs only by capitalization or spacing. Resolve that duplicate in master data first."));
+                continue;
+            }
+
+            var similar = Similar(identity.Kind, identity.Scope, source.Name);
+            if (similar.Count > 0)
+            {
+                masterChanges.Add(new(identity.Kind, source.Name, source.Rows, "Review", string.Join(", ", similar.Distinct()),
+                    "Possible singular/plural duplicate. Review it before importing."));
+                continue;
+            }
+
+            masterChanges.Add(new(identity.Kind, source.Name, source.Rows, createMissingMasters ? "Create" : "Missing"));
+        }
+        var reused = masterChanges.Count(x => x.Action == "Reuse");
+        var created = masterChanges.Count(x => x.Action == "Create");
+        var reviews = masterChanges.Count(x => x.Action == "Review");
+        var missing = masterChanges.Count(x => x.Action == "Missing");
+        return new ProductImportPreview(productRows, reused, created, reviews, missing, masterChanges
+            .OrderBy(x => x.Kind).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList());
+
+        void Add(string kind, string scope, string name, int row)
+        {
+            if (name.Length == 0) return;
+            var key = (kind, scope, MasterNameMatching.Key(name));
+            if (values.TryGetValue(key, out var prior)) values[key] = (prior.Name, prior.Rows + 1);
+            else values[key] = (name, 1);
+        }
+
+        List<string> Existing(string kind, string scope, string name)
+        {
+            var key = MasterNameMatching.Key(name);
+            return kind switch
+            {
+                "Category" => categories.Where(x => MasterNameMatching.Key(x.Name) == key).Select(x => x.Name).ToList(),
+                "Brand" => brands.Where(x => MasterNameMatching.Key(x.Name) == key).Select(x => x.Name).ToList(),
+                "Sub-Category" => subCategories.Where(x => CategoryScope(x.CategoryId) == scope && MasterNameMatching.Key(x.Name) == key).Select(x => x.Name).ToList(),
+                "Type" => types.Where(x => CategoryScope(x.CategoryId) == scope && MasterNameMatching.Key(x.Name) == key).Select(x => x.Name).ToList(),
+                _ => new()
+            };
+        }
+
+        List<string> Similar(string kind, string scope, string name)
+        {
+            IEnumerable<string> known = kind switch
+            {
+                "Category" => categories.Select(x => x.Name),
+                "Brand" => brands.Select(x => x.Name),
+                "Sub-Category" => subCategories.Where(x => CategoryScope(x.CategoryId) == scope).Select(x => x.Name),
+                "Type" => types.Where(x => CategoryScope(x.CategoryId) == scope).Select(x => x.Name),
+                _ => Array.Empty<string>()
+            };
+            known = known.Concat(values.Where(x => x.Key.Kind == kind && x.Key.Scope == scope && x.Key.Key != MasterNameMatching.Key(name)).Select(x => x.Value.Name));
+            return known.Where(x => MasterNameMatching.CouldBePluralVariant(name, x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        string CategoryScope(long categoryId) => categories.FirstOrDefault(x => x.Id == categoryId)?.Name is { } n ? MasterNameMatching.Key(n) : $"#{categoryId}";
+    }
+
+    public async Task<ImportSummary> ImportProductsAsync(Stream file, bool createMissingMasters, bool allowSimilarMasterNames, CancellationToken ct = default)
+    {
+        if (createMissingMasters && !_me.HasPermission(BuildMate.Domain.Common.Permissions.CatalogImportCreateMasters))
+            throw new ForbiddenException("You don't have permission to create master data during import.");
         var sheet = Open(file);
         foreach (var h in new[] { "Name", "Category", "Brand", "List Price" })
             if (!sheet.Has(h)) throw new AppException($"Missing column \"{h}\". Download the product template.");
@@ -297,11 +400,15 @@ public class ExcelService : IExcelService
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
         if (_db.Database.IsNpgsql()) await _db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(24071001)", ct);
         var errors = new List<ImportError>();
-        var cats = await _db.Categories.ToDictionaryAsync(c => c.Name.ToLower(), ct);
+        var categoryRows = await _db.Categories.ToListAsync(ct);
+        var brandRows = await _db.Brands.ToListAsync(ct);
         var subs = await _db.SubCategories.ToListAsync(ct);
-        var types = await _db.ProductTypes.AsNoTracking().ToListAsync(ct);
+        var types = await _db.ProductTypes.Include(t => t.SubCategories).ToListAsync(ct);
+        var cats = UniqueIndex(categoryRows, x => x.Name, "category");
+        var brands = UniqueIndex(brandRows, x => x.Name, "brand");
+        var subIndex = UniqueIndex(subs, x => $"{x.CategoryId}|{x.Name}", "sub-category");
+        var typeIndex = UniqueIndex(types, x => $"{x.CategoryId}|{x.Name}", "type");
         var familyImages = new Dictionary<string, string?>();
-        var brands = await _db.Brands.ToDictionaryAsync(b => b.Name.ToLower(), ct);
         var codes = new List<string>();
         for (var r = 2; r <= sheet.LastRow; r++) if (sheet.Str(r, "Code") is { } c) codes.Add(c.ToUpperInvariant());
         var existing = await _db.Products.Include(p => p.Aliases).Include(p => p.Translations)
@@ -309,6 +416,8 @@ public class ExcelService : IExcelService
 
         var pending = new List<(int Row, Product P, bool IsNew, List<string> Aliases, Dictionary<string, string> Tr)>();
         var seenCodes = new HashSet<string>();
+        var reusedMasterKeys = new HashSet<string>(StringComparer.Ordinal);
+        var mastersCreated = 0;
         for (var r = 2; r <= sheet.LastRow; r++)
         {
             if (sheet.IsBlank(r)) continue;
@@ -336,28 +445,42 @@ public class ExcelService : IExcelService
             if (pd is < 0 or > 90 || rd is < 0 or > 90) errors.Add(new(r, "Discounts must be between 0 and 90%."));
             if (errors.Count > before) continue;
 
-            if (!cats.TryGetValue(catName!.ToLower(), out var cat))
+            var categoryKey = MasterNameMatching.Key(catName!);
+            if (!cats.TryGetValue(categoryKey, out var cat))
             {
                 if (!createMissingMasters) { errors.Add(new(r, $"Unknown category \"{catName}\".")); continue; }
-                cat = new Category { Name = catName, CreatedById = _me.Id };
+                var possible = FindSimilar(catName!, categoryRows.Select(x => x.Name));
+                if (possible.Count > 0 && !allowSimilarMasterNames) { errors.Add(new(r, $"Category \"{catName}\" may duplicate {string.Join(", ", possible)}. Use its existing spelling or confirm that this is a distinct master.")); continue; }
+                cat = new Category { Name = MasterNameMatching.Display(catName!), CreatedById = _me.Id };
                 _db.Categories.Add(cat);
-                cats[catName.ToLower()] = cat;
+                cats[categoryKey] = cat; categoryRows.Add(cat); mastersCreated++;
             }
-            if (!brands.TryGetValue(brandName!.ToLower(), out var brand))
+            else reusedMasterKeys.Add($"Category|{categoryKey}");
+            if (!brands.TryGetValue(MasterNameMatching.Key(brandName!), out var brand))
             {
                 if (!createMissingMasters) { errors.Add(new(r, $"Unknown brand \"{brandName}\".")); continue; }
-                brand = new Brand { Name = brandName, CreatedById = _me.Id };
+                var possible = FindSimilar(brandName!, brandRows.Select(x => x.Name));
+                if (possible.Count > 0 && !allowSimilarMasterNames) { errors.Add(new(r, $"Brand \"{brandName}\" may duplicate {string.Join(", ", possible)}. Use its existing spelling or confirm that this is a distinct master.")); continue; }
+                brand = new Brand { Name = MasterNameMatching.Display(brandName!), CreatedById = _me.Id };
                 _db.Brands.Add(brand);
-                brands[brandName.ToLower()] = brand;
+                brands[MasterNameMatching.Key(brand.Name)] = brand; brandRows.Add(brand); mastersCreated++;
             }
+            else reusedMasterKeys.Add($"Brand|{MasterNameMatching.Key(brand.Name)}");
             SubCategory? sub = null;
             if (sheet.Str(r, "SubCategory") is { } subName)
             {
-                sub = subs.FirstOrDefault(s => (s.Category == cat || (cat.Id != 0 && s.CategoryId == cat.Id)) && s.Name.Equals(subName, StringComparison.OrdinalIgnoreCase));
+                if (cat.Id == 0) await _db.SaveChangesAsync(ct);
+                var subKey = MasterNameMatching.Key($"{cat.Id}|{subName}");
+                subIndex.TryGetValue(subKey, out sub);
                 if (sub == null)
                 {
-                    errors.Add(new(r, $"Unknown predefined Sub-Category \"{subName}\" in {catName}. Create it in master data first.")); continue;
+                    if (!createMissingMasters) { errors.Add(new(r, $"Unknown Sub-Category \"{subName}\" in {catName}. Enable master-data creation to add it from the sheet.")); continue; }
+                    var possible = FindSimilar(subName, subs.Where(s => s.CategoryId == cat.Id).Select(s => s.Name));
+                    if (possible.Count > 0 && !allowSimilarMasterNames) { errors.Add(new(r, $"Sub-Category \"{subName}\" may duplicate {string.Join(", ", possible)} in {cat.Name}. Use its existing spelling or confirm that this is a distinct master.")); continue; }
+                    sub = new SubCategory { Category = cat, Name = MasterNameMatching.Display(subName), SortOrder = subs.Where(s => s.CategoryId == cat.Id).Select(s => s.SortOrder).DefaultIfEmpty(0).Max() + 1, IsActive = true, CreatedById = _me.Id };
+                    _db.SubCategories.Add(sub); await _db.SaveChangesAsync(ct); subs.Add(sub); subIndex[subKey] = sub; mastersCreated++;
                 }
+                else reusedMasterKeys.Add($"Sub-Category|{subKey}");
             }
 
             // A code that isn't in the system yet creates the product under that code (e.g. the brand's own code).
@@ -409,8 +532,30 @@ public class ExcelService : IExcelService
                 if (sheet.Has("Type"))
                 {
                     var typeName = sheet.Str(r, "Type");
-                    typeId = typeName == null ? null : types.SingleOrDefault(t => t.CategoryId == cat.Id && t.IsActive && t.Key == CatalogStructure.Key(typeName))?.Id;
-                    if (typeName != null && typeId == null) throw new AppException($"Unknown predefined Type '{typeName}' for {cat.Name}. Configure master data first.");
+                    if (typeName == null) typeId = null;
+                    else
+                    {
+                        var typeKey = MasterNameMatching.Key($"{cat.Id}|{typeName}");
+                        typeIndex.TryGetValue(typeKey, out var type);
+                        if (type != null && !type.IsActive) throw new AppException($"Type '{type.Name}' is inactive for {cat.Name}.");
+                        if (type == null)
+                        {
+                            if (!createMissingMasters) throw new AppException($"Unknown Type '{typeName}' for {cat.Name}. Enable master-data creation to add it from the sheet.");
+                            var possible = FindSimilar(typeName, types.Where(t => t.CategoryId == cat.Id).Select(t => t.Name));
+                            if (possible.Count > 0 && !allowSimilarMasterNames) throw new AppException($"Type '{typeName}' may duplicate {string.Join(", ", possible)} in {cat.Name}. Use its existing spelling or confirm that this is a distinct master.");
+                            type = new ProductType { CategoryId = cat.Id, Name = MasterNameMatching.Display(typeName), Key = CatalogStructure.Key(MasterNameMatching.Display(typeName)), IsActive = true, SortOrder = types.Where(t => t.CategoryId == cat.Id).Select(t => t.SortOrder).DefaultIfEmpty(0).Max() + 1, CreatedById = _me.Id };
+                            if (sub != null) type.SubCategories.Add(new ProductTypeSubCategory { ProductType = type, SubCategory = sub });
+                            _db.ProductTypes.Add(type); await _db.SaveChangesAsync(ct); types.Add(type); typeIndex[typeKey] = type; mastersCreated++;
+                        }
+                        else reusedMasterKeys.Add($"Type|{typeKey}");
+                        if (sub != null && !type.SubCategories.Any(ts => ts.SubCategoryId == sub.Id))
+                        {
+                            if (!createMissingMasters) throw new AppException($"Sub-Category '{sub.Name}' is not assigned to Type '{type.Name}'. Configure master data first.");
+                            type.SubCategories.Add(new ProductTypeSubCategory { ProductType = type, SubCategory = sub });
+                            await _db.SaveChangesAsync(ct);
+                        }
+                        typeId = type.Id;
+                    }
                 }
                 if (sub != null && !sub.IsActive) throw new AppException("Sub-Category is inactive.");
                 var explicitFamily = sheet.Str(r, "product_family");
@@ -483,8 +628,21 @@ public class ExcelService : IExcelService
             _outbox.Add(ErpEvents.ProductUpserted, new { p.Id, p.Code, p.Name, p.HsnCode, p.GstRate, p.Mrp, p.ListPrice, p.Unit, p.Barcode, p.IsActive });
         await _db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
-        return new ImportSummary(pending.Count(x => x.IsNew), pending.Count(x => !x.IsNew), 0, new());
+        return new ImportSummary(pending.Count(x => x.IsNew), pending.Count(x => !x.IsNew), 0, new(), mastersCreated, reusedMasterKeys.Count);
     }
+
+    private static Dictionary<string, T> UniqueIndex<T>(IEnumerable<T> rows, Func<T, string> key, string kind)
+    {
+        var groups = rows.GroupBy(x => MasterNameMatching.Key(key(x)), StringComparer.Ordinal).ToList();
+        var duplicates = groups.Where(g => g.Count() > 1).Select(g => g.First()).ToList();
+        if (duplicates.Count > 0)
+            throw new AppException($"Existing {kind} master data has names that differ only by capitalization or spacing. Resolve those duplicates before importing.", 409, "master_duplicate");
+        return groups.ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+    }
+
+    private static List<string> FindSimilar(string input, IEnumerable<string> candidates) => candidates
+        .Where(name => MasterNameMatching.CouldBePluralVariant(input, name))
+        .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
     public static decimal? ParsePackSize(string? text, string baseUnit)
     {
