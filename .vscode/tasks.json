@@ -1,0 +1,26 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Inspect BuildMate App Ports",
+			"type": "shell",
+			"command": "Get-NetTCPConnection -LocalPort 3000,5173,5080,8080 -State Listen -ErrorAction SilentlyContinue | Select-Object LocalPort,OwningProcess | Format-Table -AutoSize",
+			"isBackground": false
+		},
+		{
+			"label": "Stop Old BuildMate Services",
+			"type": "shell",
+			"command": "Get-NetTCPConnection -LocalPort 3000,5173,5080,8080 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue; Write-Output \"Stopped process $_\" }",
+			"isBackground": false
+		},
+		{
+			"label": "BuildMate Mock API",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"tools/mock-api/server.mjs"
+			],
+			"isBackground": true
+		}
+	]
+}

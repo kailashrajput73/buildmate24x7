@@ -24,6 +24,10 @@ public static class FamilyAxes
             if (string.IsNullOrEmpty(size) && !string.IsNullOrEmpty(p.VariantLabel) && !p.VariantLabel.Contains(':')) size = p.VariantLabel;
             if (!string.IsNullOrWhiteSpace(size)) values["Size"] = size;
             if (!string.IsNullOrWhiteSpace(p.Length)) values["Length"] = p.Length;
+            if (!string.IsNullOrWhiteSpace(p.Module)) values["Module"] = p.Module;
+            if (!string.IsNullOrWhiteSpace(p.Color)) values["Color"] = p.Color;
+            if (!string.IsNullOrWhiteSpace(p.Series)) values["Series"] = p.Series;
+            if (!string.IsNullOrWhiteSpace(p.CurrentRating)) values["Current Rating"] = p.CurrentRating;
             return values;
         }
         var mine = Options(current);
