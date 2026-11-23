@@ -302,7 +302,25 @@ export const OptionBlocks = styled.div`
   gap: ${({ theme }) => theme.spacing.space2}px;
 
   ${({ theme }) => theme.media.md} {
-    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+`;
+
+/** Compact selector for variant attributes beyond the first three button rows. */
+export const AxisSelect = styled.select`
+  width: 100%;
+  min-height: 48px;
+  padding: ${({ theme }) => `${theme.spacing.space2}px ${theme.spacing.space3}px`};
+  border: 1px solid ${({ theme }) => theme.colors.outlineVariant};
+  border-radius: ${({ theme }) => theme.radius.sm}px;
+  background: ${({ theme }) => theme.colors.surface};
+  color: ${({ theme }) => theme.colors.onSurface};
+  font: inherit;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid ${({ theme }) => theme.colors.primary};
+    outline-offset: 2px;
   }
 `;
 

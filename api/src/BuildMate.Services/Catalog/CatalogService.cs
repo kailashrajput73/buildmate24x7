@@ -387,7 +387,7 @@ public class CatalogService : ICatalogService
 
     /// <summary>Adds Module / Color / Series / Current Rating to the specifications when they are set (empty ones are left out;
     /// a spec line with the same name already written by the store wins). An attribute that is an option row on this page
-    /// (its variants differ in it) is chosen there, so it is not repeated as a specification.</summary>
+    /// (whether its value is shared or differs across variants) is shown there, so it is not repeated as a specification.</summary>
     private static List<SpecDto> WithAttributes(List<SpecDto> specs, Product p, List<VariantAxisDto> axes)
     {
         foreach (var (name, value) in ProductAttributes.Specs(p))

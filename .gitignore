@@ -1,0 +1,3 @@
+# Local-only launchers, secrets, runtime files, and logs
+/.local-tools/
+/.local-run/

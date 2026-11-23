@@ -639,15 +639,15 @@ const variantAxes = (currentId, members) => {
 // FamilyAxes.Build(narrow: true): Brand, then Class of that brand, then only Sizes of brand + class, then Lengths.
 const sizeNum = (x) => { const m = /(\d+(?:\.\d+)?)/.exec(x ?? ''); return m ? parseFloat(m[1]) : Infinity }
 function narrowAxes(cur, members, classLabel) {
-  const ATTRS = ATTRIBUTES.map((a) => a.name)
   const opts = (p) => {
     const o = { ...Object.fromEntries(parseOpts(p.variantLabel)), ...Object.fromEntries([['Brand', brName(p.brandId)], ['Class', p.productClass], ['Size', p.size], ['Length', p.length]].filter(([, x]) => x)) }
     for (const a of ATTRIBUTES) { const x = a.value(p); if (x && o[a.name] == null && !(a.name === 'Color' && o.Colour != null)) o[a.name] = x }
     return o
   }
   const rows = members.map((p) => ({ p, o: opts(p) })), mine = opts(cur)
-  const names = [...new Set(['Brand', 'Class', 'Size', 'Length', ...rows.flatMap((r) => Object.keys(r.o))])].filter((n) => rows.some((r) => r.o[n]))
-    .filter((n) => !ATTRS.includes(n) || new Set(rows.filter((r) => r.o[n] != null).map((r) => r.o[n].toLowerCase())).size > 1)
+  const available = [...new Set(rows.flatMap((r) => Object.keys(r.o)))].filter((n) => rows.some((r) => r.o[n]))
+  const preferred = ['Brand', ...ATTRIBUTES.map((a) => a.name), 'Class', 'Size', 'Length']
+  const names = [...preferred.filter((n) => available.includes(n)), ...available.filter((n) => !preferred.includes(n))]
   const w = (n) => 2 ** (names.length - names.indexOf(n))
   return names.map((axis) => {
     const before = names.slice(0, names.indexOf(axis)).filter((n) => mine[n] != null)

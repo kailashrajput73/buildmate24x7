@@ -21,7 +21,7 @@ import {
 } from '../PipeConfigurator/PipeConfigurator.styles';
 import {
   Thumbs, Thumb, MediaWrap, PriceRow, Mrp, Save, Stock, Points, Actions, QtyRow, Stepper, BuyNowButton, Section, SectionTitle,
-  SpecTable, Description, Related, RelatedCard, TitleRow, HeartButton, OptionLabel, OptionBlocks, OptionBlock, BuyCard,
+  SpecTable, Description, Related, RelatedCard, TitleRow, HeartButton, OptionLabel, OptionBlocks, OptionBlock, AxisSelect, BuyCard,
 } from './ProductView.styles';
 
 const money = (v: number) => `₹${v.toLocaleString('en-IN', { minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
@@ -60,11 +60,21 @@ export function ProductView({ initial }: { initial: ProductDetail }) {
     if (productId !== p.id) navigate(`/p/${productId}`, { replace: true });
   };
 
-  const axes = p.variantAxes?.length
+  const allAxes = p.variantAxes?.length
     ? p.variantAxes
     : p.variants.length > 1
       ? [{ name: 'Size', choices: p.variants.map((v) => ({ value: v.label, productId: v.id, selected: v.id === p.id, exact: true, inStock: v.inStock })) }]
       : [];
+  const axisOrder = ['Module', 'Color', 'Series', 'Current Rating', 'Class', 'Size', 'Length'];
+  const optionAxes = [...allAxes.filter((a) => a.name !== 'Brand')].sort((a, b) => {
+    const ai = axisOrder.indexOf(a.name), bi = axisOrder.indexOf(b.name);
+    return (ai < 0 ? axisOrder.length : ai) - (bi < 0 ? axisOrder.length : bi);
+  });
+  // Keep Brand in its existing button row. Show the first three populated product attributes as buttons;
+  // put any additional attributes in compact selectors in the same option area.
+  const buttonAxes = [...allAxes.filter((a) => a.name === 'Brand'), ...optionAxes.slice(0, 3)];
+  const dropdownAxes = optionAxes.slice(3);
+  const axes = [...buttonAxes, ...dropdownAxes];
 
   const add = async (thenCheckout: boolean) => {
     setBusy(true);
@@ -132,7 +142,7 @@ export function ProductView({ initial }: { initial: ProductDetail }) {
                 <i className={`pi ${saved ? 'pi-heart-fill' : 'pi-heart'}`} aria-hidden="true" />
               </HeartButton>
             </TitleRow>
-            {axes.map((axis) => (
+            {buttonAxes.map((axis) => (
               <div key={axis.name}>
                 <OptionLabel>{axis.name}</OptionLabel>
                 <OptionBlocks role="group" aria-label={axis.name}>
@@ -153,10 +163,31 @@ export function ProductView({ initial }: { initial: ProductDetail }) {
                 </OptionBlocks>
               </div>
             ))}
+            {dropdownAxes.map((axis) => {
+              const selected = axis.choices.find((choice) => choice.selected);
+              return (
+                <div key={axis.name}>
+                  <OptionLabel as="label" htmlFor={`product-axis-${axis.name}`}>{axis.name}</OptionLabel>
+                  <AxisSelect
+                    id={`product-axis-${axis.name}`}
+                    aria-label={axis.name}
+                    value={selected?.productId ?? ''}
+                    onChange={(event) => open(Number(event.target.value))}
+                  >
+                    {!selected && <option value="" disabled>Select {axis.name}</option>}
+                    {axis.choices.map((choice) => (
+                      <option key={`${choice.value}-${choice.productId}`} value={choice.productId}>
+                        {choice.value}{choice.inStock ? '' : ' · Out of stock'}
+                      </option>
+                    ))}
+                  </AxisSelect>
+                </div>
+              );
+            })}
             {p.catalog?.packSize && p.catalog.boxPrice != null && <><OptionLabel>Purchase unit</OptionLabel><OptionBlocks role="group" aria-label="Purchase unit">{(['Piece', 'Box'] as const).map(unit => <OptionBlock key={unit} $selected={purchaseUnit === unit} aria-pressed={purchaseUnit === unit} onClick={() => { setPurchaseUnit(unit); setQty(1); }}>{unit === 'Box' ? `Full box (${p.catalog?.packSize} ${p.unit})` : `Individual ${p.unit}`}</OptionBlock>)}</OptionBlocks></>}
             <BuyCard>
               <CartInfo>
-                <CartLabel>{axes.length ? 'Selected product size' : 'Price'}</CartLabel>
+                <CartLabel>{axes.length ? 'Selected product' : 'Price'}</CartLabel>
                 <PriceRow>
                   <CartPrice>
                     {money(price)}

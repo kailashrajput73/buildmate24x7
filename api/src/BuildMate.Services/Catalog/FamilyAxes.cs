@@ -32,10 +32,13 @@ public static class FamilyAxes
         }
         var mine = Options(current);
         var rows = products.Select(p => (Product: p, Values: Options(p))).ToList();
-        // Attribute rows only where the family's variants differ in them (a family where every switch is "White" gets no Color row).
-        var attributes = ProductAttributes.Names.ToArray();
-        var names = new[] { "Brand", "Class", "Size", "Length" }.Concat(rows.SelectMany(r => r.Values.Keys)).Distinct().Where(n => rows.Any(r => r.Values.ContainsKey(n)))
-            .Where(n => !attributes.Contains(n) || rows.Where(r => r.Values.ContainsKey(n)).Select(r => r.Values[n].ToLowerInvariant()).Distinct().Count() > 1).ToList();
+        // Put category-specific attributes first so the shop can show its preferred option rows first.
+        // Keep populated attributes even when every family member currently has the same value (for example,
+        // a family that is currently all White).
+        var preferredNames = new[] { "Brand", "Module", "Color", "Series", "Current Rating", "Class", "Size", "Length" };
+        var availableNames = rows.SelectMany(r => r.Values.Keys).Distinct().Where(n => rows.Any(r => r.Values.ContainsKey(n))).ToList();
+        var names = preferredNames.Where(availableNames.Contains)
+            .Concat(availableNames.Where(n => !preferredNames.Contains(n))).ToList();
         // Rows that agree with the current product on every option above this one (narrow mode only).
         List<(Product Product, Dictionary<string, string> Values)> Pool(string axis) => !narrow ? rows : rows.Where(r =>
             names.TakeWhile(n => n != axis).Where(mine.ContainsKey).All(n => r.Values.GetValueOrDefault(n) == mine[n])).ToList();

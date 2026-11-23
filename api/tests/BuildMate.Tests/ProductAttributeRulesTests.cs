@@ -56,14 +56,14 @@ public class ProductAttributeRulesTests
     }
 
     [Fact]
-    public void Attribute_with_one_value_in_the_family_is_not_an_option_row()
+    public void Populated_attributes_with_one_value_still_have_an_option_row()
     {
         Product P(long id, string brand, string? color, string? rating) => new() { Id = id, Code = $"P{id}", Name = "P", Sequence = (int)id, StockQty = 5,
             Brand = new Brand { Name = brand }, Color = color, CurrentRating = rating };
         var family = new List<Product> { P(1, "Anchor", "White", "amp"), P(2, "Anchor", "Grey", "amp"), P(3, "Anchor", "White", null) };
         var axes = FamilyAxes.Build(family[0], family, narrow: true);
         Assert.Contains(axes, a => a.Name == "Color");           // White / Grey: option row
-        Assert.DoesNotContain(axes, a => a.Name == "Current Rating"); // Amp / (none): one value only → specification row
+        Assert.Contains(axes, a => a.Name == "Current Rating"); // Amp remains available even though it is the only set value
         var none = new List<Product> { P(4, "Anchor", null, null), P(5, "Anchor", null, null) };
         Assert.Equal("Brand", string.Join(" | ", FamilyAxes.Build(none[0], none, narrow: true).Select(a => a.Name))); // as before
     }

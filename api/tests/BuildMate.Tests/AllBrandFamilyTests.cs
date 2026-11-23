@@ -108,11 +108,11 @@ public class AllBrandFamilyTests
     };
 
     [Fact]
-    public void Attributes_that_differ_in_the_family_become_options_others_do_not()
+    public void Populated_attributes_become_options_even_when_the_family_has_one_value()
     {
         var switches = new List<Product> { S(1, "Anchor", "1M", "White", 1), S(2, "Anchor", "2M", "White", 2), S(3, "WIT", "1M", "White", 3, stock: 0) };
         var axes = FamilyAxes.Build(switches[0], switches, narrow: true);
-        Assert.Equal("Brand | Module", string.Join(" | ", axes.Select(a => a.Name))); // every switch is White: no Color row
+        Assert.Equal("Brand | Module | Color", string.Join(" | ", axes.Select(a => a.Name))); // Color stays available even while all are White
         Assert.Equal("Anchor | WIT", Values(axes, "Brand"));
         Assert.Equal("1M | 2M", Values(axes, "Module"));
         var wit = axes.Single(a => a.Name == "Brand").Choices.Single(c => c.Value == "WIT");
