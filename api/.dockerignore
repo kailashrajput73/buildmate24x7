@@ -1,3 +1,10 @@
+# Exclude build artifacts from every project directory
+**/bin
+**/obj
+
+# Root-level exclusions
 bin
 obj
+
+# Runtime storage
 storage
