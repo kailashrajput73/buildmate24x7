@@ -1,3 +1,8 @@
 # Local-only launchers, secrets, runtime files, and logs
 /.local-tools/
 /.local-run/
+
+# VPS-local production configuration and database files
+/.env
+/api/Initial.sql
+/backup_before_family_cards.sql
