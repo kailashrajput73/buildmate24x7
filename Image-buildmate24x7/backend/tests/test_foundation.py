@@ -1,4 +1,5 @@
 from io import BytesIO
+import json
 
 from PIL import Image
 from fastapi.testclient import TestClient
@@ -328,3 +329,24 @@ def test_exports_csv_xlsx_and_deterministic_selected_urls(monkeypatch, tmp_path)
         assert csv_response.status_code==200 and "product_code" in csv_response.content.decode("utf-8-sig")
         xlsx_response=client.post("/api/v1/exports",headers=headers,json={"asset_ids":ids,"format":"xlsx"})
         assert xlsx_response.status_code==200 and xlsx_response.content[:2]==b"PK"
+
+
+def test_product_mapping_export_contains_optional_metadata_and_order(monkeypatch, tmp_path):
+    from app.config import settings
+    from openpyxl import load_workbook
+    monkeypatch.setattr(settings, "storage_root", tmp_path)
+    Base.metadata.drop_all(engine); Base.metadata.create_all(engine)
+    with TestClient(app, client=("198.51.100.23", 5000)) as client:
+        headers = _admin_headers(client)
+        ids=[]
+        for name, code in (("z.png","Z"),("a.png","A")):
+            data={"metadata":json.dumps({"product_code":code,"product_name":"Name "+code,"brand":"BuildMate","product_family":"Lights","tags":["catalog"]})}
+            result=client.post("/api/v1/uploads",headers=headers,data=data,files={"files[]":(name,_png_bytes((len(ids)+10,2,3)),"image/png")}).json()
+            ids.append(result["results"][0]["asset"]["id"])
+        response=client.post("/api/v1/exports/product-mapping",headers=headers,json={"asset_ids":ids})
+        assert response.status_code==200
+        sheet=load_workbook(BytesIO(response.content),read_only=True).active
+        rows=list(sheet.values)
+        assert rows[0]==("asset_id","original_filename","original_url","product_code","product_name","brand","product_family","tags")
+        assert [row[3] for row in rows[1:]]==["Z","A"]
+        assert rows[1][5:]==("BuildMate","Lights",'["catalog"]')

@@ -51,6 +51,7 @@ Folder membership is not embedded into public URLs.
 - `GET /api/v1/exports/{id}` -> status/expiry.
 - `GET /api/v1/exports/{id}/download` -> authenticated expiring download.
 - `POST /api/v1/urls/copy-list` `{asset_ids|folder_id?,include_subfolders,url_kind,sort,direction}` -> deterministic UTF-8 URL text for clipboard copy; selected IDs preserve request order. Bound response size.
+- `POST /api/v1/exports/product-mapping` `{asset_ids?|folder_id?,include_subfolders,sort,direction}` -> authenticated Excel workbook for external catalog matching. Includes asset ID, filename, stable URL, and optional product code/name, brand, family, and tags; selected ID order is preserved.
 
 ## API key administration
 

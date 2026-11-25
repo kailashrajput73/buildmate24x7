@@ -81,3 +81,23 @@ def export_assets(payload: dict, db: Session = Depends(get_db), user: User = Dep
         data = BytesIO(); workbook.save(data)
         return Response(data.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": 'attachment; filename="buildmate-images.xlsx"'})
     raise HTTPException(422, "format must be csv or xlsx")
+
+
+@router.post("/exports/product-mapping")
+def export_product_mapping(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Spreadsheet template for matching external product catalogs to image assets."""
+    ids = [UUID(str(value)) for value in payload["asset_ids"]] if "asset_ids" in payload else None
+    assets = _assets(db, ids, UUID(str(payload["folder_id"])) if payload.get("folder_id") else None,
+                     bool(payload.get("include_subfolders", False)), payload.get("sort", "filename"), payload.get("direction", "asc"))
+    headers = ["asset_id", "original_filename", "original_url", "product_code", "product_name", "brand", "product_family", "tags"]
+    rows = [[str(a.id), a.original_filename, _public_url(a), a.product_code or "", a.product_name or "", a.brand or "", a.product_family or "", a.tags or "[]"] for a in assets]
+    workbook = Workbook(); sheet = workbook.active; sheet.title = "Product mapping"; sheet.append(headers)
+    for cell in sheet[1]: cell.font = Font(bold=True)
+    for row in rows: sheet.append(row)
+    for row in range(2, sheet.max_row + 1):
+        cell = sheet.cell(row, 3); cell.hyperlink = cell.value; cell.style = "Hyperlink"
+    sheet.freeze_panes = "A2"; sheet.auto_filter.ref = sheet.dimensions
+    for column, width in {"A":38,"B":30,"C":55,"D":22,"E":30,"F":22,"G":24,"H":30}.items(): sheet.column_dimensions[column].width = width
+    output = BytesIO(); workbook.save(output)
+    return Response(output.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": 'attachment; filename="buildmate-product-mapping.xlsx"'})

@@ -103,3 +103,12 @@ Status: implemented and verified locally.
 - Exports include asset identity, stable original URL, dimensions, file metadata, product metadata, tags, folder and upload time. Excel URLs are clickable; CSV is UTF-8 with BOM.
 - Added gallery controls for copying selected/folder/all URLs and downloading CSV or Excel.
 - Verification: 18 isolated SQLite tests passed; dashboard Docker production build passed. No VPS deployment.
+
+## Phase 6 — Product mapping (2026-11-25)
+
+Status: implemented and verified locally.
+
+- Reused the optional product code, product name, brand, family, and tags fields already registered on assets; existing upload and metadata edit flows preserve them.
+- Added authenticated /api/v1/exports/product-mapping XLSX export for selected assets or folders, with stable original URLs, hyperlink cells, deterministic order, and catalog-matching columns.
+- Added a Product mapping action to the gallery and documented the export contract.
+- Verification: 19 isolated SQLite tests passed (one Starlette deprecation warning); dashboard TypeScript and production build passed. No VPS deployment.
