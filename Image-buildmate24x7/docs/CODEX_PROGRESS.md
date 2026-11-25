@@ -39,3 +39,21 @@ Invoke-RestMethod http://localhost:8000/health/ready
 ```
 
 Backend test command from `backend/`: `python -m pip install -r requirements-dev.txt` then `python -m pytest -q`. Dashboard command from `dashboard/`: `npm ci` then `npm run build`.
+
+## Phase 2 — Folder management (2026-11-25)
+
+Status: implemented and verified locally.
+
+- Added the PostgreSQL `folders` table with UUID hierarchy, normalized sibling names, soft deletion, creator/timestamps, and persisted display order in Alembic migration `0002_folders`.
+- Added authenticated folder list/create/update/delete/reorder endpoints. Folder moves reject self/descendant cycles; duplicate sibling names are case-insensitive; delete rejects folders with active subfolders. Writes are serialized to protect hierarchy integrity.
+- Added nested folder manager to the dashboard: create, rename/move, search, direct image/subfolder counts, sibling up/down ordering, and delete confirmation.
+- `image_count` is currently zero because asset storage is deliberately out of scope for this phase.
+- Added an isolated Compose test profile using SQLite. `docker compose --profile test -p buildmate-image-cloud run --build --rm tests` passed: 10 tests.
+- Local PostgreSQL migration advanced to `0002_folders`; API and dashboard returned healthy and HTTP 200 respectively. A cleanup-safe smoke test against the live PostgreSQL-backed API passed for nested creation/counts, cycle rejection, and deletion.
+- Dashboard production build passed in Docker: TypeScript check plus Vite bundle (30 modules transformed).
+
+### Local verification recovery note
+
+During the first Compose rebuild, the API service briefly used the Dockerfile's test stage as its default target. That caused the test suite to drop/recreate the local Phase 1 auth tables. Inspection showed one bootstrap administrator and no folders; the mistakenly created empty folder table was removed and migration `0002_folders` then applied normally. Compose now explicitly builds the API from the `runtime` target, and the test profile uses isolated SQLite. The local administrator is seeded from `.env`; any prior local password change or active session was reset, so sign in with the current bootstrap password from `.env`.
+
+Local verification only; no VPS deployment or existing BuildMate service was changed.

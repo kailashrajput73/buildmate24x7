@@ -14,11 +14,13 @@ Admin routes require authenticated user/session. Integration routes require scop
 
 ## Folders
 
-- `GET /api/v1/folders?query=&parent_id=` -> folder page, count and ordering.
+- `GET /api/v1/folders?query=&parent_id=` -> `{items,total}` in persisted sibling order. Omitting `parent_id` returns the active folder hierarchy as a flat list with parent IDs; supplying it returns direct children. Each item includes `image_count` and `children_count`.
 - `POST /api/v1/folders` `{name,parent_id?,description?}` -> 201 folder.
-- `PATCH /api/v1/folders/{id}` `{name?,parent_id?,description?,display_order?}` -> updated folder; reject cycles and invalid parent.
-- `DELETE /api/v1/folders/{id}` -> 204 only if empty and childless; otherwise 409.
-- `POST /api/v1/folders/reorder` `{items:[{id,display_order}]}` -> 204, transactionally validate same scope.
+- `PATCH /api/v1/folders/{id}` `{name?,parent_id?,description?,display_order?}` -> updated folder; reject cycles, invalid parents, and duplicate active sibling names. A move appends to the destination sibling order unless an order is explicitly supplied.
+- `DELETE /api/v1/folders/{id}` -> soft-delete and return 204 only if empty and childless; otherwise 409.
+- `POST /api/v1/folders/reorder` `{items:[{id,display_order}]}` -> 204, transactionally validate that all active siblings are included and order values are unique.
+
+Folder names are trimmed, Unicode-normalized, case-insensitive among siblings, and limited to 120 characters. Phase 2 reports `image_count: 0` because assets are intentionally introduced in a later phase; the count field is already part of the response contract.
 
 Folder membership is not embedded into public URLs.
 

@@ -6,6 +6,8 @@ Independent self-hosted image management and delivery service for BuildMate24x7.
 
 Phase 1 Foundation is implemented: independent React dashboard, FastAPI API, PostgreSQL Compose service, health checks, migration-backed admin accounts, and revocable bearer authentication. Image management and delivery features have not been implemented.
 
+Phase 2 adds nested folder organization, rename/move, safe empty-folder deletion, folder/subfolder counts, search, and persisted sibling ordering. The dashboard's folder manager appears after administrator sign-in. Image counts remain zero until the later asset phase.
+
 ## Local deployment
 
 - Admin: `https://images.buildmate24x7.com`
@@ -25,7 +27,13 @@ DNS, TLS, ports, and coexistence with the current VPS services must be checked o
 
 ### Tests
 
-Backend tests (from `backend/`): `python -m pip install -r requirements-dev.txt` then `python -m pytest -q`. Dashboard production build: from `dashboard/`, `npm ci` then `npm run build`.
+Backend tests run in an isolated SQLite test container and do not touch the local PostgreSQL volume:
+
+```powershell
+docker compose --profile test -p buildmate-image-cloud run --build --rm tests
+```
+
+Dashboard production build: from `dashboard/`, `npm ci` then `npm run build`.
 
 ## Documentation
 

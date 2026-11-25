@@ -19,7 +19,9 @@ services:
     networks: [image_cloud_private]
 
   api:
-    build: ./backend
+    build:
+      context: ./backend
+      target: runtime
     environment:
       IMAGE_CLOUD_DATABASE_URL: ${IMAGE_CLOUD_DATABASE_URL:?Set IMAGE_CLOUD_DATABASE_URL}
       IMAGE_CLOUD_JWT_SECRET: ${IMAGE_CLOUD_JWT_SECRET:?Set IMAGE_CLOUD_JWT_SECRET}
@@ -56,6 +58,18 @@ services:
       retries: 5
     restart: unless-stopped
     networks: [image_cloud_private]
+
+  tests:
+    profiles: [test]
+    build:
+      context: ./backend
+      target: test
+    environment:
+      IMAGE_CLOUD_DATABASE_URL: "sqlite+pysqlite:///:memory:"
+      IMAGE_CLOUD_JWT_SECRET: local-test-secret-value-with-at-least-32-bytes
+      IMAGE_CLOUD_BOOTSTRAP_ADMIN_EMAIL: admin@example.com
+      IMAGE_CLOUD_BOOTSTRAP_ADMIN_PASSWORD: test-bootstrap-password-strong
+      IMAGE_CLOUD_CORS_ORIGINS: '["http://testserver"]'
 
 volumes:
   image_cloud_db:

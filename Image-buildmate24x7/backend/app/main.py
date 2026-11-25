@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.auth import bearer_scheme, create_token, decode_token, get_current_user, hash_password, verify_password
 from app.config import settings
 from app.database import engine, get_db
+from app.folders import router as folders_router
 from app.limiter import limiter
 from app.models import AuthSession, User
 from app.schemas import LoginRequest, LoginResponse, PasswordChangeRequest, UserSummary
@@ -67,6 +68,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
+app.include_router(folders_router)
 
 
 @app.get("/health/live", tags=["health"])

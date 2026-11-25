@@ -23,5 +23,6 @@ Primary sections: Dashboard, Image Library, Folders, Upload, Exports, Settings. 
 - Keep selection across pagination only if selection semantics are clear; show selected count.
 - Explain soft deletion and provide restore path. Require a second explicit confirmation for permanent deletion and protective confirmation for bulk deletion.
 - Provide empty, loading, partial-failure, offline, and permission-denied states.
+- The folder manager shows the nested hierarchy and direct image/subfolder counts, lets the admin create, rename, and move folders, and persists sibling order. Deletion confirms intent and is rejected for folders with children (and, when assets exist, images).
 - Ensure keyboard access, visible focus, descriptive labels, sufficient contrast, and non-color-only status indicators.
 - Display byte sizes consistently, dimensions as width × height, and dates in the user's locale while storing UTC.

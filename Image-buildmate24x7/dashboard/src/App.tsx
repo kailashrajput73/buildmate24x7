@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import FolderManager from "./FolderManager";
 
 type User = { id: string; email: string; display_name: string | null };
 type LoginResult = { access_token: string; token_type: string; expires_in: number; user: User };
@@ -100,6 +101,7 @@ export default function App() {
               <div><strong>{user.email}</strong><p>Administrator account</p></div>
               <button className="button secondary" onClick={() => void signOut()}>Sign out</button>
             </div>
+            <FolderManager token={token!} />
             <form className="card password-card" onSubmit={(event) => void changePassword(event)}>
               <h2>Change password</h2>
               <label htmlFor="current-password">Current password</label>
@@ -122,7 +124,7 @@ export default function App() {
           </form>
         )}
         {passwordMessage && <p className="success" role="status">{passwordMessage}</p>}
-        <div className="foundation-note"><span>✓</span><div><strong>Foundation is ready</strong><p>Authentication, service health, and database connectivity are in place. Image library features are not enabled in this phase.</p></div></div>
+        <div className="foundation-note"><span>✓</span><div><strong>Folder management is ready</strong><p>Organize the image library with nested folders. Image uploads and delivery will be added in a later phase.</p></div></div>
       </section>
       <footer>BuildMate Image Cloud <span>Independent service</span></footer>
     </main>
