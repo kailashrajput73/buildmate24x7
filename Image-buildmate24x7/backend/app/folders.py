@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Folder, User
+from app.models import Asset, Folder, User
 from app.schemas import FolderCreate, FolderListResponse, FolderOut, FolderReorderRequest, FolderUpdate
 
 router = APIRouter(prefix="/api/v1/folders", tags=["folders"], dependencies=[Depends(get_current_user)])
@@ -75,18 +75,20 @@ def _next_order(db: Session, parent_id: UUID | None) -> int:
     return int(db.scalar(statement) or 0) + 1000
 
 
-def _folder_out(db: Session, folder: Folder, children_count: int | None = None) -> FolderOut:
+def _folder_out(db: Session, folder: Folder, children_count: int | None = None, image_count: int | None = None) -> FolderOut:
     if children_count is None:
         children_count = int(
             db.scalar(select(func.count(Folder.id)).where(Folder.parent_id == folder.id, Folder.deleted_at.is_(None))) or 0
         )
+    if image_count is None:
+        image_count = int(db.scalar(select(func.count(Asset.id)).where(Asset.folder_id == folder.id, Asset.deleted_at.is_(None))) or 0)
     return FolderOut(
         id=folder.id,
         parent_id=folder.parent_id,
         name=folder.name,
         description=folder.description,
         display_order=folder.display_order,
-        image_count=0,  # Asset storage is intentionally outside Phase 2.
+        image_count=image_count,
         children_count=children_count,
         created_at=folder.created_at,
         updated_at=folder.updated_at,
@@ -122,8 +124,15 @@ def list_folders(
             .group_by(Folder.parent_id)
         ).all()
     )
+    image_counts = dict(
+        db.execute(
+            select(Asset.folder_id, func.count(Asset.id))
+            .where(Asset.deleted_at.is_(None), Asset.folder_id.is_not(None))
+            .group_by(Asset.folder_id)
+        ).all()
+    )
     return FolderListResponse(
-        items=[_folder_out(db, folder, int(child_counts.get(folder.id, 0))) for folder in folders],
+        items=[_folder_out(db, folder, int(child_counts.get(folder.id, 0)), int(image_counts.get(folder.id, 0))) for folder in folders],
         total=len(folders),
     )
 
@@ -190,11 +199,11 @@ def update_folder(folder_id: UUID, payload: FolderUpdate, db: Session = Depends(
 def delete_folder(folder_id: UUID, db: Session = Depends(get_db)) -> Response:
     _lock_folder_writes(db)
     folder = _active_folder(db, folder_id)
-    # All Phase 2 folders are empty; future asset support must add an asset count check here.
     child_exists = db.scalar(
         select(Folder.id).where(Folder.parent_id == folder.id, Folder.deleted_at.is_(None)).limit(1)
     ) is not None
-    if child_exists:
+    asset_exists = db.scalar(select(Asset.id).where(Asset.folder_id == folder.id, Asset.deleted_at.is_(None)).limit(1)) is not None
+    if child_exists or asset_exists:
         raise HTTPException(status_code=409, detail="Folder must be empty and have no subfolders before deletion")
     folder.deleted_at = datetime.now(UTC)
     db.commit()

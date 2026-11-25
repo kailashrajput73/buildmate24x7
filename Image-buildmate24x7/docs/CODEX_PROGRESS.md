@@ -57,3 +57,24 @@ Status: implemented and verified locally.
 During the first Compose rebuild, the API service briefly used the Dockerfile's test stage as its default target. That caused the test suite to drop/recreate the local Phase 1 auth tables. Inspection showed one bootstrap administrator and no folders; the mistakenly created empty folder table was removed and migration `0002_folders` then applied normally. Compose now explicitly builds the API from the `runtime` target, and the test profile uses isolated SQLite. The local administrator is seeded from `.env`; any prior local password change or active session was reset, so sign in with the current bootstrap password from `.env`.
 
 Local verification only; no VPS deployment or existing BuildMate service was changed.
+
+## Phase 3 — Image upload (2026-11-25)
+
+Status: implementation complete; verification recorded below.
+
+- Added migration `0003_assets` with asset and immutable initial-version metadata. Original files are stored outside the web root in a separate persistent Compose volume using server-generated UUID keys.
+- Added an admin upload panel with multi-select and drag/drop, target-folder selection, optional product code, byte progress, per-file outcomes, stable original links, duplicate warnings, and retry of failed files. Added authenticated multipart single/bulk upload at `POST /api/v1/uploads` with batch-level or per-file optional product metadata. Each file streams to private temporary storage, enforces configurable byte and pixel limits, is decoded to validate actual JPEG/PNG/WebP/AVIF content, is hashed, and is atomically moved to originals. Original bytes are not transformed.
+- Per-file outcomes retain successful uploads if another file fails. Identical SHA-256 content raises an advisory duplicate warning; each upload receives a distinct permanent UUID. Asset and first-version metadata commit alongside storage placement; failed registration cleans up the placed file.
+- Added stable `/original/{uuid}.{format}` URLs and safe original retrieval headers. `IMAGE_CLOUD_CDN_ORIGIN` controls the returned origin. Delivery is currently hosted by the API process; the separate CDN deployment topology is not implemented in this phase.
+- Connected Phase 2 folder image counts to active assets and updated the dashboard copy to describe the count behavior.
+- Added isolated test coverage for authentication, content sniffing despite spoofed extension/MIME, metadata, originals/URL, duplicate warnings, partial bulk failure, and folder counts.
+
+### Phase 3 verification
+
+- Isolated Compose SQLite test profile: `16 passed, 1 warning` (Starlette TestClient deprecation notice).
+- API runtime and dashboard production images built. Dashboard TypeScript check and Vite build passed (31 modules transformed).
+- Local API and dashboard containers started; `/health/live` returned `{"status":"ok"}`, `/health/ready` returned `{"status":"ready"}`, and dashboard returned HTTP 200.
+- PostgreSQL migration advanced to `0003_assets`; test runner remained on isolated SQLite and did not access the project PostgreSQL volume.
+- Local only. Public original retrieval currently runs in the API container; a separately deployed CDN service and VPS setup remain outside this phase.
+
+No VPS deployment, BuildMate integration, image-library browser, transformations, or optimizations were implemented.

@@ -12,7 +12,7 @@ type Folder = {
   updated_at: string;
 };
 type FolderResponse = { items: Folder[]; total: number };
-type FolderManagerProps = { token: string };
+type FolderManagerProps = { token: string; refreshKey?: number };
 type FolderRow = { folder: Folder; depth: number };
 
 function flattenFolders(folders: Folder[]): FolderRow[] {
@@ -47,7 +47,7 @@ async function responseMessage(response: Response): Promise<string> {
   return `Request failed (${response.status})`;
 }
 
-export default function FolderManager({ token }: FolderManagerProps) {
+export default function FolderManager({ token, refreshKey = 0 }: FolderManagerProps) {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mode, setMode] = useState<"create" | "edit" | null>(null);
@@ -75,7 +75,7 @@ export default function FolderManager({ token }: FolderManagerProps) {
   useEffect(() => {
     setError("");
     void refresh().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not load folders"));
-  }, [token]);
+  }, [token, refreshKey]);
 
   const rows = useMemo(() => flattenFolders(folders), [folders]);
   const visibleRows = useMemo(() => {
@@ -232,7 +232,6 @@ export default function FolderManager({ token }: FolderManagerProps) {
           </form>
         )}
       </div>
-      <p className="folder-footnote">Image counts are zero until image assets are added in a later phase.</p>
     </section>
   );
 }

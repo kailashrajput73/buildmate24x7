@@ -18,6 +18,7 @@ from app.database import engine, get_db
 from app.folders import router as folders_router
 from app.limiter import limiter
 from app.models import AuthSession, User
+from app.uploads import router as uploads_router
 from app.schemas import LoginRequest, LoginResponse, PasswordChangeRequest, UserSummary
 
 
@@ -69,6 +70,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 app.include_router(folders_router)
+app.include_router(uploads_router)
 
 
 @app.get("/health/live", tags=["health"])

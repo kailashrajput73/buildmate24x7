@@ -1,6 +1,8 @@
-# Database schema (proposal)
+# Database schema
 
-This normalized design is the source of truth for future migrations. PostgreSQL, separate database and credentials from BuildMate. UUID primary keys; UTC `timestamptz`; transactions for file registration, moves, soft-delete/restore, and export snapshots. Define all FK delete behavior explicitly. Schema implementation waits for approval.
+This normalized design is the source of truth for future migrations. PostgreSQL, separate database and credentials from BuildMate. UUID primary keys; UTC `timestamptz`; transactions for file registration, moves, soft-delete/restore, and export snapshots. Define all FK delete behavior explicitly.
+
+Implementation status: migrations `0001_auth_foundation`, `0002_folders`, and `0003_assets` are applied. Phase 3 currently implements `assets` with optional product metadata and JSON-encoded tags, plus an immutable first `asset_versions` row. The remaining proposed asset catalog, tag relation, mapping, transform, usage, and audit tables are not implemented yet.
 
 ## Tables
 

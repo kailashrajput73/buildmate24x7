@@ -9,7 +9,7 @@ COPY migrations ./migrations
 
 FROM app-base AS runtime
 COPY entrypoint.sh ./entrypoint.sh
-RUN chmod 0555 ./entrypoint.sh && useradd --create-home --uid 10001 appuser
+RUN chmod 0555 ./entrypoint.sh && useradd --create-home --uid 10001 appuser && mkdir -p /var/lib/buildmate-image-cloud/originals /var/lib/buildmate-image-cloud/temp && chown -R appuser:appuser /var/lib/buildmate-image-cloud
 USER 10001:10001
 EXPOSE 8000
 ENTRYPOINT ["./entrypoint.sh"]

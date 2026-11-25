@@ -8,3 +8,6 @@ pwdlib[argon2]==0.2.1
 slowapi==0.1.9
 alembic==1.15.2
 email-validator==2.2.0
+python-multipart==0.0.20
+Pillow==11.2.1
+pillow-avif-plugin==1.5.2

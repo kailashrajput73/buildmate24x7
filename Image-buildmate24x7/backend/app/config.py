@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import EmailStr, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -14,6 +15,25 @@ class Settings(BaseSettings):
     bootstrap_admin_email: EmailStr
     bootstrap_admin_password: SecretStr
     cors_origins: list[str] = ["http://localhost:5173"]
+    storage_root: Path = Path("/var/lib/buildmate-image-cloud")
+    cdn_origin: str = "http://localhost:8000"
+    upload_max_bytes: int = 52_428_800
+    upload_max_pixels: int = 80_000_000
+
+    @field_validator("cdn_origin")
+    @classmethod
+    def validate_cdn_origin(cls, value: str) -> str:
+        value = value.strip().rstrip("/")
+        if not value.startswith(("http://", "https://")):
+            raise ValueError("IMAGE_CLOUD_CDN_ORIGIN must be an HTTP(S) origin")
+        return value
+
+    @field_validator("upload_max_bytes")
+    @classmethod
+    def validate_upload_max_bytes(cls, value: int) -> int:
+        if not 1 <= value <= 524_288_000:
+            raise ValueError("IMAGE_CLOUD_UPLOAD_MAX_BYTES must be between 1 and 524288000")
+        return value
 
     @field_validator("jwt_secret")
     @classmethod

@@ -17,6 +17,12 @@ h1 { font-family: "DM Sans", sans-serif; font-size: clamp(27px, 5vw, 36px); lett
 h2 { margin: 0 0 19px; font: 600 17px "DM Sans", sans-serif; }
 .password-card { margin-top: 15px; }
 .folder-manager { margin-top: 15px; padding: 24px; }
+.upload-manager { margin-top: 15px; padding: 24px; }
+.upload-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(210px, .9fr); gap: 18px; }
+.drop-zone { min-height: 185px; padding: 22px; border: 1px dashed #aebbd0; border-radius: 10px; background: #f9fbff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #758198; font-size: 12px; }
+.drop-zone strong { color: #243958; font-size: 15px; }.upload-choose { position: relative; overflow: hidden; width: auto; margin-top: 6px; }.upload-choose input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.upload-options { display: flex; flex-direction: column; gap: 9px; }.upload-options label { color: #52627a; font-size: 12px; font-weight: 600; }.upload-options select,.upload-options input { width: 100%; border: 1px solid #dce2ec; border-radius: 7px; padding: 10px; background: white; color: #172c52; }.upload-options .button { margin-top: 7px; }.upload-options progress { width: 100%; height: 9px; accent-color: #1a56db; }
+.upload-queue,.upload-results { margin-top: 13px; padding: 12px; border: 1px solid #e7ebf2; border-radius: 8px; font-size: 12px; }.upload-queue > div,.upload-results > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 7px 0; border-top: 1px solid #eef1f6; }.upload-queue span,.upload-results span { min-width: 0; overflow-wrap: anywhere; }.upload-queue button { border: 0; background: transparent; color: #9d3940; font-size: 20px; cursor: pointer; }.upload-results a { color: #1a56db; white-space: nowrap; }.upload-error { color: #a33939; font-size: 12px; }.retry-button { width: auto; margin-top: 8px; }
 .folder-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .folder-heading .eyebrow { margin-bottom: 7px; }
 .folder-heading h2 { margin: 0; font-size: 23px; }
@@ -48,5 +54,5 @@ input:focus { border-color: #1a56db; box-shadow: 0 0 0 3px #1a56db18; }
 .avatar { width: 38px; height: 38px; flex: 0 0 38px; border-radius: 50%; display: grid; place-items: center; background: #e8efff; color: #1a56db; font-weight: 700; }
 footer { padding: 20px clamp(20px, 6vw, 88px); color: #8490a3; font-size: 12px; border-top: 1px solid #e8edf5; background: white; display: flex; justify-content: space-between; }
 footer span { color: #a0aabb; }
-@media (max-width: 700px) { .folder-layout { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .folder-layout,.upload-layout { grid-template-columns: 1fr; } }
 @media (max-width: 520px) { .topbar { height: 62px; }.brand { font-size: 14px; }.content { padding: 46px 0; }.card { padding: 22px; }.signed-in { align-items: flex-start; flex-wrap: wrap; }.signed-in .button { width: 100%; margin: 5px 0 0; }.folder-heading { align-items: flex-start; }.folder-manager { padding: 18px; } }

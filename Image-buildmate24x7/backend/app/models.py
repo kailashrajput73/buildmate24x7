@@ -60,3 +60,51 @@ class Folder(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class Asset(Base):
+    __tablename__ = "assets"
+    __table_args__ = (
+        Index("ix_assets_folder_created", "folder_id", "created_at"),
+        Index("ix_assets_sha256", "sha256"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    folder_id: Mapped[UUID | None] = mapped_column(ForeignKey("folders.id", ondelete="SET NULL"), nullable=True)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    media_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    format: Mapped[str] = mapped_column(String(10), nullable=False)
+    width: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    height: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    product_code: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    product_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    brand: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    product_family: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    variant: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    tags: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
+    uploaded_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AssetVersion(Base):
+    __tablename__ = "asset_versions"
+    __table_args__ = (Index("uq_asset_versions_number", "asset_id", "version_number", unique=True),)
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    asset_id: Mapped[UUID] = mapped_column(ForeignKey("assets.id", ondelete="RESTRICT"), nullable=False)
+    version_number: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    media_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    format: Mapped[str] = mapped_column(String(10), nullable=False)
+    width: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    height: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

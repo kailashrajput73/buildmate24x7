@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import FolderManager from "./FolderManager";
+import UploadManager from "./UploadManager";
 
 type User = { id: string; email: string; display_name: string | null };
 type LoginResult = { access_token: string; token_type: string; expires_in: number; user: User };
@@ -26,6 +27,7 @@ export default function App() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
+  const [folderRefresh, setFolderRefresh] = useState(0);
 
   useEffect(() => {
     void getHealth().then(setHealth);
@@ -101,7 +103,8 @@ export default function App() {
               <div><strong>{user.email}</strong><p>Administrator account</p></div>
               <button className="button secondary" onClick={() => void signOut()}>Sign out</button>
             </div>
-            <FolderManager token={token!} />
+            <UploadManager token={token!} onUploaded={() => setFolderRefresh((value) => value + 1)} />
+            <FolderManager token={token!} refreshKey={folderRefresh} />
             <form className="card password-card" onSubmit={(event) => void changePassword(event)}>
               <h2>Change password</h2>
               <label htmlFor="current-password">Current password</label>
@@ -124,7 +127,7 @@ export default function App() {
           </form>
         )}
         {passwordMessage && <p className="success" role="status">{passwordMessage}</p>}
-        <div className="foundation-note"><span>✓</span><div><strong>Folder management is ready</strong><p>Organize the image library with nested folders. Image uploads and delivery will be added in a later phase.</p></div></div>
+        <div className="foundation-note"><span>✓</span><div><strong>Folder management is ready</strong><p>Organize image assets with nested folders. Uploads are available through the authenticated API; image library browsing and transformations are planned for later phases.</p></div></div>
       </section>
       <footer>BuildMate Image Cloud <span>Independent service</span></footer>
     </main>

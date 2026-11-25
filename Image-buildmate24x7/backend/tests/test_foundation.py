@@ -1,3 +1,6 @@
+from io import BytesIO
+
+from PIL import Image
 from fastapi.testclient import TestClient
 
 from app.database import engine
@@ -164,3 +167,127 @@ def test_folder_reorder_persists_for_all_siblings():
         assert response.status_code == 204
         listed = client.get("/api/v1/folders", headers=headers).json()["items"]
         assert [folder["name"] for folder in listed] == ["Three", "Two", "One"]
+
+
+def _png_bytes(color=(30, 90, 170)):
+    output = BytesIO()
+    Image.new("RGB", (9, 7), color).save(output, format="PNG")
+    return output.getvalue()
+
+
+def test_upload_requires_authentication(monkeypatch, tmp_path):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "storage_root", tmp_path)
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    with TestClient(app) as client:
+        response = client.post("/api/v1/uploads", files={"files[]": ("x.png", _png_bytes(), "image/png")})
+        assert response.status_code == 401
+
+
+def test_upload_registers_immutable_asset_and_stable_original(monkeypatch, tmp_path):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "storage_root", tmp_path)
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    with TestClient(app, client=("198.51.100.16", 5000)) as client:
+        headers = _admin_headers(client)
+        folder = client.post("/api/v1/folders", headers=headers, json={"name": "Products"}).json()
+        response = client.post(
+            "/api/v1/uploads", headers=headers,
+            data={"folder_id": folder["id"], "metadata": '{"product_code":"SW-9","tags":["switch","white"]}'},
+            files={"files[]": ("spoofed.jpg", _png_bytes(), "application/octet-stream")},
+        )
+        assert response.status_code == 200
+        result = response.json()
+        assert (result["succeeded"], result["failed"]) == (1, 0)
+        asset = result["results"][0]["asset"]
+        assert asset["format"] == "png" and asset["media_type"] == "image/png"
+        assert asset["width"] == 9 and asset["height"] == 7
+        assert asset["product_code"] == "SW-9" and asset["tags"] == ["switch", "white"]
+        assert asset["original_url"].endswith(f"/original/{asset['id']}.png")
+        original = client.get(f"/original/{asset['id']}.png")
+        assert original.status_code == 200 and original.content == _png_bytes()
+        assert original.headers["cache-control"].endswith("immutable")
+        folders = client.get("/api/v1/folders", headers=headers).json()
+        assert next(item for item in folders["items"] if item["id"] == folder["id"])["image_count"] == 1
+        assert client.delete(f"/api/v1/folders/{folder['id']}", headers=headers).status_code == 409
+
+
+def test_bulk_upload_partial_failures_and_duplicate_warning(monkeypatch, tmp_path):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "storage_root", tmp_path)
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    image = _png_bytes()
+    with TestClient(app, client=("198.51.100.17", 5000)) as client:
+        headers = _admin_headers(client)
+        response = client.post(
+            "/api/v1/uploads", headers=headers,
+            files=[("files[]", ("first.png", image, "image/png")),
+                   ("files[]", ("bad.png", b"not an image", "image/png")),
+                   ("files[]", ("duplicate.png", image, "image/png"))],
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert (body["succeeded"], body["failed"]) == (2, 1)
+        assert body["results"][1]["status"] == "failed"
+        assert body["results"][2]["duplicate_warning"] is True
+        assert body["results"][0]["asset"]["id"] != body["results"][2]["asset"]["id"]
+
+
+def test_upload_rejects_mime_or_extension_spoof_and_bad_metadata(monkeypatch, tmp_path):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "storage_root", tmp_path)
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    with TestClient(app, client=("198.51.100.18", 5000)) as client:
+        headers = _admin_headers(client)
+        spoof = client.post("/api/v1/uploads", headers=headers, files={"files[]": ("x.exe", b"MZ invalid", "image/png")})
+        assert spoof.json()["failed"] == 1
+        invalid_metadata = client.post(
+            "/api/v1/uploads", headers=headers, data={"metadata": '{"unknown":"value"}'},
+            files={"files[]": ("x.png", _png_bytes(), "image/png")},
+        )
+        assert invalid_metadata.status_code == 422
+        assert list((tmp_path / "originals").glob("*")) == []
+
+
+def test_bulk_upload_accepts_per_file_metadata(monkeypatch, tmp_path):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "storage_root", tmp_path)
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    with TestClient(app, client=("198.51.100.19", 5000)) as client:
+        headers = _admin_headers(client)
+        response = client.post(
+            "/api/v1/uploads", headers=headers,
+            data={"metadata": '[{"product_code":"A"},{"product_code":"B"}]'},
+            files=[("files[]", ("a.png", _png_bytes((1, 2, 3)), "image/png")),
+                   ("files[]", ("b.png", _png_bytes((4, 5, 6)), "image/png"))],
+        )
+        assert response.status_code == 200
+        assert [item["asset"]["product_code"] for item in response.json()["results"]] == ["A", "B"]
+
+
+def test_upload_enforces_configured_byte_and_pixel_limits(monkeypatch, tmp_path):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "storage_root", tmp_path)
+    monkeypatch.setattr(settings, "upload_max_bytes", 20)
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    with TestClient(app, client=("198.51.100.20", 5000)) as client:
+        headers = _admin_headers(client)
+        too_large = client.post("/api/v1/uploads", headers=headers, files={"files[]": ("large.png", _png_bytes(), "image/png")})
+        assert too_large.json()["results"][0]["error"] == "File exceeds the configured upload size limit"
+        monkeypatch.setattr(settings, "upload_max_bytes", 52_428_800)
+        monkeypatch.setattr(settings, "upload_max_pixels", 10)
+        too_many_pixels = client.post("/api/v1/uploads", headers=headers, files={"files[]": ("pixels.png", _png_bytes(), "image/png")})
+        assert too_many_pixels.json()["results"][0]["error"] == "Image dimensions exceed the configured pixel limit"
+        assert list((tmp_path / "originals").glob("*")) == []

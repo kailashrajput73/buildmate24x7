@@ -26,7 +26,9 @@ Folder membership is not embedded into public URLs.
 
 ## Uploads and assets
 
-- `POST /api/v1/uploads` multipart `files[]`, optional `folder_id`, optional per-file metadata. Returns per-file result with status, asset, duplicate warning, and stable URL; partial failures do not hide successful files.
+- `POST /api/v1/uploads` multipart repeated `files[]`, optional `folder_id`, optional `metadata` JSON object shared by the batch or JSON array with one object per file. Allowed metadata: `product_code`, `product_name`, `brand`, `product_family`, `category`, `variant`, `tags`. Returns per-file result with status, asset, duplicate warning, and stable URL; partial failures do not hide successful files. A batch can contain at most 50 files.
+- Images are decoded and validated by content as JPEG, PNG, WebP, or AVIF; defaults are 50 MiB and 80 million pixels and are configurable. Original bytes are stored unchanged under generated UUID storage keys. SHA-256 equality is a warning only; duplicate uploads receive distinct IDs.
+- `GET /original/{asset_id}.{format}` serves an immutable original with stored MIME, ETag, immutable cache headers, and `nosniff`. `IMAGE_CLOUD_CDN_ORIGIN` defines the public URL origin; set it to the HTTPS public delivery host in deployment.
 - `POST /api/v1/upload-sessions` `{filename,media_type?,size?,folder_id?}` -> short-lived signed/opaque session metadata (future resumable mode).
 - `PUT /api/v1/upload-sessions/{id}/content` -> streamed upload; session is one-use and authenticated.
 - `GET /api/v1/assets` query `q,folder_id,recursive,format,date_from,date_to,min_width,max_width,min_height,max_height,min_bytes,max_bytes,status,sort,direction,cursor,limit` -> asset page.
