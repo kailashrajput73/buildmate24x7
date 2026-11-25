@@ -77,4 +77,20 @@ Status: implementation complete; verification recorded below.
 - PostgreSQL migration advanced to `0003_assets`; test runner remained on isolated SQLite and did not access the project PostgreSQL volume.
 - Local only. Public original retrieval currently runs in the API container; a separately deployed CDN service and VPS setup remain outside this phase.
 
+### Correct local Compose command
+
+The parent BuildMate repository has its own Compose file. Image Cloud now uses the distinct project name `buildmate-image-cloud-app` and retains its existing `buildmate-image-cloud_image_cloud_db` and `buildmate-image-cloud_image_cloud_originals` volumes. Run all Image Cloud commands from `Image-buildmate24x7/` (or pass that directory's `.env` explicitly):
+
+```powershell
+Set-Location C:\Users\pc\Desktop\buildmate24x7\Image-buildmate24x7
+docker compose --env-file .env up -d --build
+docker compose --env-file .env ps
+```
+
+Do not use the old `-p buildmate-image-cloud` command from the parent directory; that selects the parent BuildMate Compose project. A final test rerun after this Compose-name update could not start because Docker Desktop's engine pipe was unavailable. The 16-test SQLite suite had passed immediately before the Compose-only isolation update.
+
 No VPS deployment, BuildMate integration, image-library browser, transformations, or optimizations were implemented.
+
+## Phase 4 � Gallery
+
+Implementation in progress: asset search, filters, sorting, detail/update endpoints, manual ordering migration/API, and dashboard grid/list/preview UI have been added. Run the isolated test profile and dashboard production build, fix any failures, then record verified results before marking complete.

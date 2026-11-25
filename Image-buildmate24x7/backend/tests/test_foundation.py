@@ -291,3 +291,19 @@ def test_upload_enforces_configured_byte_and_pixel_limits(monkeypatch, tmp_path)
         too_many_pixels = client.post("/api/v1/uploads", headers=headers, files={"files[]": ("pixels.png", _png_bytes(), "image/png")})
         assert too_many_pixels.json()["results"][0]["error"] == "Image dimensions exceed the configured pixel limit"
         assert list((tmp_path / "originals").glob("*")) == []
+
+
+def test_gallery_search_filter_detail_and_metadata_update(monkeypatch, tmp_path):
+    from app.config import settings
+    monkeypatch.setattr(settings, "storage_root", tmp_path)
+    Base.metadata.drop_all(engine); Base.metadata.create_all(engine)
+    with TestClient(app, client=("198.51.100.21", 5000)) as client:
+        headers = _admin_headers(client)
+        upload = client.post("/api/v1/uploads", headers=headers, files={"files[]": ("lamp.png", _png_bytes(), "image/png")}).json()
+        asset_id = upload["results"][0]["asset"]["id"]
+        listed = client.get("/api/v1/assets?q=lamp&format=png", headers=headers)
+        assert listed.status_code == 200 and listed.json()["total"] == 1
+        detail = client.get(f"/api/v1/assets/{asset_id}", headers=headers)
+        assert detail.status_code == 200
+        changed = client.patch(f"/api/v1/assets/{asset_id}", headers=headers, json={"product_code":"L-1","tags":["lighting"]})
+        assert changed.json()["product_code"] == "L-1" and changed.json()["tags"] == ["lighting"]

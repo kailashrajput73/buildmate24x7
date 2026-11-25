@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from fastapi.responses import FileResponse
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import String, func, select, update
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -72,6 +72,22 @@ class UploadBatch(BaseModel):
     failed: int
 
 
+class AssetPage(BaseModel):
+    items: list[AssetSummary]
+    total: int
+
+
+class AssetUpdate(BaseModel):
+    folder_id: UUID | None = None
+    product_code: str | None = Field(default=None, max_length=160)
+    product_name: str | None = Field(default=None, max_length=255)
+    brand: str | None = Field(default=None, max_length=160)
+    product_family: str | None = Field(default=None, max_length=160)
+    category: str | None = Field(default=None, max_length=160)
+    variant: str | None = Field(default=None, max_length=160)
+    tags: list[str] | None = Field(default=None, max_length=50)
+
+
 def _public_url(asset: Asset) -> str:
     return f"{settings.cdn_origin}/original/{asset.id}.{asset.format}"
 
@@ -85,6 +101,85 @@ def _asset_summary(asset: Asset) -> AssetSummary:
         category=asset.category, variant=asset.variant,
         tags=json.loads(asset.tags or "[]"), original_url=_public_url(asset), created_at=asset.created_at,
     )
+
+
+def _asset_query(db: Session, q: str | None, folder_id: UUID | None, recursive: bool, fmt: str | None,
+                 date_from: datetime | None, date_to: datetime | None, min_width: int | None,
+                 max_width: int | None, min_height: int | None, max_height: int | None,
+                 min_bytes: int | None, max_bytes: int | None):
+    statement = select(Asset).where(Asset.deleted_at.is_(None), Asset.status == "active")
+    if q:
+        needle = f"%{q.strip()}%"
+        statement = statement.where((Asset.original_filename.ilike(needle)) | (Asset.product_code.ilike(needle)) |
+                                    (Asset.product_name.ilike(needle)) | (Asset.id.cast(String).ilike(needle)))
+    if folder_id is not None:
+        folder_ids = [folder_id]
+        if recursive:
+            frontier = [folder_id]
+            while frontier:
+                children = list(db.scalars(select(Folder.id).where(Folder.parent_id.in_(frontier), Folder.deleted_at.is_(None))).all())
+                folder_ids.extend(children)
+                frontier = children
+        statement = statement.where(Asset.folder_id.in_(folder_ids))
+    if fmt: statement = statement.where(Asset.format == fmt.lower())
+    if date_from: statement = statement.where(Asset.created_at >= date_from)
+    if date_to: statement = statement.where(Asset.created_at <= date_to)
+    for column, lower, upper in ((Asset.width,min_width,max_width),(Asset.height,min_height,max_height),(Asset.byte_size,min_bytes,max_bytes)):
+        if lower is not None: statement = statement.where(column >= lower)
+        if upper is not None: statement = statement.where(column <= upper)
+    return statement
+
+
+@router.get("/api/v1/assets", response_model=AssetPage)
+def list_assets(q: str | None = None, folder_id: UUID | None = None, recursive: bool = False,
+                format: str | None = None, date_from: datetime | None = None, date_to: datetime | None = None,
+                min_width: int | None = None, max_width: int | None = None, min_height: int | None = None,
+                max_height: int | None = None, min_bytes: int | None = None, max_bytes: int | None = None,
+                sort: str = "created_at", direction: str = "desc", offset: int = 0,
+                limit: int = 100, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> AssetPage:
+    if min(limit, offset) < 0 or limit < 1 or limit > 200: raise HTTPException(status_code=422, detail="Invalid pagination")
+    statement = _asset_query(db,q,folder_id,recursive,format,date_from,date_to,min_width,max_width,min_height,max_height,min_bytes,max_bytes)
+    total = int(db.scalar(select(func.count()).select_from(statement.subquery())) or 0)
+    ordering = {"created_at": Asset.created_at, "filename": Asset.original_filename, "name": Asset.original_filename,
+                "size": Asset.byte_size, "width": Asset.width, "height": Asset.height, "format": Asset.format,
+                "manual": Asset.display_order}
+    if sort not in ordering or direction not in {"asc","desc"}: raise HTTPException(status_code=422, detail="Invalid sort")
+    col = ordering[sort]
+    statement = statement.order_by(col.asc() if direction == "asc" else col.desc(), Asset.id.asc()).offset(offset).limit(limit)
+    return AssetPage(items=[_asset_summary(a) for a in db.scalars(statement).all()], total=total)
+
+
+@router.get("/api/v1/assets/{asset_id}", response_model=AssetSummary)
+def get_asset(asset_id: UUID, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> AssetSummary:
+    asset = db.scalar(select(Asset).where(Asset.id == asset_id, Asset.deleted_at.is_(None)))
+    if asset is None: raise HTTPException(status_code=404, detail="Asset not found")
+    return _asset_summary(asset)
+
+
+@router.patch("/api/v1/assets/{asset_id}", response_model=AssetSummary)
+def update_asset(asset_id: UUID, payload: AssetUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> AssetSummary:
+    asset = db.scalar(select(Asset).where(Asset.id == asset_id, Asset.deleted_at.is_(None)))
+    if asset is None: raise HTTPException(status_code=404, detail="Asset not found")
+    changes = payload.model_dump(exclude_unset=True)
+    if "folder_id" in changes and changes["folder_id"] is not None and db.scalar(select(Folder.id).where(Folder.id == changes["folder_id"], Folder.deleted_at.is_(None))) is None:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    for key, value in changes.items():
+        setattr(asset, key, json.dumps(value, ensure_ascii=False) if key == "tags" and value is not None else value)
+    db.commit(); db.refresh(asset)
+    return _asset_summary(asset)
+
+
+@router.post("/api/v1/assets/reorder", status_code=204)
+def reorder_assets(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    items = payload.get("items", [])
+    ids = [UUID(str(item["id"])) for item in items]
+    if not ids or len(set(ids)) != len(ids): raise HTTPException(status_code=422, detail="Provide unique asset IDs")
+    assets = list(db.scalars(select(Asset).where(Asset.id.in_(ids), Asset.deleted_at.is_(None)).with_for_update()).all())
+    if len(assets) != len(ids) or len({asset.folder_id for asset in assets}) != 1: raise HTTPException(status_code=409, detail="Assets must exist and share a folder")
+    orders = [int(item["display_order"]) for item in items]
+    if len(set(orders)) != len(orders): raise HTTPException(status_code=422, detail="Ordering values must be unique")
+    for asset, order in zip(assets, orders): asset.display_order = order
+    db.commit()
 
 
 async def _persist_upload(upload: UploadFile, folder_id: UUID | None, metadata: UploadMetadata, user: User, db: Session) -> tuple[Asset, bool]:

@@ -77,6 +77,7 @@ class Asset(Base):
     width: Mapped[int] = mapped_column(BigInteger, nullable=False)
     height: Mapped[int] = mapped_column(BigInteger, nullable=False)
     byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    display_order: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1000, server_default="1000")
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     storage_key: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
     product_code: Mapped[str | None] = mapped_column(String(160), nullable=True)

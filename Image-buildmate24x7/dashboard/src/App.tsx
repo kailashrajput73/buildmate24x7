@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import FolderManager from "./FolderManager";
 import UploadManager from "./UploadManager";
+import Gallery from "./Gallery";
 
 type User = { id: string; email: string; display_name: string | null };
 type LoginResult = { access_token: string; token_type: string; expires_in: number; user: User };
@@ -104,6 +105,7 @@ export default function App() {
               <button className="button secondary" onClick={() => void signOut()}>Sign out</button>
             </div>
             <UploadManager token={token!} onUploaded={() => setFolderRefresh((value) => value + 1)} />
+            <Gallery token={token!} />
             <FolderManager token={token!} refreshKey={folderRefresh} />
             <form className="card password-card" onSubmit={(event) => void changePassword(event)}>
               <h2>Change password</h2>
