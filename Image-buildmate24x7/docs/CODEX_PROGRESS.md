@@ -94,3 +94,12 @@ No VPS deployment, BuildMate integration, image-library browser, transformations
 ## Phase 4 � Gallery
 
 Implementation in progress: asset search, filters, sorting, detail/update endpoints, manual ordering migration/API, and dashboard grid/list/preview UI have been added. Run the isolated test profile and dashboard production build, fix any failures, then record verified results before marking complete.
+
+## Phase 5 — Bulk exports (2026-11-25)
+
+Status: implemented and verified locally.
+
+- Added authenticated bulk URL copy and CSV/XLSX export endpoints for selected images and folder scopes (including optional subfolders), with bounded export size and deterministic ordering.
+- Exports include asset identity, stable original URL, dimensions, file metadata, product metadata, tags, folder and upload time. Excel URLs are clickable; CSV is UTF-8 with BOM.
+- Added gallery controls for copying selected/folder/all URLs and downloading CSV or Excel.
+- Verification: 18 isolated SQLite tests passed; dashboard Docker production build passed. No VPS deployment.

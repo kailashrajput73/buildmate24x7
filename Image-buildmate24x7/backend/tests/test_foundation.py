@@ -307,3 +307,24 @@ def test_gallery_search_filter_detail_and_metadata_update(monkeypatch, tmp_path)
         assert detail.status_code == 200
         changed = client.patch(f"/api/v1/assets/{asset_id}", headers=headers, json={"product_code":"L-1","tags":["lighting"]})
         assert changed.json()["product_code"] == "L-1" and changed.json()["tags"] == ["lighting"]
+
+
+def test_exports_csv_xlsx_and_deterministic_selected_urls(monkeypatch, tmp_path):
+    from app.config import settings
+    monkeypatch.setattr(settings, "storage_root", tmp_path)
+    Base.metadata.drop_all(engine); Base.metadata.create_all(engine)
+    with TestClient(app, client=("198.51.100.22", 5000)) as client:
+        headers = _admin_headers(client)
+        ids=[]
+        for name, code in (("b.png","B"),("a.png","A")):
+            result=client.post("/api/v1/uploads",headers=headers,data={"metadata":'{"product_code":"'+code+'"}'},files={"files[]":(name,_png_bytes((len(ids)+1,4,5)),"image/png")}).json()
+            ids.append(result["results"][0]["asset"]["id"])
+        copied=client.post("/api/v1/urls/copy-list",headers=headers,json={"asset_ids":ids})
+        assert copied.status_code==200 and copied.json()["count"]==2
+        assert copied.json()["urls"].splitlines()[0].endswith(f"/{ids[0]}.png")
+        copied_again=client.post("/api/v1/urls/copy-list",headers=headers,json={"asset_ids":ids})
+        assert copied_again.json()["urls"] == copied.json()["urls"]
+        csv_response=client.post("/api/v1/exports",headers=headers,json={"asset_ids":ids,"format":"csv"})
+        assert csv_response.status_code==200 and "product_code" in csv_response.content.decode("utf-8-sig")
+        xlsx_response=client.post("/api/v1/exports",headers=headers,json={"asset_ids":ids,"format":"xlsx"})
+        assert xlsx_response.status_code==200 and xlsx_response.content[:2]==b"PK"

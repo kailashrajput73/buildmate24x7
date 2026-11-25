@@ -16,6 +16,7 @@ from app.auth import bearer_scheme, create_token, decode_token, get_current_user
 from app.config import settings
 from app.database import engine, get_db
 from app.folders import router as folders_router
+from app.exports import router as exports_router
 from app.limiter import limiter
 from app.models import AuthSession, User
 from app.uploads import router as uploads_router
@@ -71,6 +72,7 @@ app.add_middleware(
 )
 app.include_router(folders_router)
 app.include_router(uploads_router)
+app.include_router(exports_router)
 
 
 @app.get("/health/live", tags=["health"])

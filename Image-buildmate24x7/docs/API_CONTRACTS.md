@@ -47,10 +47,10 @@ Folder membership is not embedded into public URLs.
 
 ## Exports and URL copy
 
-- `POST /api/v1/exports` `{scope:{asset_ids?|folder_id?|all?},include_subfolders,format:csv|xlsx|urls, url_kind:original|optimized|both, filters?,sort?}` -> 202 export job or immediate response for small data sets.
+- `POST /api/v1/exports` `{asset_ids?|folder_id?,include_subfolders,format:csv|xlsx,sort,direction}` -> authenticated CSV or XLSX attachment with stable original URLs and product metadata. Folder scope can include descendants; selected IDs preserve submitted order. Bounded to 5,000 images per download.
 - `GET /api/v1/exports/{id}` -> status/expiry.
 - `GET /api/v1/exports/{id}/download` -> authenticated expiring download.
-- `POST /api/v1/urls/copy-list` `{asset_ids|folder_id,include_subfolders,url_kind,transformation?,sort?}` -> deterministic UTF-8 text. Bound response size; large requests use export job.
+- `POST /api/v1/urls/copy-list` `{asset_ids|folder_id?,include_subfolders,url_kind,sort,direction}` -> deterministic UTF-8 URL text for clipboard copy; selected IDs preserve request order. Bound response size.
 
 ## API key administration
 
