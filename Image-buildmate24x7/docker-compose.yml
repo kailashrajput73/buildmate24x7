@@ -34,6 +34,7 @@ services:
       IMAGE_CLOUD_CDN_ORIGIN: ${IMAGE_CLOUD_CDN_ORIGIN:-http://localhost:8000}
       IMAGE_CLOUD_UPLOAD_MAX_BYTES: ${IMAGE_CLOUD_UPLOAD_MAX_BYTES:-52428800}
       IMAGE_CLOUD_UPLOAD_MAX_PIXELS: ${IMAGE_CLOUD_UPLOAD_MAX_PIXELS:-80000000}
+      IMAGE_CLOUD_IMGPROXY_BASE_URL: ${IMAGE_CLOUD_IMGPROXY_BASE_URL:-}
     volumes:
       - image_cloud_originals:/var/lib/buildmate-image-cloud
     depends_on:

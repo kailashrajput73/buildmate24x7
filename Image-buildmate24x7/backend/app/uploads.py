@@ -3,13 +3,15 @@ import json
 import os
 import tempfile
 import warnings
+import hashlib as _hashlib
+from io import BytesIO
 from datetime import datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
 import pillow_avif  # noqa: F401 -- registers AVIF decoding with Pillow
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response, RedirectResponse
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import String, func, select, update
@@ -300,3 +302,44 @@ def get_original(asset_id: UUID, extension: str, db: Session = Depends(get_db)) 
     if path.parent != originals or not path.is_file():
         raise HTTPException(status_code=404, detail="Original image not found")
     return FileResponse(path, media_type=asset.media_type, headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "public, max-age=31536000, immutable", "ETag": f'"{asset.sha256}"'})
+
+
+@router.get("/media/{asset_id}", include_in_schema=True)
+def get_media(asset_id: UUID, w: int | None = None, h: int | None = None, q: int = 82,
+              format: str = "webp", preset: str | None = None, db: Session = Depends(get_db)):
+    presets = {"thumbnail": 150, "small": 300, "medium": 600, "large": 1080}
+    if preset is not None:
+        if preset not in presets: raise HTTPException(422, "Unsupported image preset")
+        w = w or presets[preset]; h = h or presets[preset]
+    if not w and not h: w = h = 1080
+    if any(value is not None and not 1 <= value <= 2048 for value in (w, h)) or not 1 <= q <= 90:
+        raise HTTPException(422, "Dimensions must be 1-2048 pixels and quality 1-90")
+    fmt = format.lower()
+    if fmt not in {"webp", "avif", "jpeg", "png"}: raise HTTPException(422, "Unsupported output format")
+    asset = db.scalar(select(Asset).where(Asset.id == asset_id, Asset.status == "active", Asset.deleted_at.is_(None)))
+    if asset is None: raise HTTPException(404, "Image not found")
+    if settings.imgproxy_base_url:
+        # Optional deployment integration: let imgproxy handle transformations when configured.
+        source = f"{settings.cdn_origin}/original/{asset.id}.{asset.format}"
+        from urllib.parse import quote
+        return RedirectResponse(f"{settings.imgproxy_base_url.rstrip('/')}/insecure/rs:fit:{w or 0}:{h or 0}/q:{q}/plain/{quote(source, safe='')}@{fmt}", status_code=307)
+    original = (settings.storage_root / "originals" / asset.storage_key).resolve()
+    if original.parent != (settings.storage_root / "originals").resolve() or not original.is_file(): raise HTTPException(404, "Image not found")
+    cache_key = _hashlib.sha256(f"{asset.sha256}:{w}:{h}:{q}:{fmt}".encode()).hexdigest()
+    cache_dir = settings.storage_root / "cache"; cache_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    cache_path = cache_dir / f"{cache_key}.{fmt}"
+    if not cache_path.exists():
+        try:
+            with Image.open(original) as image:
+                image.thumbnail((w or image.width, h or image.height), Image.Resampling.LANCZOS)
+                if fmt in {"jpeg", "webp", "avif"} and image.mode not in {"RGB", "L"}:
+                    image = image.convert("RGB")
+                output = BytesIO(); options = {"quality": q}
+                image.save(output, format={"jpeg":"JPEG","webp":"WEBP","avif":"AVIF","png":"PNG"}[fmt], **(options if fmt != "png" else {}))
+            fd, temp_name = tempfile.mkstemp(prefix="derivative-", dir=cache_dir)
+            with os.fdopen(fd, "wb") as stream: stream.write(output.getvalue())
+            Path(temp_name).replace(cache_path)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(500, "Could not generate image derivative") from exc
+    mime = {"jpeg":"image/jpeg","webp":"image/webp","avif":"image/avif","png":"image/png"}[fmt]
+    return FileResponse(cache_path, media_type=mime, headers={"Cache-Control":"public, max-age=31536000, immutable", "X-Content-Type-Options":"nosniff", "ETag":f'"{cache_key}"'})

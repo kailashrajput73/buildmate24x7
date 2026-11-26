@@ -43,6 +43,7 @@ Folder membership is not embedded into public URLs.
 
 - `GET|HEAD /original/{asset_id}.{format}` -> immutable original, content type sniffed/stored, ETag, cache headers, `X-Content-Type-Options: nosniff`.
 - `GET|HEAD /media/{asset_id}?w=&h=&q=&format=` -> bounded transformation; parameters normalized and validated against pixel/quality/format limits; cache key includes asset version and normalized params.
+- Supported presets: `thumbnail` (150), `small` (300), `medium` (600), and `large` (1080); output format may be `webp`, `avif`, `jpeg`, or `png`. The Python image pipeline stores derivatives in the disposable `cache/` tree. When `IMAGE_CLOUD_IMGPROXY_BASE_URL` is set, requests redirect to that configured imgproxy service instead.
 - Unknown, inactive, or deleted assets return a safe 404. No folder browsing or storage listing endpoint.
 
 ## Exports and URL copy

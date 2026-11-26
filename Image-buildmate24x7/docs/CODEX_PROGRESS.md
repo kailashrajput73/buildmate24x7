@@ -112,3 +112,12 @@ Status: implemented and verified locally.
 - Added authenticated /api/v1/exports/product-mapping XLSX export for selected assets or folders, with stable original URLs, hyperlink cells, deterministic order, and catalog-matching columns.
 - Added a Product mapping action to the gallery and documented the export contract.
 - Verification: 19 isolated SQLite tests passed (one Starlette deprecation warning); dashboard TypeScript and production build passed. No VPS deployment.
+
+## Phase 7 — Optimization (2026-11-25)
+
+Status: implemented and verified locally.
+
+- Added bounded derivative generation for thumbnail (150), small (300), medium (600), large (1080) presets, with WebP, AVIF, JPEG, and PNG output options.
+- Derivative cache keys include original SHA-256 and normalized transform options. Generated files are atomically written under disposable cache/; original storage and bytes are unchanged.
+- Added optional imgproxy upstream integration using IMAGE_CLOUD_IMGPROXY_BASE_URL; configured deployments redirect compatible media requests to the upstream. Without it, Pillow generates derivatives locally.
+- Verification: 20 isolated SQLite tests passed (one Starlette deprecation warning); production API image build passed. No VPS deployment.
