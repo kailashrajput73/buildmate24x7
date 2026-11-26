@@ -3,7 +3,7 @@ from io import BytesIO, StringIO
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from openpyxl import Workbook
 from openpyxl.styles import Font
@@ -14,6 +14,7 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.models import Asset, Folder, User
 from app.uploads import _asset_query, _public_url
+from app.limiter import limiter
 
 router = APIRouter(prefix="/api/v1", tags=["exports"], dependencies=[Depends(get_current_user)])
 HEADERS = ["asset_id", "original_filename", "original_url", "format", "media_type", "width", "height", "byte_size", "product_code", "product_name", "brand", "product_family", "category", "variant", "tags", "folder_id", "uploaded_at"]
@@ -49,7 +50,8 @@ def _assets(db: Session, asset_ids: list[UUID] | None, folder_id: UUID | None, i
     return items
 
 @router.post("/urls/copy-list")
-def copy_urls(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@limiter.limit("30/minute")
+def copy_urls(request: Request, payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     ids = [UUID(str(value)) for value in payload["asset_ids"]] if "asset_ids" in payload else None
     assets = _assets(db, ids, UUID(str(payload["folder_id"])) if payload.get("folder_id") else None,
                      bool(payload.get("include_subfolders", False)), payload.get("sort", "created_at"), payload.get("direction", "desc"))
@@ -64,7 +66,8 @@ def copy_urls(payload: dict, db: Session = Depends(get_db), user: User = Depends
     return {"urls": "\n".join(values), "count": len(values)}
 
 @router.post("/exports")
-def export_assets(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@limiter.limit("10/minute")
+def export_assets(request: Request, payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     ids = [UUID(str(value)) for value in payload["asset_ids"]] if "asset_ids" in payload else None
     assets = _assets(db, ids, UUID(str(payload["folder_id"])) if payload.get("folder_id") else None,
                      bool(payload.get("include_subfolders", False)), payload.get("sort", "created_at"), payload.get("direction", "desc"))
@@ -84,7 +87,8 @@ def export_assets(payload: dict, db: Session = Depends(get_db), user: User = Dep
 
 
 @router.post("/exports/product-mapping")
-def export_product_mapping(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@limiter.limit("10/minute")
+def export_product_mapping(request: Request, payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Spreadsheet template for matching external product catalogs to image assets."""
     ids = [UUID(str(value)) for value in payload["asset_ids"]] if "asset_ids" in payload else None
     assets = _assets(db, ids, UUID(str(payload["folder_id"])) if payload.get("folder_id") else None,

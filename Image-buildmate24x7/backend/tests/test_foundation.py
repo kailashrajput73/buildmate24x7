@@ -368,3 +368,12 @@ def test_media_derivative_is_cached_and_original_is_unchanged(monkeypatch, tmp_p
         assert client.get(f"/media/{asset['id']}?preset=thumbnail&format=webp").content==derivative.content
         assert client.get(f"/original/{asset['id']}.png").content==original_bytes
         assert client.get(f"/media/{asset['id']}?w=99999").status_code==422
+
+
+def test_production_security_headers_and_no_store_health():
+    with TestClient(app) as client:
+        response=client.get("/health/live")
+        assert response.status_code==200
+        assert response.headers["cache-control"]=="no-store"
+        assert response.headers["x-content-type-options"]=="nosniff"
+        assert response.headers["x-frame-options"]=="DENY"

@@ -10,7 +10,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pillow_avif  # noqa: F401 -- registers AVIF decoding with Pillow
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import FileResponse, Response, RedirectResponse
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -21,6 +21,7 @@ from app.auth import get_current_user
 from app.config import settings
 from app.database import get_db
 from app.models import Asset, AssetVersion, Folder, User
+from app.limiter import limiter
 
 router = APIRouter(tags=["uploads"])
 SUPPORTED = {"JPEG": ("jpeg", "image/jpeg"), "PNG": ("png", "image/png"), "WEBP": ("webp", "image/webp"), "AVIF": ("avif", "image/avif")}
@@ -256,7 +257,9 @@ async def _persist_upload(upload: UploadFile, folder_id: UUID | None, metadata: 
 
 
 @router.post("/api/v1/uploads", response_model=UploadBatch, status_code=status.HTTP_200_OK)
+@limiter.limit("20/minute")
 async def upload_files(
+    request: Request,
     files: list[UploadFile] = File(..., alias="files[]", min_length=1, max_length=50),
     folder_id: UUID | None = Form(default=None),
     metadata: str = Form(default="{}"),

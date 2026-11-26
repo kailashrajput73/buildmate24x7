@@ -34,3 +34,12 @@ Once implemented: validate env values; review Compose diff; deploy under dedicat
 ## Backup/restore
 
 Back up PostgreSQL and originals independently; cache is disposable. Encrypt and restrict backup copies, retain according to an agreed policy, and monitor last successful backup. Restore database and originals together to an isolated test environment and verify asset counts, hashes, and representative public delivery before claiming tested recovery. No backup reliability claim is made at this stage.
+
+## Phase 8 operations
+
+- Apply the Cloudflare DNS/TLS/cache setup in [CLOUDFLARE.md](CLOUDFLARE.md) only after proxy routes and host firewall are inspected. Keep API/auth/export responses uncached; cache immutable `/original/` and `/media/` URLs.
+- Configure `IMAGE_CLOUD_ALLOWED_HOSTS` with the exact admin/CDN origin hostnames. Upload is limited to 20 requests/minute per source IP; exports to 10/minute and URL copy to 30/minute. Cloudflare WAF/rate limiting is still recommended at the edge.
+- On the VPS, install the scripts and invoke `bash scripts/backup.sh /var/backups/buildmate-image-cloud`; move backups off-host and encrypt them with the approved key-management method. The script produces a PostgreSQL custom dump, original archive, and SHA-256 manifest. Cache is excluded.
+- Monitor with `bash scripts/disk-check.sh /var/lib/buildmate-image-cloud`; exit 1 means warn threshold (default 80%), exit 2 critical (90%). Schedule it from the host monitoring agent/cron and alert on nonzero status.
+- Run `bash scripts/restore-test.sh <db.dump> <originals.tar.gz>` on a scheduled basis. It restores PostgreSQL into a temporary database, extracts originals to a temporary directory, checks registered active storage keys, reports schema/count, and drops only its temporary database. Review logs/output and remove the temporary restore directory after inspection.
+- These scripts have not been executed against a production VPS. Do not represent production backup/restore or Cloudflare delivery as verified until the target host, keys, DNS, proxy, and actual restore drill are reviewed.

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     upload_max_bytes: int = 52_428_800
     upload_max_pixels: int = 80_000_000
     imgproxy_base_url: str | None = None
+    allowed_hosts: list[str] = ["localhost", "127.0.0.1", "testserver", "api"]
 
     @field_validator("cdn_origin")
     @classmethod

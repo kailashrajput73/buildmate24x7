@@ -121,3 +121,12 @@ Status: implemented and verified locally.
 - Derivative cache keys include original SHA-256 and normalized transform options. Generated files are atomically written under disposable cache/; original storage and bytes are unchanged.
 - Added optional imgproxy upstream integration using IMAGE_CLOUD_IMGPROXY_BASE_URL; configured deployments redirect compatible media requests to the upstream. Without it, Pillow generates derivatives locally.
 - Verification: 20 isolated SQLite tests passed (one Starlette deprecation warning); production API image build passed. No VPS deployment.
+
+## Phase 8 — Production readiness (2026-11-26)
+
+Status: implementation complete locally; production activation requires target-host and Cloudflare access.
+
+- Added API trusted-host allowlisting, security response headers, no-store health/API headers, plus upload, export, and URL-copy rate limits.
+- Added Cloudflare DNS/TLS/cache and origin firewall runbook; IMAGE_CLOUD_ALLOWED_HOSTS is configurable. Immutable original/media paths are the only recommended cacheable paths.
+- Added PostgreSQL/original backup script with checksums, disk/inode threshold monitor, and isolated temporary-database restore script that verifies registered active originals. Cache is excluded from backups; backup directory is git-ignored.
+- Verification: 21 backend tests passed in isolated SQLite (one Starlette deprecation warning). Production Cloudflare rules, VPS backup execution, disk alerts, and restore drill remain unverified because no production host/zone credentials were available.
