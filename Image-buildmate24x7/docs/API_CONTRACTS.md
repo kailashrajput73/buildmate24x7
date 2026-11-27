@@ -27,6 +27,7 @@ Folder membership is not embedded into public URLs.
 ## Uploads and assets
 
 - `POST /api/v1/uploads` multipart repeated `files[]`, optional `folder_id`, optional `metadata` JSON object shared by the batch or JSON array with one object per file. Allowed metadata: `product_code`, `product_name`, `brand`, `product_family`, `category`, `variant`, `tags`. Returns per-file result with status, asset, duplicate warning, and stable URL; partial failures do not hide successful files. A batch can contain at most 50 files.
+- `POST /api/v1/uploads/directory` multipart repeated `files[]` (max 50 per request), `relative_paths` JSON string array matching file order, optional `destination_folder_id`, and optional metadata JSON object. Relative paths use browser `webkitRelativePath` slash separators, are limited to 32 nested folders, reject absolute paths, `..`, backslashes, drive/alternate-stream colons, controls, and overlong segments. Missing folders are created/reused in the database hierarchy; response includes per-file results and number of folders newly created in this batch. Large trees are sent as sequential bounded requests. Duplicate hashes return warnings and always create new asset IDs; no original is overwritten.
 - Images are decoded and validated by content as JPEG, PNG, WebP, or AVIF; defaults are 50 MiB and 80 million pixels and are configurable. Original bytes are stored unchanged under generated UUID storage keys. SHA-256 equality is a warning only; duplicate uploads receive distinct IDs.
 - `GET /original/{asset_id}.{format}` serves an immutable original with stored MIME, ETag, immutable cache headers, and `nosniff`. `IMAGE_CLOUD_CDN_ORIGIN` defines the public URL origin; set it to the HTTPS public delivery host in deployment.
 - `POST /api/v1/upload-sessions` `{filename,media_type?,size?,folder_id?}` -> short-lived signed/opaque session metadata (future resumable mode).
@@ -61,3 +62,21 @@ Folder membership is not embedded into public URLs.
 ## Compatibility and contract rules
 
 Keep public asset IDs and URL semantics stable. Use additive API changes where possible. Product code/name stay nullable. Return precise validation errors for unsupported format, corrupt decode, dimension/pixel limit, and upload size. Never report successful upload until original placement and metadata commit both succeed.
+
+## Collections, versions, trash, and audit
+
+- `GET|POST /api/v1/collections` lists or creates named collections; `GET /api/v1/collections/{id}/assets`, `POST /api/v1/collections/{id}/assets` (`{asset_ids}`), and `DELETE /api/v1/collections/{id}/assets/{asset_id}` manage independent many-to-many membership. `DELETE /api/v1/collections/{id}` removes the collection and memberships only.
+- `POST /api/v1/assets/{id}/replace` accepts multipart `file`, validates the actual image bytes and configured size/pixel limits, preserves the asset ID, and stores a new immutable version. `/original/{id}.{format}` remains version 1; `/original/{id}/v{version}.{format}` serves a specific later version. Asset summaries return the current version URL and version number.
+- `POST /api/v1/assets/bulk-download` `{asset_ids}` returns a ZIP, bounded to 100 assets and 250 MiB. `POST /api/v1/assets/bulk-delete` soft-deletes assets; `GET /api/v1/trash` lists them and `POST /api/v1/assets/{id}/restore` restores them.
+- `GET /api/v1/audit?limit=100` returns authenticated recent asset operation records (maximum 500). Events cover rename, move, replace, trash, and restore.
+
+## Persistent browser authentication
+
+- `POST /api/v1/auth/login` retains the existing JSON token response for bearer API compatibility and also sets the configured `HttpOnly; SameSite=Lax; Path=/api/v1` session cookie. The browser dashboard uses the cookie and does not persist the response token. Cookie lifetime follows `IMAGE_CLOUD_JWT_TTL_MINUTES`; default 10,080 minutes. `IMAGE_CLOUD_AUTH_COOKIE_SECURE=true` is required for HTTPS production deployments; keep it false only for local HTTP.
+- `GET /api/v1/auth/me` restores a browser session after reload. The cookie is checked against the persisted, revocable `auth_sessions` row. Cookie-authenticated non-safe requests require a matching allowed `Origin`; bearer-authenticated clients retain the existing flow.
+- `POST /api/v1/auth/logout` revokes the current session and expires its cookie. Password changes revoke all active sessions.
+- `GET /api/v1/assets/{id}/versions` returns safe version metadata and immutable URLs. `POST /api/v1/assets/{id}/versions/{version}/restore` copies a prior immutable original into a new current version, preserving earlier version URLs.
+
+## Full-screen viewer
+
+The dashboard opens `#/assets?asset={id}` for a viewer without leaving the mounted gallery. The viewer loads asset details and version history from the authenticated APIs; the original preview and derived variants use the existing delivery paths. Browser Back closes the viewer and restores the previous gallery URL/state.

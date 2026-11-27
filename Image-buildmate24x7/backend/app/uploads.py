@@ -1,9 +1,11 @@
 import hashlib
 import json
 import os
+import shutil
 import tempfile
 import warnings
 import hashlib as _hashlib
+import unicodedata
 from io import BytesIO
 from datetime import datetime
 from pathlib import Path
@@ -15,12 +17,13 @@ from fastapi.responses import FileResponse, Response, RedirectResponse
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import String, func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.config import settings
 from app.database import get_db
-from app.models import Asset, AssetVersion, Folder, User
+from app.models import Asset, AssetVersion, AuditEvent, Folder, User
 from app.limiter import limiter
 
 router = APIRouter(tags=["uploads"])
@@ -44,6 +47,9 @@ class AssetSummary(BaseModel):
     id: UUID
     folder_id: UUID | None
     original_filename: str
+    display_name: str | None = None
+    current_version_number: int = 1
+    uploaded_by: UUID | None = None
     media_type: str
     format: str
     width: int
@@ -82,6 +88,7 @@ class AssetPage(BaseModel):
 
 class AssetUpdate(BaseModel):
     folder_id: UUID | None = None
+    display_name: str | None = Field(default=None, max_length=255)
     product_code: str | None = Field(default=None, max_length=160)
     product_name: str | None = Field(default=None, max_length=255)
     brand: str | None = Field(default=None, max_length=160)
@@ -92,12 +99,14 @@ class AssetUpdate(BaseModel):
 
 
 def _public_url(asset: Asset) -> str:
-    return f"{settings.cdn_origin}/original/{asset.id}.{asset.format}"
+    if asset.current_version_number == 1:
+        return f"{settings.cdn_origin}/original/{asset.id}.{asset.format}"
+    return f"{settings.cdn_origin}/original/{asset.id}/v{asset.current_version_number}.{asset.format}"
 
 
 def _asset_summary(asset: Asset) -> AssetSummary:
     return AssetSummary(
-        id=asset.id, folder_id=asset.folder_id, original_filename=asset.original_filename,
+        id=asset.id, folder_id=asset.folder_id, original_filename=asset.original_filename, display_name=asset.display_name, current_version_number=asset.current_version_number, uploaded_by=asset.uploaded_by,
         media_type=asset.media_type, format=asset.format, width=asset.width, height=asset.height,
         byte_size=asset.byte_size, sha256=asset.sha256, product_code=asset.product_code,
         product_name=asset.product_name, brand=asset.brand, product_family=asset.product_family,
@@ -168,6 +177,9 @@ def update_asset(asset_id: UUID, payload: AssetUpdate, db: Session = Depends(get
         raise HTTPException(status_code=404, detail="Folder not found")
     for key, value in changes.items():
         setattr(asset, key, json.dumps(value, ensure_ascii=False) if key == "tags" and value is not None else value)
+    if "display_name" in changes or "folder_id" in changes:
+        action = "renamed" if "display_name" in changes else "moved"
+        db.add(AuditEvent(actor_id=user.id,entity_type="asset",entity_id=str(asset.id),action=action,details=json.dumps(changes,default=str)))
     db.commit(); db.refresh(asset)
     return _asset_summary(asset)
 
@@ -295,16 +307,182 @@ async def upload_files(
     return UploadBatch(results=results, succeeded=succeeded, failed=len(results) - succeeded)
 
 
-@router.get("/original/{asset_id}.{extension}", include_in_schema=False)
-def get_original(asset_id: UUID, extension: str, db: Session = Depends(get_db)) -> FileResponse:
-    asset = db.scalar(select(Asset).where(Asset.id == asset_id, Asset.format == extension, Asset.status == "active", Asset.deleted_at.is_(None)))
-    if asset is None:
-        raise HTTPException(status_code=404, detail="Original image not found")
-    path = (settings.storage_root / "originals" / asset.storage_key).resolve()
+def _safe_directory_parts(relative_path: str) -> list[str]:
+    """Validate browser-provided webkitRelativePath without ever treating it as a disk path."""
+    if not relative_path or len(relative_path) > 2048 or "\\" in relative_path or "\x00" in relative_path or relative_path.startswith("/"):
+        raise ValueError("Unsafe relative directory path")
+    parts = relative_path.split("/")
+    if len(parts) < 2 or len(parts) > 33:
+        raise ValueError("Directory uploads require a relative folder path no deeper than 32 folders")
+    if any(part in {"", ".", ".."} or ":" in part for part in parts):
+        raise ValueError("Unsafe relative directory path")
+    cleaned = []
+    for index, part in enumerate(parts):
+        name = unicodedata.normalize("NFKC", part).strip()
+        if not name or len(name) > 255 or any(unicodedata.category(char).startswith("C") for char in name):
+            raise ValueError("Directory or filename contains unsupported characters")
+        if index < len(parts) - 1 and (len(name) > 120 or "/" in name or "\\" in name):
+            raise ValueError("Folder name is invalid or too long")
+        cleaned.append(name if index < len(parts) - 1 else part)
+    return cleaned
+
+
+def _get_or_create_upload_folder(db: Session, parent_id: UUID | None, name: str, user: User) -> tuple[Folder, bool]:
+    normalized = unicodedata.normalize("NFKC", name).strip()
+    key = normalized.casefold()
+    statement = select(Folder).where(Folder.deleted_at.is_(None), Folder.normalized_name == key)
+    statement = statement.where(Folder.parent_id.is_(None) if parent_id is None else Folder.parent_id == parent_id)
+    folder = db.scalar(statement)
+    if folder:
+        return folder, False
+    order_statement = select(func.max(Folder.display_order)).where(Folder.deleted_at.is_(None))
+    order_statement = order_statement.where(Folder.parent_id.is_(None) if parent_id is None else Folder.parent_id == parent_id)
+    folder = Folder(parent_id=parent_id, name=normalized, normalized_name=key,
+                    description=None, display_order=int(db.scalar(order_statement) or 0) + 1000,
+                    created_by=user.id)
+    db.add(folder)
+    try:
+        db.commit()
+        db.refresh(folder)
+        return folder, True
+    except IntegrityError:
+        db.rollback()
+        folder = db.scalar(statement)
+        if folder:
+            return folder, False
+        raise ValueError("A folder could not be created safely")
+
+
+@router.post("/api/v1/uploads/directory")
+@limiter.limit("20/minute")
+async def upload_directory_files(
+    request: Request,
+    files: list[UploadFile] = File(..., alias="files[]", min_length=1, max_length=50),
+    relative_paths: str = Form(...),
+    destination_folder_id: UUID | None = Form(default=None),
+    metadata: str = Form(default="{}"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Upload one bounded batch while retaining each browser directory's folder hierarchy."""
+    try:
+        paths = json.loads(relative_paths)
+        if not isinstance(paths, list) or len(paths) != len(files) or not all(isinstance(path, str) for path in paths):
+            raise ValueError
+        metadata_value = UploadMetadata.model_validate(json.loads(metadata))
+    except (ValueError, TypeError, json.JSONDecodeError, ValidationError) as exc:
+        raise HTTPException(status_code=422, detail="Invalid directory upload manifest") from exc
+    if destination_folder_id is not None and db.scalar(select(Folder.id).where(Folder.id == destination_folder_id, Folder.deleted_at.is_(None))) is None:
+        raise HTTPException(status_code=404, detail="Destination folder not found")
+
+    results: list[UploadItem] = []
+    created_folder_ids: set[UUID] = set()
+    for upload, relative_path in zip(files, paths):
+        try:
+            parts = _safe_directory_parts(relative_path)
+            parent_id = destination_folder_id
+            for folder_name in parts[:-1]:
+                folder, created = _get_or_create_upload_folder(db, parent_id, folder_name, user)
+                if created:
+                    created_folder_ids.add(folder.id)
+                parent_id = folder.id
+            upload.filename = parts[-1]
+            asset, duplicate = await _persist_upload(upload, parent_id, metadata_value, user, db)
+            results.append(UploadItem(filename="/".join(parts), status="uploaded", asset=_asset_summary(asset), duplicate_warning=duplicate))
+        except ValueError as exc:
+            results.append(UploadItem(filename=relative_path[:2048], status="failed", error=str(exc)))
+        except Exception:
+            db.rollback()
+            results.append(UploadItem(filename=relative_path[:2048], status="failed", error="Upload could not be registered"))
+        finally:
+            await upload.close()
+    succeeded = sum(item.status == "uploaded" for item in results)
+    return {"results": results, "succeeded": succeeded, "failed": len(results) - succeeded,
+            "folders_created": len(created_folder_ids)}
+
+
+def _serve_version(version: AssetVersion, extension: str) -> FileResponse:
+    if version.format != extension: raise HTTPException(status_code=404, detail="Original image not found")
+    path = (settings.storage_root / "originals" / version.storage_key).resolve()
     originals = (settings.storage_root / "originals").resolve()
     if path.parent != originals or not path.is_file():
         raise HTTPException(status_code=404, detail="Original image not found")
-    return FileResponse(path, media_type=asset.media_type, headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "public, max-age=31536000, immutable", "ETag": f'"{asset.sha256}"'})
+    return FileResponse(path, media_type=version.media_type, headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "public, max-age=31536000, immutable", "ETag": f'"{version.sha256}"'})
+
+
+@router.get("/original/{asset_id}.{extension}", include_in_schema=False)
+def get_original(asset_id: UUID, extension: str, db: Session = Depends(get_db)) -> FileResponse:
+    version = db.scalar(select(AssetVersion).join(Asset, Asset.id == AssetVersion.asset_id).where(Asset.id == asset_id, AssetVersion.version_number == 1, Asset.status == "active", Asset.deleted_at.is_(None)))
+    if version is None: raise HTTPException(status_code=404, detail="Original image not found")
+    return _serve_version(version, extension)
+
+
+@router.get("/original/{asset_id}/v{version_number}.{extension}", include_in_schema=False)
+def get_original_version(asset_id: UUID, version_number: int, extension: str, db: Session = Depends(get_db)) -> FileResponse:
+    version = db.scalar(select(AssetVersion).join(Asset, Asset.id == AssetVersion.asset_id).where(Asset.id == asset_id, AssetVersion.version_number == version_number, Asset.status == "active", Asset.deleted_at.is_(None)))
+    if version is None: raise HTTPException(status_code=404, detail="Original image version not found")
+    return _serve_version(version, extension)
+
+
+@router.post("/api/v1/assets/{asset_id}/replace", response_model=AssetSummary)
+@limiter.limit("20/minute")
+async def replace_asset(request: Request, asset_id: UUID, file: UploadFile = File(...), user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> AssetSummary:
+    asset = db.scalar(select(Asset).where(Asset.id == asset_id, Asset.deleted_at.is_(None), Asset.status == "active"))
+    if asset is None: raise HTTPException(404, "Asset not found")
+    root=settings.storage_root.resolve(); temp_dir=root/"temp"; originals=root/"originals"; temp_dir.mkdir(parents=True,exist_ok=True,mode=0o700); originals.mkdir(parents=True,exist_ok=True,mode=0o700)
+    fd,temp_name=tempfile.mkstemp(prefix="replace-",suffix=".part",dir=temp_dir); temp=Path(temp_name); digest=hashlib.sha256(); size=0
+    try:
+        with os.fdopen(fd,"wb") as stream:
+            while chunk:=await file.read(CHUNK_SIZE):
+                size+=len(chunk)
+                if size>settings.upload_max_bytes: raise HTTPException(413,"File exceeds configured upload size limit")
+                digest.update(chunk);stream.write(chunk)
+        if size==0: raise HTTPException(422,"File is empty")
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error",Image.DecompressionBombWarning)
+                with Image.open(temp) as image:
+                    detected=image.format;width,height=image.size
+                    if detected not in SUPPORTED or width<1 or height<1 or width*height>settings.upload_max_pixels: raise ValueError()
+                    image.verify()
+                with Image.open(temp) as image:image.load()
+        except (UnidentifiedImageError,OSError,Image.DecompressionBombError,Image.DecompressionBombWarning,ValueError) as exc: raise HTTPException(422,"Replacement is not a valid supported image") from exc
+        extension,media_type=SUPPORTED[detected]; number=asset.current_version_number+1; key=f"{asset.id}-v{number}.{extension}"; final=originals/key;temp.replace(final)
+        version=AssetVersion(asset_id=asset.id,version_number=number,sha256=digest.hexdigest(),storage_key=key,media_type=media_type,format=extension,width=width,height=height,byte_size=size,created_by=user.id)
+        db.add(version);db.add(AuditEvent(actor_id=user.id,entity_type="asset",entity_id=str(asset.id),action="replaced",details=json.dumps({"version":number,"format":extension})));asset.current_version_number=number;asset.sha256=version.sha256;asset.storage_key=key;asset.media_type=media_type;asset.format=extension;asset.width=width;asset.height=height;asset.byte_size=size
+        try:db.commit();db.refresh(asset)
+        except Exception:db.rollback();final.unlink(missing_ok=True);raise
+        return _asset_summary(asset)
+    finally:
+        temp.unlink(missing_ok=True);await file.close()
+
+
+@router.get("/api/v1/assets/{asset_id}/versions")
+def list_asset_versions(asset_id: UUID, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    asset=db.scalar(select(Asset).where(Asset.id==asset_id,Asset.deleted_at.is_(None)))
+    if asset is None: raise HTTPException(404,"Asset not found")
+    versions=db.scalars(select(AssetVersion).where(AssetVersion.asset_id==asset_id).order_by(AssetVersion.version_number.desc())).all()
+    return {"items":[{"version_number":v.version_number,"format":v.format,"media_type":v.media_type,"width":v.width,"height":v.height,"byte_size":v.byte_size,"sha256":v.sha256,"created_by":str(v.created_by) if v.created_by else None,"created_at":v.created_at.isoformat(),"original_url":(f"{settings.cdn_origin}/original/{asset.id}.{v.format}" if v.version_number==1 else f"{settings.cdn_origin}/original/{asset.id}/v{v.version_number}.{v.format}"),"current":v.version_number==asset.current_version_number} for v in versions]}
+
+
+@router.post("/api/v1/assets/{asset_id}/versions/{version_number}/restore",response_model=AssetSummary)
+def restore_asset_version(asset_id:UUID,version_number:int,db:Session=Depends(get_db),user:User=Depends(get_current_user)):
+    asset=db.scalar(select(Asset).where(Asset.id==asset_id,Asset.deleted_at.is_(None),Asset.status=="active"))
+    previous=db.scalar(select(AssetVersion).where(AssetVersion.asset_id==asset_id,AssetVersion.version_number==version_number))
+    if asset is None or previous is None: raise HTTPException(404,"Asset version not found")
+    originals=(settings.storage_root/"originals").resolve();source=(originals/previous.storage_key).resolve()
+    if source.parent!=originals or not source.is_file(): raise HTTPException(404,"Asset version is unavailable")
+    number=asset.current_version_number+1;key=f"{asset.id}-v{number}.{previous.format}";target=originals/key
+    fd,temp_name=tempfile.mkstemp(prefix="restore-",suffix=".part",dir=originals);os.close(fd);temp=Path(temp_name)
+    try:
+        shutil.copyfile(source,temp);temp.replace(target)
+        restored=AssetVersion(asset_id=asset.id,version_number=number,sha256=previous.sha256,storage_key=key,media_type=previous.media_type,format=previous.format,width=previous.width,height=previous.height,byte_size=previous.byte_size,created_by=user.id)
+        db.add(restored);db.add(AuditEvent(actor_id=user.id,entity_type="asset",entity_id=str(asset.id),action="version_restored",details=json.dumps({"source_version":version_number,"new_version":number})))
+        asset.current_version_number=number;asset.sha256=previous.sha256;asset.storage_key=key;asset.media_type=previous.media_type;asset.format=previous.format;asset.width=previous.width;asset.height=previous.height;asset.byte_size=previous.byte_size
+        try:db.commit();db.refresh(asset)
+        except Exception:db.rollback();target.unlink(missing_ok=True);raise
+        return _asset_summary(asset)
+    finally:temp.unlink(missing_ok=True)
 
 
 @router.get("/media/{asset_id}", include_in_schema=True)
@@ -323,7 +501,7 @@ def get_media(asset_id: UUID, w: int | None = None, h: int | None = None, q: int
     if asset is None: raise HTTPException(404, "Image not found")
     if settings.imgproxy_base_url:
         # Optional deployment integration: let imgproxy handle transformations when configured.
-        source = f"{settings.cdn_origin}/original/{asset.id}.{asset.format}"
+        source = _public_url(asset)
         from urllib.parse import quote
         return RedirectResponse(f"{settings.imgproxy_base_url.rstrip('/')}/insecure/rs:fit:{w or 0}:{h or 0}/q:{q}/plain/{quote(source, safe='')}@{fmt}", status_code=307)
     original = (settings.storage_root / "originals" / asset.storage_key).resolve()

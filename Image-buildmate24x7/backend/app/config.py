@@ -10,7 +10,9 @@ class Settings(BaseSettings):
 
     database_url: str
     jwt_secret: SecretStr
-    jwt_ttl_minutes: int = 30
+    jwt_ttl_minutes: int = 10080
+    auth_cookie_secure: bool = False
+    auth_cookie_name: str = "buildmate_image_session"
     enable_api_docs: bool = False
     bootstrap_admin_email: EmailStr
     bootstrap_admin_password: SecretStr
@@ -47,8 +49,8 @@ class Settings(BaseSettings):
     @field_validator("jwt_ttl_minutes")
     @classmethod
     def validate_ttl(cls, value: int) -> int:
-        if not 5 <= value <= 1440:
-            raise ValueError("IMAGE_CLOUD_JWT_TTL_MINUTES must be between 5 and 1440")
+        if not 5 <= value <= 43200:
+            raise ValueError("IMAGE_CLOUD_JWT_TTL_MINUTES must be between 5 and 43200")
         return value
 
     @field_validator("bootstrap_admin_password")

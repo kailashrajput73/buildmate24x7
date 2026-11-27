@@ -1,12 +1,16 @@
 from io import BytesIO
+import csv
 import json
+from datetime import UTC, datetime
 
 from PIL import Image
 from fastapi.testclient import TestClient
 
 from app.database import engine
 from app.main import app
-from app.models import Base
+from app.models import AuthSession, Base
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 
 def test_health_endpoints():
@@ -37,6 +41,60 @@ def test_admin_login_me_and_logout_revokes_session():
         assert client.get("/api/v1/auth/me", headers=headers).status_code == 200
         assert client.post("/api/v1/auth/logout", headers=headers).status_code == 204
         assert client.get("/api/v1/auth/me", headers=headers).status_code == 401
+
+
+def test_persistent_cookie_survives_new_client_and_csrf_is_checked():
+    Base.metadata.drop_all(engine);Base.metadata.create_all(engine)
+    from app.config import settings
+    with TestClient(app,client=("198.51.100.31",5000)) as first:
+        login=first.post("/api/v1/auth/login",json={"email":"admin@example.com","password":"test-bootstrap-password-strong"})
+        assert login.status_code==200
+        cookie_header=login.headers["set-cookie"].lower()
+        assert "httponly" in cookie_header and "samesite=lax" in cookie_header and "path=/api/v1" in cookie_header and "max-age=604800" in cookie_header
+        prior_secret=login.cookies.get(settings.auth_cookie_name)
+        rotated=first.post("/api/v1/auth/login",json={"email":"admin@example.com","password":"test-bootstrap-password-strong"})
+        secret=rotated.cookies.get(settings.auth_cookie_name)
+        assert secret and secret!=prior_secret
+        assert first.get("/api/v1/auth/me",headers={"Authorization":f"Bearer {login.json()['access_token']}"}).status_code==401
+        assert secret
+    with TestClient(app,client=("198.51.100.31",5000)) as reopened:
+        reopened.cookies.set(settings.auth_cookie_name,secret,path="/api/v1")
+        assert reopened.get("/api/v1/auth/me").status_code==200
+        blocked=reopened.post("/api/v1/auth/logout")
+        assert blocked.status_code==403
+        logout=reopened.post("/api/v1/auth/logout",headers={"Origin":"http://testserver"})
+        assert logout.status_code==204
+        assert reopened.get("/api/v1/auth/me").status_code==401
+
+
+def test_cookie_authenticated_folder_write_accepts_same_origin_fetch_metadata():
+    Base.metadata.drop_all(engine); Base.metadata.create_all(engine)
+    with TestClient(app, client=("198.51.100.32", 5000)) as client:
+        login = client.post("/api/v1/auth/login", json={"email": "admin@example.com", "password": "test-bootstrap-password-strong"})
+        assert login.status_code == 200
+        blocked = client.post("/api/v1/folders", headers={"Origin": "https://attacker.example", "Sec-Fetch-Site": "cross-site"}, json={"name": "Blocked"})
+        assert blocked.status_code == 403
+        created = client.post("/api/v1/folders", headers={"Origin": "http://127.0.0.1:5173", "Sec-Fetch-Site": "same-origin"}, json={"name": "Same-origin folder"})
+        assert created.status_code == 201 and created.json()["name"] == "Same-origin folder"
+
+
+def test_cookie_secure_flag_is_configurable(monkeypatch):
+    Base.metadata.drop_all(engine);Base.metadata.create_all(engine)
+    from app.config import settings
+    monkeypatch.setattr(settings,"auth_cookie_secure",True)
+    with TestClient(app,client=("198.51.100.32",5000)) as client:
+        response=client.post("/api/v1/auth/login",json={"email":"admin@example.com","password":"test-bootstrap-password-strong"})
+        assert response.status_code==200 and "secure" in response.headers["set-cookie"].lower()
+
+
+def test_expired_server_session_rejects_cookie():
+    Base.metadata.drop_all(engine);Base.metadata.create_all(engine)
+    with TestClient(app,client=("198.51.100.33",5000)) as client:
+        login=client.post("/api/v1/auth/login",json={"email":"admin@example.com","password":"test-bootstrap-password-strong"})
+        with Session(engine) as db:
+            row=db.scalar(select(AuthSession).order_by(AuthSession.created_at.desc()))
+            row.expires_at=datetime(2000,1,1,tzinfo=UTC);db.commit()
+        assert client.get("/api/v1/auth/me").status_code==401
 
 
 def test_admin_route_rejects_missing_credentials():
@@ -240,6 +298,43 @@ def test_bulk_upload_partial_failures_and_duplicate_warning(monkeypatch, tmp_pat
         assert body["results"][0]["asset"]["id"] != body["results"][2]["asset"]["id"]
 
 
+def test_directory_upload_preserves_paths_duplicates_and_failed_items(monkeypatch, tmp_path):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "storage_root", tmp_path)
+    Base.metadata.drop_all(engine); Base.metadata.create_all(engine)
+    with TestClient(app, client=("198.51.100.45", 5000)) as client:
+        headers = _admin_headers(client)
+        destination = client.post("/api/v1/folders", headers=headers, json={"name": "Existing destination"}).json()
+        image = _png_bytes((45, 65, 85))
+        files = [
+            ("files[]", ("pipe001.png", image, "image/png")),
+            ("files[]", ("pipe002.png", image, "image/png")),
+            ("files[]", ("bad.png", b"not-an-image", "image/png")),
+            ("files[]", ("escape.png", image, "image/png")),
+        ]
+        response = client.post("/api/v1/uploads/directory", headers=headers,
+            data={"destination_folder_id": destination["id"],
+                  "relative_paths": json.dumps(["KING/CPVC/Pipes/pipe001.png", "KING/CPVC/Pipes/pipe002.png",
+                                                "KING/CPVC/Fittings/bad.png", "../escape.png"])}, files=files)
+        assert response.status_code == 200
+        result = response.json()
+        assert result["succeeded"] == 2 and result["failed"] == 2 and result["folders_created"] == 4
+        assert result["results"][0]["filename"] == "KING/CPVC/Pipes/pipe001.png"
+        assert result["results"][0]["asset"]["original_filename"] == "pipe001.png"
+        assert result["results"][1]["duplicate_warning"] is True
+        assert result["results"][2]["status"] == "failed"
+        assert result["results"][3]["status"] == "failed"
+        assert client.get(result["results"][0]["asset"]["original_url"]).content == image
+        folders = client.get("/api/v1/folders", headers=headers).json()["items"]
+        by_id = {folder["id"]: folder for folder in folders}
+        pipes = next(folder for folder in folders if folder["name"] == "Pipes")
+        cpvc = by_id[pipes["parent_id"]]
+        king = by_id[cpvc["parent_id"]]
+        assert pipes["parent_id"] == cpvc["id"] and cpvc["parent_id"] == king["id"]
+        assert king["parent_id"] == destination["id"]
+
+
 def test_upload_rejects_mime_or_extension_spoof_and_bad_metadata(monkeypatch, tmp_path):
     from app.config import settings
 
@@ -327,6 +422,15 @@ def test_exports_csv_xlsx_and_deterministic_selected_urls(monkeypatch, tmp_path)
         assert copied_again.json()["urls"] == copied.json()["urls"]
         csv_response=client.post("/api/v1/exports",headers=headers,json={"asset_ids":ids,"format":"csv"})
         assert csv_response.status_code==200 and "product_code" in csv_response.content.decode("utf-8-sig")
+        parent=client.post("/api/v1/folders",headers=headers,json={"name":"Catalog","parent_id":None}).json()
+        child=client.post("/api/v1/folders",headers=headers,json={"name":"Lights","parent_id":parent["id"]}).json()
+        client.post("/api/v1/uploads",headers=headers,data={"folder_id":child["id"]},files={"files[]":("nested.png",_png_bytes((12,13,14)),"image/png")})
+        nested_export=client.post("/api/v1/exports",headers=headers,json={"folder_id":parent["id"],"include_subfolders":True,"format":"csv"})
+        nested_rows=list(csv.DictReader(nested_export.content.decode("utf-8-sig").splitlines()))
+        assert nested_rows[0]["folder_path"]=="Catalog/Lights"
+        copied_folder=client.post("/api/v1/urls/copy-list",headers=headers,json={"folder_id":parent["id"],"include_subfolders":True,"sort":"filename","direction":"asc","include_metadata":True})
+        assert copied_folder.status_code==200 and "filename\tproduct_code\tfolder_path\toriginal_url" in copied_folder.json()["urls"]
+        assert "Catalog/Lights" in copied_folder.json()["urls"]
         xlsx_response=client.post("/api/v1/exports",headers=headers,json={"asset_ids":ids,"format":"xlsx"})
         assert xlsx_response.status_code==200 and xlsx_response.content[:2]==b"PK"
 
@@ -377,3 +481,43 @@ def test_production_security_headers_and_no_store_health():
         assert response.headers["cache-control"]=="no-store"
         assert response.headers["x-content-type-options"]=="nosniff"
         assert response.headers["x-frame-options"]=="DENY"
+
+
+def test_collections_are_independent_and_trash_restore_is_recoverable(monkeypatch,tmp_path):
+    from app.config import settings
+    monkeypatch.setattr(settings,"storage_root",tmp_path)
+    Base.metadata.drop_all(engine);Base.metadata.create_all(engine)
+    with TestClient(app,client=("198.51.100.25",5000)) as client:
+        headers=_admin_headers(client)
+        uploaded=client.post("/api/v1/uploads",headers=headers,files={"files[]":("item.png",_png_bytes(),"image/png")}).json()["results"][0]["asset"]
+        cid=client.post("/api/v1/collections",headers=headers,json={"name":"Campaign"}).json()["id"]
+        assert client.post(f"/api/v1/collections/{cid}/assets",headers=headers,json={"asset_ids":[uploaded["id"]]}).status_code==204
+        assert client.get(f"/api/v1/collections/{cid}/assets",headers=headers).json()["total"]==1
+        download=client.post("/api/v1/assets/bulk-download",headers=headers,json={"asset_ids":[uploaded["id"]]})
+        assert download.status_code==200 and download.headers["content-type"]=="application/zip"
+        assert client.post("/api/v1/assets/bulk-delete",headers=headers,json={"asset_ids":[uploaded["id"]]}).json()["deleted"]==1
+        assert client.get("/api/v1/assets",headers=headers).json()["total"]==0
+        restored=client.post(f"/api/v1/assets/{uploaded['id']}/restore",headers=headers)
+        assert restored.status_code==200 and restored.json()["id"]==uploaded["id"]
+        assert client.get(f"/api/v1/collections/{cid}/assets",headers=headers).json()["total"]==1
+
+
+def test_asset_replacement_preserves_identity_and_old_url(monkeypatch,tmp_path):
+    from app.config import settings
+    monkeypatch.setattr(settings,"storage_root",tmp_path)
+    Base.metadata.drop_all(engine);Base.metadata.create_all(engine)
+    original=_png_bytes((10,20,30));replacement=_png_bytes((30,40,50))
+    with TestClient(app,client=("198.51.100.26",5000)) as client:
+        headers=_admin_headers(client)
+        asset=client.post("/api/v1/uploads",headers=headers,files={"files[]":("old.png",original,"image/png")}).json()["results"][0]["asset"]
+        old_url=asset["original_url"]
+        changed=client.post(f"/api/v1/assets/{asset['id']}/replace",headers=headers,files={"file":("new.png",replacement,"image/png")})
+        assert changed.status_code==200 and changed.json()["id"]==asset["id"] and changed.json()["current_version_number"]==2
+        assert client.get(old_url.replace(settings.cdn_origin,"" )).content==original
+        assert client.get(changed.json()["original_url"].replace(settings.cdn_origin,"" )).content==replacement
+        history=client.get(f"/api/v1/assets/{asset['id']}/versions",headers=headers)
+        assert history.status_code==200 and [v["version_number"] for v in history.json()["items"]]==[2,1]
+        restored=client.post(f"/api/v1/assets/{asset['id']}/versions/1/restore",headers=headers)
+        assert restored.status_code==200 and restored.json()["current_version_number"]==3
+        assert client.get(restored.json()["original_url"].replace(settings.cdn_origin,"")).content==original
+        assert len(list((tmp_path/"originals").iterdir()))==3

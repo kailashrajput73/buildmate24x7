@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pwdlib import PasswordHash
 from sqlalchemy import select
@@ -54,12 +54,16 @@ def decode_token(token: str) -> dict:
 
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    if credentials is None:
+    bearer_token = credentials.credentials if credentials and credentials.credentials.strip() else None
+    cookie_token = request.cookies.get(settings.auth_cookie_name)
+    token = bearer_token or cookie_token
+    if token is None:
         raise HTTPException(status_code=401, detail="Authentication required", headers={"WWW-Authenticate": "Bearer"})
-    claims = decode_token(credentials.credentials)
+    claims = decode_token(token)
     session = db.scalar(select(AuthSession).where(AuthSession.token_id == UUID(claims["jti"])))
     user = db.get(User, UUID(claims["sub"]))
     expires = datetime.fromtimestamp(claims["exp"], UTC)
@@ -74,4 +78,17 @@ def get_current_user(
         or user.deleted_at is not None
     ):
         raise HTTPException(status_code=401, detail="Invalid or expired credentials", headers={"WWW-Authenticate": "Bearer"})
+    if cookie_token is not None and bearer_token is None and request.method not in {"GET", "HEAD", "OPTIONS"}:
+        origin = request.headers.get("origin", "").rstrip("/")
+        allowed_origins = {value.rstrip("/") for value in settings.cors_origins}
+        request_origin = str(request.base_url).rstrip("/")
+        origin_allowed = bool(origin) and (origin in allowed_origins or origin == request_origin)
+        # Some reverse proxies reconstruct request.base_url without the dashboard's
+        # external port/host. Browser-controlled Fetch Metadata proves the request
+        # is same-origin even when the Origin header cannot match that reconstruction.
+        same_origin_fetch = request.headers.get("sec-fetch-site", "").lower() == "same-origin"
+        same_origin = origin_allowed or same_origin_fetch
+        if not same_origin:
+            raise HTTPException(status_code=403, detail="CSRF origin check failed")
+    request.state.auth_session = session
     return user

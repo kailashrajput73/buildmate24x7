@@ -17,12 +17,18 @@ from app.uploads import _asset_query, _public_url
 from app.limiter import limiter
 
 router = APIRouter(prefix="/api/v1", tags=["exports"], dependencies=[Depends(get_current_user)])
-HEADERS = ["asset_id", "original_filename", "original_url", "format", "media_type", "width", "height", "byte_size", "product_code", "product_name", "brand", "product_family", "category", "variant", "tags", "folder_id", "uploaded_at"]
+HEADERS = ["asset_id", "original_filename", "original_url", "format", "media_type", "width", "height", "byte_size", "product_code", "product_name", "brand", "product_family", "category", "variant", "tags", "folder_id", "folder_path", "uploaded_at"]
 
-def _rows(assets):
+def _rows(assets, db: Session):
+    folders={folder.id:folder for folder in db.scalars(select(Folder).where(Folder.deleted_at.is_(None))).all()}
+    def folder_path(folder_id):
+        names=[];seen=set();folder=folders.get(folder_id)
+        while folder and folder.id not in seen:
+            seen.add(folder.id);names.append(folder.name);folder=folders.get(folder.parent_id)
+        return "/".join(reversed(names))
     return [[str(a.id), a.original_filename, _public_url(a), a.format, a.media_type, a.width, a.height, a.byte_size,
              a.product_code or "", a.product_name or "", a.brand or "", a.product_family or "", a.category or "", a.variant or "",
-             a.tags or "[]", str(a.folder_id or ""), a.created_at.isoformat() if a.created_at else ""] for a in assets]
+             a.tags or "[]", str(a.folder_id or ""), folder_path(a.folder_id), a.created_at.isoformat() if a.created_at else ""] for a in assets]
 
 def _assets(db: Session, asset_ids: list[UUID] | None, folder_id: UUID | None, include_subfolders: bool,
             sort: str, direction: str):
@@ -59,9 +65,20 @@ def copy_urls(request: Request, payload: dict, db: Session = Depends(get_db), us
     if kind not in {"original", "both", "optimized"}: raise HTTPException(422, "Invalid URL kind")
     if kind == "optimized": raise HTTPException(501, "Optimized URLs are available in a later phase")
     values = []
+    folder_paths = {}
+    if payload.get("include_metadata"):
+        folders = {folder.id: folder for folder in db.scalars(select(Folder).where(Folder.deleted_at.is_(None))).all()}
+        def path_for(folder_id):
+            names=[]; seen=set(); folder=folders.get(folder_id)
+            while folder and folder.id not in seen:
+                seen.add(folder.id); names.append(folder.name); folder=folders.get(folder.parent_id)
+            return "/".join(reversed(names))
+        folder_paths = {asset.id: path_for(asset.folder_id) for asset in assets}
     for asset in assets:
         url = _public_url(asset)
-        values.append(f"{url}\n{url}" if kind == "both" else url)
+        values.append("\t".join([asset.original_filename, asset.product_code or "", folder_paths[asset.id], url]) if payload.get("include_metadata") else f"{url}\n{url}" if kind == "both" else url)
+    if payload.get("include_metadata"):
+        values.insert(0, "filename\tproduct_code\tfolder_path\toriginal_url")
     if len(values) > 5000: raise HTTPException(413, "URL copy list is too large")
     return {"urls": "\n".join(values), "count": len(values)}
 
@@ -73,12 +90,12 @@ def export_assets(request: Request, payload: dict, db: Session = Depends(get_db)
                      bool(payload.get("include_subfolders", False)), payload.get("sort", "created_at"), payload.get("direction", "desc"))
     fmt = payload.get("format", "csv")
     if fmt == "csv":
-        out = StringIO(newline=""); writer = csv.writer(out, lineterminator="\r\n"); writer.writerow(HEADERS); writer.writerows(_rows(assets))
+        out = StringIO(newline=""); writer = csv.writer(out, lineterminator="\r\n"); writer.writerow(HEADERS); writer.writerows(_rows(assets,db))
         return Response(out.getvalue().encode("utf-8-sig"), media_type="text/csv; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="buildmate-images.csv"'})
     if fmt == "xlsx":
         workbook = Workbook(); sheet = workbook.active; sheet.title = "Images"; sheet.append(HEADERS)
         for cell in sheet[1]: cell.font = Font(bold=True)
-        for row in _rows(assets): sheet.append(row)
+        for row in _rows(assets,db): sheet.append(row)
         for row in range(2, sheet.max_row + 1): sheet.cell(row, 3).hyperlink = sheet.cell(row, 3).value; sheet.cell(row, 3).style = "Hyperlink"
         sheet.freeze_panes = "A2"; sheet.auto_filter.ref = sheet.dimensions
         data = BytesIO(); workbook.save(data)

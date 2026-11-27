@@ -91,10 +91,15 @@ Do not use the old `-p buildmate-image-cloud` command from the parent directory;
 
 No VPS deployment, BuildMate integration, image-library browser, transformations, or optimizations were implemented.
 
-## Phase 4 � Gallery
+## Phase 4 — Gallery (2026-11-25)
 
-Implementation in progress: asset search, filters, sorting, detail/update endpoints, manual ordering migration/API, and dashboard grid/list/preview UI have been added. Run the isolated test profile and dashboard production build, fix any failures, then record verified results before marking complete.
+Status: implemented and verified locally.
 
+- Added authenticated asset listing with filename/product/ID search, folder and recursive-folder selection, format/date/dimension/byte filters, deterministic sorting and pagination, asset detail, and editable metadata/folder assignment.
+- Added persistent manual image ordering in migration `0004_asset_order` and authenticated reorder API. Dashboard gallery supports grid/list views, selection, large preview/detail panel, filters, sort controls, and manual ordering within a folder.
+- Added gallery backend coverage for authenticated upload, search/filter, detail lookup, and metadata edit.
+- Verification: isolated SQLite suite passed 17 tests; dashboard TypeScript check and production build passed; API health/readiness and dashboard HTTP 200 passed; local PostgreSQL reached migration `0004_asset_order`.
+- No exports, bulk delete, restore, transformations, or VPS deployment were included.
 ## Phase 5 — Bulk exports (2026-11-25)
 
 Status: implemented and verified locally.
@@ -130,3 +135,76 @@ Status: implementation complete locally; production activation requires target-h
 - Added Cloudflare DNS/TLS/cache and origin firewall runbook; IMAGE_CLOUD_ALLOWED_HOSTS is configurable. Immutable original/media paths are the only recommended cacheable paths.
 - Added PostgreSQL/original backup script with checksums, disk/inode threshold monitor, and isolated temporary-database restore script that verifies registered active originals. Cache is excluded from backups; backup directory is git-ignored.
 - Verification: 21 backend tests passed in isolated SQLite (one Starlette deprecation warning). Production Cloudflare rules, VPS backup execution, disk alerts, and restore drill remain unverified because no production host/zone credentials were available.
+
+## SaaS UI redesign (2026-11-26)
+
+Status: implemented and locally smoke-checked.
+
+- Replaced the stacked administration page with a responsive dark SaaS shell, grouped sidebar navigation, workspace selector foundation, breadcrumbs, global asset search, upload action, account control, and separate Dashboard, Assets, Folders, Uploads, and Settings views. Unimplemented modules are disabled and labeled planned.
+- Dashboard uses real asset/folder APIs and reports storage unavailable when the loaded page cannot represent the full library. Recently accessed folders/activity are explicitly marked unavailable.
+- Added recent image previews, bulk folder movement, detail drawer metadata and URL copy actions. Preview URLs are normalized to same-origin /original and /media proxy paths. Nginx now proxies these to the API and CSP permits the configured CDN host.
+- Verification: dashboard TypeScript/Vite production build passed; dashboard and JS bundle returned HTTP 200; image proxy paths reached the API and returned expected 404 for nonexistent UUIDs. Existing backend suite covers uploads, folders, search/filter, exports and metadata. No separate frontend test framework or browser console automation is present; authenticated interactive browser flows were not exercised in this run.
+- Planned/disabled: transformation builder/playground, API key management/docs, analytics and storage settings.
+
+## Advanced media library and asset actions (2026-11-26)
+
+Status: implemented locally; awaiting local stack deployment for interactive browser review.
+
+- Replaced the Folders view with a two-panel explorer: searchable, expandable nested tree with counts, root navigation, breadcrumbs, child folders, create/rename/move/delete context actions, and selected-folder asset gallery. Folder moves leave image URLs unchanged. Folder Share remains unavailable because public folder permissions are not configured.
+- Added per-asset actions for open/detail, display-name rename, original download, share/copy URL, optimized URL copy, replace, collection membership, and recoverable trash. Replacement uploads reuse image content validation and preserve the permanent asset UUID; each version is stored separately and has a version-specific immutable URL. Legacy original URLs still serve version 1.
+- Added multi-select toolbar with select-all, ZIP download (bounded to 100 files/250 MiB), URL copy, metadata export, folder move, collection add, order change, and confirmed soft-delete. Added asset version indicator and retained product metadata/URL detail drawer.
+- Added persistent many-to-many collections with create/search, list, view, remove membership, and CSV export. Collection membership is independent of folder placement. Added authenticated Trash view with restore and persisted audit events for asset rename/move/replace/trash/restore operations.
+- Added migrations `0005_asset_actions` and `0006_audit_events`.
+- Planned/unavailable actions are visibly disabled: transformation editor, access-control configuration (no permission model), image-to-video, generate-from-asset, and automation integrations. No fake processing is exposed.
+- Verification: backend suite 23 passed (one Starlette deprecation warning); dashboard Docker production build passed (TypeScript and Vite). Direct `npm` was unavailable on the host, so the container build was used. Folder and asset flows were not browser-driven in this run. No Cloudinary migration was performed.
+## Full-screen asset viewer and persistent sessions (2026-11-26)
+
+Status: implementation complete locally; production deployment and interactive browser walkthrough remain outstanding.
+
+- Added a dedicated full-screen asset viewer. Single card clicks toggle selection; double-click and the asset menu Open action open the viewer. Viewer navigation is represented in the existing hash route, preserves gallery state, supports browser Back/Forward and Escape, and closes without re-fetching the gallery.
+- Added fit/actual-size controls, zoom, scroll panning, browser full-screen mode, checkerboard transparency background, responsive information tabs, technical analysis, generated derivative URL copy/open actions, and an unavailable Image to Video tab. Metadata comes from asset and version APIs; unknown fields display as unavailable.
+- Added authenticated asset-version listing and restore-as-new-version. Restoring never overwrites stored originals or changes the asset ID; the original URL remains version 1 and each subsequent version uses an immutable version-specific URL.
+- Persistent login now sets an HttpOnly, SameSite=Lax cookie scoped to `/api/v1`, backed by the existing PostgreSQL session table and random session ID. Logout/password change revoke sessions and clear the cookie. Cookie writes require allowed-Origin validation for CSRF protection. The dashboard restores `/auth/me` before rendering login and stores no token in browser storage. Existing bearer clients and the JSON token response remain compatible; browser sessions default to seven days and are configurable.
+- Local `.env` now uses a seven-day session and `IMAGE_CLOUD_AUTH_COOKIE_SECURE=false` for HTTP. Production requires HTTPS, `IMAGE_CLOUD_AUTH_COOKIE_SECURE=true`, the public admin origin in `IMAGE_CLOUD_CORS_ORIGINS`, and a persistent signing secret/database volume.
+- Verification: 26 backend tests passed (one upstream Starlette deprecation warning); production dashboard Docker build passed. PostgreSQL Compose startup applied migrations through `0006_audit_events`; API liveness/readiness returned healthy and dashboard returned HTTP 200. Tests cover cookie attributes, cookie session survival across clients, session rotation, CSRF origin rejection, secure-cookie flag, expiry, logout revocation, asset version listing, stable original URLs, and restore-as-new-version. Double-click, keyboard, back/forward, and responsive viewer interactions were not browser-automated in this run.
+
+## Media workspace redesign and hover actions (2026-11-26)
+
+Status: implementation in progress; local production build and regression verification underway.
+
+- Added a narrow global navigation rail and independently collapsible secondary navigation. Secondary navigation visibility, folder tree visibility, and selected folder are persisted across refreshes. Assets and Folders now share the two-panel folder explorer and gallery workspace; retained existing route hashes and existing collection, trash, upload, and account views.
+- Added responsive workspace CSS, compact media toolbar, tree panel, folder breadcrumb and counts, cards, and responsive small-screen panel behavior. Folder context menus include folder navigation, create/rename/move/order/delete and URL copy/CSV/XLSX export for this folder or nested contents. Folder copy includes filename, product code, folder path, and original URL; CSV/XLSX exports include computed folder paths with cycle protection.
+- Added per-thumbnail hover quick-copy for permanent original URLs with success/error status and supported image actions for open, rename, original download, move, collection membership, validated replace, and recoverable trash. Existing multi-select bulk operations remain available.
+- Folder menu provides “Upload images here” through the existing multi-file upload manager and preselects that destination. “Upload entire local folder” is omitted: the current upload API accepts a flat multi-file batch and does not preserve browser directory paths, so exposing it would misrepresent functionality.
+- Verification: 26 backend tests passed (one upstream Starlette deprecation warning); the dashboard TypeScript and Vite production build passed in Docker. Tests assert nested CSV and copied folder metadata include `Catalog/Lights`. The dashboard/API/database containers are healthy and the dashboard returns HTTP 200. Windows browser screenshot capture was blocked by the computer-use browser URL policy, so no screenshot is attached and detailed browser-driven interaction review remains outstanding.
+
+## Directory upload and workspace regression follow-up (2026-11-26)
+
+Status: directory upload implementation and automated regression checks complete; manual Windows browser verification blocked by the browser access host.
+
+- Added authenticated `POST /api/v1/uploads/directory` accepting up to 50 files per request plus aligned `webkitRelativePath` values. It rejects absolute paths, traversal, backslashes, colon/alternate-stream syntax, controls, malformed paths, excessive depth, and overlong segments before resolving folder records. It creates or reuses nested folders under root or the selected destination and persists files through the existing original upload pipeline.
+- Folder context menus now open Windows' browser directory picker for root or a selected destination. The upload centre reports selected file and directory counts, shows per-file queued/uploading/success/failure/duplicate states, displays overall progress, sends bounded sequential batches paced under the existing API rate limit, and retries failed items only.
+- Duplicate bytes remain separate assets with permanent IDs and receive a visible duplicate warning; existing originals are never overwritten. Directory uploads preserve filenames and do not change image URLs or product metadata behavior.
+- Added tests for nested hierarchy below an existing destination, original filename/URL access, duplicate warnings, invalid image failures, traversal rejection, and folder/export metadata. Regression suite also covers persistent session behavior, existing upload, URL stability, folder operations, and product mapping.
+- Verification: 27 backend tests passed (one upstream Starlette deprecation warning); dashboard TypeScript/Vite production build passed in Docker. API, database, and dashboard Compose services are healthy after rebuild, dashboard responds HTTP 200. Manual interaction testing for navigation, menus, clipboard, exports, viewer, session refresh, file chooser, and downloads could not be completed because Windows browser access reports that the browser access host/URL policy is unavailable. No screenshots were captured.
+- Local restart: from `Image-buildmate24x7`, run `docker compose --env-file .env up -d --build`; open `http://localhost:5173`.
+
+## Directory upload 413 diagnosis (2026-11-26)
+
+- User reported that a directory upload completed with no images present. Nginx dashboard logs showed repeated `client intended to send too large body` errors and `413` responses on `POST /api/v1/uploads/directory` for multipart batches from approximately 8 MiB to 73 MiB. These requests were rejected by the reverse proxy before reaching FastAPI, so no assets were registered from those attempts.
+- Fixed the `/api/` Nginx body limit to 64 MiB, enough for one configured 50 MiB original plus multipart overhead. Directory batches now split at both 50 files and 40 MiB, while keeping a larger single file by itself; the client reports a clear error on 413 responses.
+- Dashboard Docker production build passed and the rebuilt dashboard container restarted. User must select the local directory again because the browser's failed file selection is only in memory and was not stored server-side.
+
+## Folder create 403 diagnosis (2026-11-26)
+
+- Latest API and dashboard logs show `POST /api/v1/folders` returning 403 while authenticated reads and `/auth/me` returned 200. This was a CSRF check rejecting same-origin cookie-authenticated POST requests when the browser omitted the `Origin` header.
+- Updated CSRF validation to accept a missing `Origin` only when the browser-controlled `Sec-Fetch-Site` is exactly `same-origin`. Explicit cross-site origins and cross-site fetch metadata remain rejected. Updated `docs/SECURITY.md`.
+- Added a regression test that proves cross-site folder creation is denied and a same-origin fetch-metadata folder creation succeeds. Backend suite: 28 passed (one upstream deprecation warning). The rebuilt API is running and healthy; reload the dashboard before retrying folder creation.
+- Follow-up: recent logs after deployment contain no folder-create POSTs, so no new failure reached this Compose API to classify. Dashboard errors now include the server's response detail/status instead of the generic message. Dashboard rebuilt, served HTTP 200, and is healthy on port 5173.
+- Reproduced follow-up: Firefox 161 requests still returned 403 when an explicit browser `Origin` mismatched the API's proxy-reconstructed base URL. CSRF validation now also accepts browser-controlled `Sec-Fetch-Site: same-origin` even when `Origin` is present but mismatched; cross-site origin plus `Sec-Fetch-Site: cross-site` remains denied. Added regression coverage for the mismatch. Backend suite: 28 passed; updated API image deployed and healthy.
+
+## Context menu outside-click dismissal (2026-11-27)
+
+- Root cause: image and folder menus only registered an Escape key listener. Neither menu had any outside-pointer detection. Menus render inline, so their menu subtree and trigger can be checked directly without portal coordination.
+- Added capture-phase `pointerdown` handling while a menu is open in both Gallery and FolderExplorer. Pointer events cover mouse and touch. Clicks within the menu (including nested `<details>` submenus) are ignored; the active trigger is exempt so clicking it toggles closed. Clicking a different trigger dismisses the old menu before that trigger's normal click handler opens its menu. Escape and route hash/history navigation close the menu. Listener cleanup runs when the menu closes or its component unmounts.
+- Verification: dashboard TypeScript check and Vite production build passed in the Docker build (`36` modules transformed). `git diff --check` passed. Actual browser interactions could not be exercised: the Windows browser access host stopped the CUA session because URL policy enforcement is unsupported for this browser. Docker service inspection also showed PostgreSQL restarting, so the current local app is not in a usable state for manual interaction testing. No unrelated services were restarted.

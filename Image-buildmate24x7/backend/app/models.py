@@ -72,6 +72,8 @@ class Asset(Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     folder_id: Mapped[UUID | None] = mapped_column(ForeignKey("folders.id", ondelete="SET NULL"), nullable=True)
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    current_version_number: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1, server_default="1")
     media_type: Mapped[str] = mapped_column(String(100), nullable=False)
     format: Mapped[str] = mapped_column(String(10), nullable=False)
     width: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -108,4 +110,33 @@ class AssetVersion(Base):
     height: Mapped[int] = mapped_column(BigInteger, nullable=False)
     byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Collection(Base):
+    __tablename__ = "collections"
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AssetCollection(Base):
+    __tablename__ = "asset_collections"
+    __table_args__ = (Index("ix_asset_collections_collection", "collection_id"),)
+    asset_id: Mapped[UUID] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), primary_key=True)
+    collection_id: Mapped[UUID] = mapped_column(ForeignKey("collections.id", ondelete="CASCADE"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+    __table_args__ = (Index("ix_audit_events_entity", "entity_type", "entity_id", "created_at"),)
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    actor_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    entity_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    entity_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
